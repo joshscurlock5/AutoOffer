@@ -7,9 +7,12 @@ import { site, telHref } from "@/lib/site-config";
 import { X, ArrowRight, Phone, Tag } from "./icons";
 
 /**
- * Subtle exit-intent reminder. Fires once per browser session on desktop when
- * the cursor leaves toward the top of the window (the classic "about to close
- * the tab" signal). Skipped on touch devices, the offer funnel, and admin.
+ * Subtle exit-intent reminder. Fires once per browser session when the cursor
+ * leaves toward the top of the window (the classic "about to close the tab"
+ * signal). Skipped on the offer funnel and admin.
+ *
+ * To preview it any time, visit any page with ?exitpreview=1
+ * (e.g. https://your-site/?exitpreview=1).
  */
 export default function ExitIntent() {
   const pathname = usePathname();
@@ -18,17 +21,23 @@ export default function ExitIntent() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer")) return;
+
+    // Preview override: ?exitpreview=1 shows it immediately, every time.
+    if (new URLSearchParams(window.location.search).has("exitpreview")) {
+      setOpen(true);
+      return;
+    }
+
     if (sessionStorage.getItem("ao_exit_shown")) return;
-    // Desktop only — no reliable mouse-leave signal on touch screens.
-    if (window.matchMedia("(pointer: coarse)").matches) return;
 
     let armed = false;
     const arm = setTimeout(() => {
       armed = true;
-    }, 4000);
+    }, 1200);
 
     const onMouseOut = (e: MouseEvent) => {
       if (!armed) return;
+      // Fired only when the cursor actually leaves the window via the top.
       if (e.clientY <= 0 && !e.relatedTarget) {
         setOpen(true);
         sessionStorage.setItem("ao_exit_shown", "1");
