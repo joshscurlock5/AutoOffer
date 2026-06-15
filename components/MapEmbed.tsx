@@ -1,5 +1,6 @@
-import { site, fullAddress, mailHref, telHref } from "@/lib/site-config";
+import { site, fullAddress, mailHref } from "@/lib/site-config";
 import { Container } from "./Section";
+import TelLink from "./TelLink";
 import { MapPin, Phone, Mail, Clock, ExternalLink } from "./icons";
 
 export default function MapEmbed() {
@@ -31,9 +32,9 @@ export default function MapEmbed() {
               </span>
               <div>
                 <p className="text-sm font-semibold text-navy">Call us</p>
-                <a href={telHref} className="text-sm font-bold text-brand hover:underline">
+                <TelLink location="map" className="text-sm font-bold text-brand hover:underline">
                   {site.phoneDisplay}
-                </a>
+                </TelLink>
               </div>
             </div>
             <div className="flex gap-3">

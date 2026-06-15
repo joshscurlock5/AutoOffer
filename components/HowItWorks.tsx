@@ -58,7 +58,7 @@ export default function HowItWorks() {
         <Link href="/get-offer" className="btn-primary">
           Get My Estimate <ArrowRight className="h-4 w-4" />
         </Link>
-        <PhoneButton variant="ghost" />
+        <PhoneButton variant="ghost" location="how_it_works" />
       </div>
     </Section>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { site, fullAddress, telHref, mailHref } from "@/lib/site-config";
+import { site, fullAddress, mailHref } from "@/lib/site-config";
+import TelLink from "./TelLink";
 import { Phone, Mail, MapPin, Clock, Facebook, Instagram, MapleLeaf } from "./icons";
 
 const brands = [
@@ -70,9 +71,9 @@ export default function Footer() {
             </li>
             <li className="flex gap-3">
               <Phone className="h-5 w-5 shrink-0 text-brand-200" />
-              <a href={telHref} className="font-semibold text-white hover:text-brand-200">
+              <TelLink location="footer" className="font-semibold text-white hover:text-brand-200">
                 {site.phoneDisplay}
-              </a>
+              </TelLink>
             </li>
             <li className="flex gap-3">
               <Mail className="h-5 w-5 shrink-0 text-brand-200" />

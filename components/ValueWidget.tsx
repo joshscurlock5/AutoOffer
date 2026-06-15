@@ -29,7 +29,7 @@ export default function ValueWidget() {
       el?.focus();
       return;
     }
-    track("widget_submit", { make, model, year });
+    track("widget_submit", { make, model, year: Number(year) });
     const q = new URLSearchParams({ year, make, model, trim, km: kmv });
     router.push(`/get-offer?${q.toString()}`);
   }

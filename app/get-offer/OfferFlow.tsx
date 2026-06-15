@@ -47,6 +47,11 @@ export default function OfferFlow() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Funnel instrumentation guards (per-mount; reset on a fresh /get-offer load).
+  const flowStarted = useRef(false);
+  const estimateViews = useRef(0);
+  const contactStarts = useRef(0);
+
   // Prefill from query string (from the homepage widget).
   useEffect(() => {
     setYear(sp.get("year") || "");
@@ -55,6 +60,15 @@ export default function OfferFlow() {
     setTrim(sp.get("trim") || "");
     setKmv(sp.get("km") || "");
   }, [sp]);
+
+  // Funnel start — fires for EVERY way into /get-offer (homepage widget OR a
+  // direct entry via header/sticky/exit/footer), so step-1 bounce is visible.
+  useEffect(() => {
+    if (flowStarted.current) return;
+    flowStarted.current = true;
+    track("offer_flow_start", { source: sp.get("make") ? "widget" : "direct" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Revoke object URLs only on unmount (a [previews] dependency would revoke
   // URLs that are still being displayed).
@@ -91,10 +105,13 @@ export default function OfferFlow() {
   function goToOffer(e: React.FormEvent) {
     e.preventDefault();
     if (!step1Valid) return;
+    const yr = Number(year);
+    track("step1_submitted", { make, model, year: yr, source: sp.get("make") ? "widget" : "direct" });
     const est = estimateOffer({ year, make, model, mileageKm: Number(kmv) });
     setEstimate(est);
     setStep(2);
-    track("estimate_viewed", { make, model, year, unique: !!est.unique });
+    track("estimate_viewed", { make, model, year: yr, unique: !!est.unique, reentry: estimateViews.current > 0 });
+    estimateViews.current += 1;
     // Brief skeleton so the reveal doesn't flash; kept short to preserve momentum.
     setCalculating(true);
     if (calcTimer.current) clearTimeout(calcTimer.current);
@@ -136,7 +153,16 @@ export default function OfferFlow() {
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
-      track("lead_submitted", { contactMethod, unique: !!estimate?.unique });
+      // GA4 recommended lead event — value/currency let it import as an Ads conversion.
+      track("generate_lead", {
+        currency: "CAD",
+        value: estimate?.mid ?? 0,
+        make,
+        model,
+        year: Number(year),
+        contactMethod,
+        unique: !!estimate?.unique,
+      });
       setStep(4);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -147,6 +173,14 @@ export default function OfferFlow() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Advance to the contact step from EITHER the normal or unique-vehicle branch,
+  // so contact_started isn't undercounted for unpriceable vehicles.
+  function advanceToContact() {
+    track("contact_started", { unique: !!estimate?.unique, reentry: contactStarts.current > 0 });
+    contactStarts.current += 1;
+    setStep(3);
   }
 
   const isUnique = estimate?.unique;
@@ -261,7 +295,7 @@ export default function OfferFlow() {
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
             <p className="text-sm text-muted">
               Prefer to talk? Call{" "}
-              <a href={telHref} className="font-bold text-brand hover:underline">{site.phoneDisplay}</a>
+              <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand hover:underline">{site.phoneDisplay}</a>
             </p>
             <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
               See My Estimate <ArrowRight className="h-4 w-4" />
@@ -284,7 +318,7 @@ export default function OfferFlow() {
               <OfferSkeleton />
             </div>
           ) : isUnique ? (
-            <UniqueOffer onContinue={() => setStep(3)} onBack={() => setStep(1)} vehicle={{ year, make, model, trim }} />
+            <UniqueOffer onContinue={advanceToContact} onBack={() => setStep(1)} vehicle={{ year, make, model, trim }} />
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
               <div className="card p-6 sm:p-8">
@@ -317,17 +351,12 @@ export default function OfferFlow() {
                   No obligation. This range is free — a real buyer confirms your firm offer with you.
                 </p>
 
-                <button
-                  onClick={() => {
-                    track("contact_started");
-                    setStep(3);
-                  }}
-                  className="btn-primary mt-6 text-lg"
-                >
+                <button onClick={advanceToContact} className="btn-primary mt-6 text-lg">
                   Get My Firm Offer <ArrowRight className="h-5 w-5" />
                 </button>
                 <a
                   href={telHref}
+                  onClick={() => track("phone_click", { location: "offer_step2" })}
                   className="btn mt-3 border-2 border-brand bg-white py-3.5 text-brand hover:-translate-y-0.5 hover:bg-brand-50"
                 >
                   <Phone className="h-5 w-5" /> Call Now Instead
@@ -449,6 +478,7 @@ export default function OfferFlow() {
               </p>
               <a
                 href={telHref}
+                onClick={() => track("phone_click", { location: "offer_step3" })}
                 className="btn w-full border-2 border-brand bg-white py-3.5 text-brand hover:-translate-y-0.5 hover:bg-brand-50"
               >
                 <Phone className="h-5 w-5" /> Call Now Instead
@@ -496,7 +526,7 @@ export default function OfferFlow() {
               Skip the wait — our team can finalize your offer right over the phone.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <PhoneButton variant="primary" />
+              <PhoneButton variant="primary" location="offer_success" />
               <Link href="/" className="btn-ghost">Back to home</Link>
             </div>
           </div>
@@ -568,7 +598,7 @@ function UniqueOffer({
           <button onClick={onContinue} className="btn-primary">
             Continue <ArrowRight className="h-4 w-4" />
           </button>
-          <PhoneButton variant="ghost" />
+          <PhoneButton variant="ghost" location="unique_offer" />
         </div>
         <button onClick={onBack} className="mt-4 text-sm font-medium text-muted hover:text-brand">
           ← Edit vehicle details

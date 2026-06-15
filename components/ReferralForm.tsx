@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { site } from "@/lib/site-config";
+import { track } from "@/lib/analytics";
 import { Check, ArrowRight, Gift } from "./icons";
 
 export default function ReferralForm() {
@@ -40,7 +41,9 @@ export default function ReferralForm() {
       if (!res.ok) throw new Error();
       setCode(data.code || "");
       setState("done");
+      track("referral_submitted", { hasFriendDetails: !!(f.friendName || f.friendPhone) });
     } catch {
+      track("referral_error");
       setState("error");
     }
   }

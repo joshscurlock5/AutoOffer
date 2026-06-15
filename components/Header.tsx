@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
+import { track } from "@/lib/analytics";
 import { Phone, Menu, X, ArrowRight } from "./icons";
 
 const NAV = [
@@ -79,6 +80,7 @@ export default function Header() {
         <div className="hidden items-center gap-3 lg:flex">
           <a
             href={telHref}
+            onClick={() => track("phone_click", { location: "header_desktop" })}
             className="group flex items-center gap-2 rounded-full px-3 py-2 text-navy transition hover:text-brand"
           >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
@@ -125,7 +127,7 @@ export default function Header() {
                 </Link>
               ))}
             <div className="mt-3 flex flex-col gap-2">
-              <a href={telHref} className="btn-dark w-full">
+              <a href={telHref} onClick={() => track("phone_click", { location: "header_mobile" })} className="btn-dark w-full">
                 <Phone className="h-5 w-5" />
                 {site.phoneDisplay}
               </a>

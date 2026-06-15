@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Script from "next/script";
 import { Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -6,6 +7,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StickyMobileBar from "@/components/StickyMobileBar";
 import ExitIntent from "@/components/ExitIntent";
+import Analytics from "@/components/Analytics";
+import CookieNotice from "@/components/CookieNotice";
 import { site } from "@/lib/site-config";
 import { GA_ID } from "@/lib/analytics";
 
@@ -46,13 +49,20 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col pb-20 lg:pb-0">
         {GA_ID && (
           <>
+            {/* Define gtag + config BEFORE hydration so early user events aren't
+                dropped. send_page_view:false — <Analytics/> owns page_view so
+                client-side route changes are counted. Ad/remarketing signals
+                off (first-party measurement only). */}
+            <Script id="ga4-init" strategy="beforeInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false});`}
+            </Script>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
               strategy="afterInteractive"
             />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
-            </Script>
+            <Suspense fallback={null}>
+              <Analytics />
+            </Suspense>
           </>
         )}
         <Header />
@@ -60,6 +70,7 @@ export default function RootLayout({
         <Footer />
         <StickyMobileBar />
         <ExitIntent />
+        <CookieNotice />
       </body>
     </html>
   );

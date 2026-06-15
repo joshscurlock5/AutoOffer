@@ -23,9 +23,18 @@ export default function PrivacyPage() {
       ],
     },
     {
+      h: "Analytics & cookies",
+      p: [
+        "We use Google Analytics 4, a service provided by Google LLC, to understand how visitors use our site. Google Analytics sets cookies (such as _ga) in your browser and collects technical and usage information including your IP address, device and browser type, the pages you visit, and how you move through our offer process. We use this only in aggregate to measure and improve the site and the offer flow.",
+        "We do not send your name, email address, or phone number to Google Analytics — that information is used only to prepare and deliver your offer, as described above.",
+        "Google processes this analytics information on servers in the United States, which means it may be stored or accessed outside Canada and is subject to U.S. law.",
+        "You can opt out by blocking or clearing cookies in your browser settings, or by installing Google's Analytics Opt-out Browser Add-on at https://tools.google.com/dlpage/gaoptout.",
+      ],
+    },
+    {
       h: "How we share your information",
       p: [
-        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing) and only as needed to deliver our service, or where required by law.",
+        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing and the analytics provider described in “Analytics & cookies” above) and only as needed to deliver our service, or where required by law.",
       ],
     },
     {
@@ -54,7 +63,7 @@ export default function PrivacyPage() {
       <section className="bg-gradient-to-b from-brand-50 to-white">
         <div className="container-x py-14 sm:py-16">
           <h1 className="font-display text-4xl font-extrabold text-navy sm:text-5xl">Privacy Policy</h1>
-          <p className="mt-3 text-muted">Last updated: June 2026</p>
+          <p className="mt-3 text-muted">Last updated: June 15, 2026</p>
         </div>
       </section>
 

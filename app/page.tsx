@@ -8,6 +8,7 @@ import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
 import MapEmbed from "@/components/MapEmbed";
 import PhoneButton from "@/components/PhoneButton";
+import TelLink from "@/components/TelLink";
 import Reveal from "@/components/Reveal";
 import { Section, SectionHeading } from "@/components/Section";
 import { site } from "@/lib/site-config";
@@ -86,7 +87,7 @@ export default function HomePage() {
             </ul>
 
             <div className="mt-7 border-t border-slate-200 pt-6">
-              <a href={`tel:${site.phoneE164}`} className="group flex items-start gap-3">
+              <TelLink location="hero" className="group flex items-start gap-3">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
                   <Phone className="h-5 w-5" />
                 </span>
@@ -96,7 +97,7 @@ export default function HomePage() {
                   </span>
                   <span className="block text-sm text-muted">We&apos;re available 24/7.</span>
                 </span>
-              </a>
+              </TelLink>
             </div>
           </div>
 
@@ -183,7 +184,7 @@ export default function HomePage() {
             <Link href="/get-offer" className="btn-gold text-lg">
               Get My Estimate <ArrowRight className="h-5 w-5" />
             </Link>
-            <PhoneButton variant="ghost" label="Call Now" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" />
+            <PhoneButton variant="ghost" label="Call Now" location="final_cta" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" />
           </div>
         </div>
       </section>

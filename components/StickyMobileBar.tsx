@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { telHref } from "@/lib/site-config";
+import { track } from "@/lib/analytics";
 import { ArrowRight, Phone } from "./icons";
 
 /**
@@ -38,6 +39,7 @@ export default function StickyMobileBar() {
         )}
         <a
           href={telHref}
+          onClick={() => track("phone_click", { location: "sticky_mobile" })}
           aria-label="Call or text us"
           className="btn shrink-0 border-2 border-brand bg-white px-5 py-3 text-brand active:bg-brand-50"
         >

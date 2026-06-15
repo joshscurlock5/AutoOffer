@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import ContactForm from "@/components/ContactForm";
 import MapEmbed from "@/components/MapEmbed";
-import { site, fullAddress, telHref, mailHref } from "@/lib/site-config";
+import TelLink from "@/components/TelLink";
+import { site, fullAddress, mailHref } from "@/lib/site-config";
 import { Phone, Mail, MapPin, Clock } from "@/components/icons";
 
 export const metadata: Metadata = {
@@ -23,8 +24,8 @@ export default function ContactPage() {
             make you an offer right over the phone.
           </p>
 
-          <a
-            href={telHref}
+          <TelLink
+            location="contact_hero"
             className="mx-auto mt-8 inline-flex items-center gap-4 rounded-2xl bg-brand px-8 py-5 text-white shadow-lift transition hover:bg-brand-600"
           >
             <span className="grid h-14 w-14 place-items-center rounded-full bg-white/20">
@@ -38,7 +39,7 @@ export default function ContactPage() {
                 {site.phoneDisplay}
               </span>
             </span>
-          </a>
+          </TelLink>
           <p className="mt-4 text-sm text-muted">{site.hours}</p>
         </div>
       </section>
@@ -54,13 +55,13 @@ export default function ContactPage() {
             </p>
 
             <div className="mt-8 space-y-4">
-              <a href={telHref} className="card flex items-center gap-4 p-5 transition hover:shadow-lift">
+              <TelLink location="contact_card" className="card flex items-center gap-4 p-5 transition hover:shadow-lift">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand"><Phone className="h-6 w-6" /></span>
                 <span>
                   <span className="block text-sm text-muted">Phone</span>
                   <span className="block text-lg font-bold text-navy">{site.phoneDisplay}</span>
                 </span>
-              </a>
+              </TelLink>
               <a href={mailHref} className="card flex items-center gap-4 p-5 transition hover:shadow-lift">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand"><Mail className="h-6 w-6" /></span>
                 <span>
