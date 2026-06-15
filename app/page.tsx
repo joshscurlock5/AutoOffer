@@ -68,7 +68,9 @@ export default function HomePage() {
               pay the same visit by e-transfer or bank draft.
             </p>
 
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            {/* Big hero buttons on desktop only — on mobile the sticky bottom
+                bar carries the CTAs, so the form sits higher. */}
+            <div className="mt-7 hidden flex-col gap-3 sm:flex-row lg:flex">
               <Link href="/get-offer" className="btn-primary text-lg">
                 Get My Instant Estimate <ArrowRight className="h-5 w-5" />
               </Link>
@@ -79,7 +81,7 @@ export default function HomePage() {
                 <Phone className="h-5 w-5" /> Call Now
               </a>
             </div>
-            <p className="mt-3 hidden text-sm text-muted sm:block">
+            <p className="mt-3 hidden text-sm text-muted lg:block">
               Want a firm number faster?{" "}
               <a href={`tel:${site.phoneE164}`} className="font-semibold text-navy hover:text-brand">
                 Call us at {site.phoneDisplay}
@@ -87,10 +89,13 @@ export default function HomePage() {
               and we&apos;ll walk through it with you.
             </p>
 
-            <ul className="mt-7 flex flex-wrap gap-x-6 gap-y-2">
+            <ul className="mt-6 flex flex-wrap gap-2">
               {["Free & no obligation", "We come to you", "Paid same visit"].map((b) => (
-                <li key={b} className="flex items-center gap-2 text-sm font-medium text-navy">
-                  <Check className="h-4 w-4 text-brand" /> {b}
+                <li
+                  key={b}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand"
+                >
+                  <Check className="h-3.5 w-3.5" /> {b}
                 </li>
               ))}
             </ul>

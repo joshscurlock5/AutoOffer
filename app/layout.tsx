@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import FloatingCall from "@/components/FloatingCall";
+import StickyMobileBar from "@/components/StickyMobileBar";
 import { site } from "@/lib/site-config";
 
 export const metadata: Metadata = {
@@ -39,11 +39,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="flex min-h-screen flex-col">
+      <body className="flex min-h-screen flex-col pb-20 lg:pb-0">
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
-        <FloatingCall />
+        <StickyMobileBar />
       </body>
     </html>
   );
