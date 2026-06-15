@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+.env*.local
+npm-debug.log*
+yarn-error.log*
+
+# Local lead data (do not commit customer info)
+data/leads.json
+data/referrals.json
+data/uploads/
+
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+next-env.d.ts

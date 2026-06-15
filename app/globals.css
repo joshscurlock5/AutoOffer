@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-white font-sans text-ink antialiased;
+}
+
+::selection {
+  background-color: rgba(26, 127, 84, 0.18);
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Respect users who prefer less motion: neutralise all animation/transition. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  /* Skeleton loading placeholder with a left-to-right shimmer sweep. */
+  .skeleton {
+    @apply relative overflow-hidden bg-slate-200/70;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.65),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  .container-x {
+    @apply mx-auto w-full max-w-content px-5;
+  }
+
+  /* Buttons — one authored easing/timing, with a real lift on hover. */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full text-base font-semibold leading-none transition-[transform,background-color,box-shadow,color] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2;
+  }
+  .btn-primary {
+    @apply btn bg-brand px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-lift active:translate-y-0;
+  }
+  .btn-gold {
+    @apply btn bg-accent px-6 py-3.5 text-navy shadow-soft hover:-translate-y-0.5 hover:bg-accent-600 hover:shadow-lift active:translate-y-0;
+  }
+  .btn-dark {
+    @apply btn bg-navy px-6 py-3.5 text-white hover:-translate-y-0.5 hover:bg-navy-700 active:translate-y-0;
+  }
+  .btn-accent {
+    @apply btn-gold;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-200 bg-white px-6 py-3.5 text-ink hover:-translate-y-0.5 hover:border-brand hover:text-brand active:translate-y-0;
+  }
+
+  /* Icon-only control: gives focus ring + decent hit area without .btn padding. */
+  .icon-btn {
+    @apply grid place-items-center rounded-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2;
+  }
+
+  /* Forms */
+  .field {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-ink outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/20;
+  }
+  select.field {
+    @apply appearance-none bg-[length:18px] bg-[right_0.9rem_center] bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-navy;
+  }
+
+  /* Card vocabulary — three distinct surfaces, not one repeated tile. */
+  .card {
+    @apply rounded-2xl bg-white shadow-card;
+  }
+  .card-outline {
+    @apply rounded-2xl border border-slate-200 bg-white;
+  }
+  .card-spotlight {
+    @apply rounded-2xl bg-navy text-white shadow-lift;
+  }
+
+  /* Type helpers */
+  .eyebrow {
+    @apply text-sm font-semibold uppercase tracking-[0.14em] text-brand;
+  }
+  .h-section {
+    @apply font-display text-3xl font-bold leading-tight tracking-tight text-navy sm:text-[2.6rem];
+  }
+
+  /* Subtle dot grid for hero/section backgrounds (replaces blur blobs). */
+  .bg-grid {
+    background-image: radial-gradient(rgba(16, 41, 30, 0.07) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+}
