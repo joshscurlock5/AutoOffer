@@ -18,22 +18,22 @@ export const site = {
   email: "offers@autooffer.ca", //                           PLACEHOLDER
 
   address: {
-    line1: "123 Example Avenue NW", //                       PLACEHOLDER
-    city: "Calgary", //                                      PLACEHOLDER
-    province: "AB", //                                       PLACEHOLDER
-    postal: "T2P 1A1", //                                    PLACEHOLDER
+    line1: "16075 66 St NW",
+    city: "Edmonton",
+    province: "AB",
+    postal: "", //  add your postal code here if you'd like it shown
     country: "Canada",
   },
 
-  hours: "Mon – Sun: 8:00 AM – 10:00 PM MT", //              PLACEHOLDER
+  hours: "Open 24/7 — we buy cars around the clock",
 
   // ---- GOOGLE MAP ---------------------------------------------------------
   // No API key needed. Replace the address in q= with your real one
-  // (spaces become +). Example: q=123+Example+Ave+NW,+Calgary,+AB
+  // (spaces become +).
   mapEmbedSrc:
-    "https://www.google.com/maps?q=Calgary,+AB,+Canada&z=11&output=embed",
+    "https://www.google.com/maps?q=16075+66+St+NW,+Edmonton,+AB,+Canada&z=15&output=embed",
   mapLink:
-    "https://www.google.com/maps/search/?api=1&query=Calgary%2C+AB%2C+Canada",
+    "https://www.google.com/maps/search/?api=1&query=16075+66+St+NW%2C+Edmonton%2C+AB%2C+Canada",
 
   // ---- SOCIAL (use # to hide a link) --------------------------------------
   social: {
@@ -67,7 +67,13 @@ export const site = {
   ],
 } as const;
 
-export const fullAddress = `${site.address.line1}, ${site.address.city}, ${site.address.province} ${site.address.postal}`;
+export const fullAddress = [
+  site.address.line1,
+  site.address.city,
+  `${site.address.province} ${site.address.postal}`.trim(),
+]
+  .filter(Boolean)
+  .join(", ");
 
 // Convenience: the href for a click-to-call link.
 export const telHref = `tel:${site.phoneE164}`;

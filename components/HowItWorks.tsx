@@ -39,11 +39,11 @@ export default function HowItWorks() {
           const Icon = s.icon;
           return (
             <Reveal key={s.title} delay={i * 120} className="relative">
-              <span className="pointer-events-none absolute -top-14 left-1/2 -translate-x-1/2 select-none font-display text-[130px] font-extrabold leading-none text-brand/[0.06] md:left-0 md:translate-x-0">
+              <span className="pointer-events-none absolute -top-[4.25rem] left-1/2 -translate-x-1/2 select-none font-display text-[118px] font-extrabold leading-none text-brand/20 md:left-7">
                 {i + 1}
               </span>
               <div className="relative text-center md:text-left">
-                <div className="relative z-10 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-soft ring-8 ring-cream md:mx-0">
+                <div className="relative z-10 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-soft ring-4 ring-cream md:mx-0">
                   <Icon className="h-6 w-6" />
                 </div>
                 <h3 className="mt-6 font-display text-xl font-bold text-navy">{s.title}</h3>
