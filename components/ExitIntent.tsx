@@ -1,28 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { X, ArrowRight, Phone, Tag } from "./icons";
 
 /**
- * Subtle exit-intent reminder. Fires once per browser session when the cursor
- * leaves toward the top of the window (the classic "about to close the tab"
- * signal). Skipped on the offer funnel and admin.
+ * Subtle exit-intent reminder. Shown once per browser session on EVERY page
+ * (except the admin panel and the offer flow itself).
+ *  - Desktop: when the cursor leaves toward the top of the window.
+ *  - Mobile/touch: when the visitor scrolls down then quickly back to the top
+ *    (a safe "I'm leaving" signal — we don't hijack the back button).
  *
- * To preview it any time, visit any page with ?exitpreview=1
- * (e.g. https://your-site/?exitpreview=1).
+ * Preview it any time by adding ?exitpreview=1 to any URL.
  */
 export default function ExitIntent() {
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer")) return;
 
-    // Preview override: ?exitpreview=1 shows it immediately, every time.
+    // Preview override — shows it immediately on any page, every time.
     if (new URLSearchParams(window.location.search).has("exitpreview")) {
       setOpen(true);
       return;
@@ -30,26 +28,50 @@ export default function ExitIntent() {
 
     if (sessionStorage.getItem("ao_exit_shown")) return;
 
+    let done = false;
+    const excluded = () => {
+      const p = window.location.pathname;
+      return p.startsWith("/admin") || p.startsWith("/get-offer");
+    };
+    const fire = () => {
+      if (done || excluded()) return;
+      done = true;
+      setOpen(true);
+      sessionStorage.setItem("ao_exit_shown", "1");
+      cleanup();
+    };
+
+    // Don't fire in the first moment after load.
     let armed = false;
     const arm = setTimeout(() => {
       armed = true;
     }, 1200);
 
+    // Desktop: cursor leaves the window via the top edge.
     const onMouseOut = (e: MouseEvent) => {
-      if (!armed) return;
-      // Fired only when the cursor actually leaves the window via the top.
-      if (e.clientY <= 0 && !e.relatedTarget) {
-        setOpen(true);
-        sessionStorage.setItem("ao_exit_shown", "1");
-        document.removeEventListener("mouseout", onMouseOut);
-      }
+      if (armed && e.clientY <= 0 && !e.relatedTarget) fire();
     };
     document.addEventListener("mouseout", onMouseOut);
-    return () => {
+
+    // Mobile/touch: scrolled down, then scrolling back up toward the top.
+    const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    let wentDown = false;
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > 500) wentDown = true;
+      if (armed && wentDown && y < 140 && y < lastY) fire();
+      lastY = y;
+    };
+    if (isTouch) window.addEventListener("scroll", onScroll, { passive: true });
+
+    function cleanup() {
       clearTimeout(arm);
       document.removeEventListener("mouseout", onMouseOut);
-    };
-  }, [pathname]);
+      window.removeEventListener("scroll", onScroll);
+    }
+    return cleanup;
+  }, []);
 
   if (!open) return null;
 
