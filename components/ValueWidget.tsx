@@ -16,7 +16,6 @@ export default function ValueWidget() {
 
   const models = make ? modelsFor(make) : [];
   const ready = Boolean(year && make && model && kmv);
-  const missing = !year ? "year" : !make ? "make" : !model ? "model" : "mileage";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -126,7 +125,7 @@ export default function ValueWidget() {
       </button>
       {!ready && (
         <p className="mt-2 text-center text-xs text-muted">
-          Add your <span className="font-semibold text-navy">{missing}</span> to see your estimate
+          Add your year, make, model, and mileage to see your estimate.
         </p>
       )}
 

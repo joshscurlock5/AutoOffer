@@ -64,9 +64,8 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-              Get an instant estimate in minutes — then a firm offer by phone once we
-              confirm the details. We come to your driveway and pay by e-transfer or
-              bank draft. No haggling, no dealership.
+              Get an instant estimate in minutes. We come to you, inspect the car, and
+              pay the same visit by e-transfer or bank draft.
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
@@ -80,7 +79,7 @@ export default function HomePage() {
                 <Phone className="h-5 w-5" /> Call Now
               </a>
             </div>
-            <p className="mt-3 text-sm text-muted">
+            <p className="mt-3 hidden text-sm text-muted sm:block">
               Want a firm number faster?{" "}
               <a href={`tel:${site.phoneE164}`} className="font-semibold text-navy hover:text-brand">
                 Call us at {site.phoneDisplay}
@@ -99,8 +98,10 @@ export default function HomePage() {
 
           <div className="animate-fade-up">
             <div className="relative">
-              <HeroArt className="w-full drop-shadow-[0_24px_50px_rgba(16,41,30,0.28)]" />
-              <div className="relative z-10 mx-auto -mt-12 w-[94%] sm:-mt-16">
+              {/* Decorative car graphic shows on desktop only — on mobile the form
+                  comes right after the trust bullets so users reach it faster. */}
+              <HeroArt className="hidden w-full drop-shadow-[0_24px_50px_rgba(16,41,30,0.28)] lg:block" />
+              <div className="relative z-10 mx-auto w-full lg:-mt-16 lg:w-[94%]">
                 <ValueWidget />
               </div>
             </div>
