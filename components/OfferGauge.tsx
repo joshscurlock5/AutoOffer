@@ -49,17 +49,10 @@ export default function OfferGauge({
         <p className="mt-1 text-center font-display text-3xl font-extrabold text-navy">
           {cad(low)} – {cad(high)}
         </p>
-        <div className="mt-4 flex h-3.5 overflow-hidden rounded-full">
-          <div className="w-1/4 bg-accent" />
-          <div className="w-1/2 bg-brand" />
-          <div className="w-1/4 bg-accent" />
-        </div>
-        <div className="mt-2 flex justify-between text-[11px] font-semibold">
-          <span className="text-muted">Below avg</span>
-          <span className="text-brand">Your offer</span>
-          <span className="text-muted">Above avg</span>
-        </div>
-        <p className="mt-2 text-center text-xs text-muted">Above the typical market range</p>
+        <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-brand" />
+        <p className="mt-2 text-center text-xs text-muted">
+          A real buyer confirms your firm offer — free, no obligation.
+        </p>
       </div>
 
       {/* sm+: the full bell curve */}
@@ -67,7 +60,7 @@ export default function OfferGauge({
         viewBox={`0 0 ${W} ${H}`}
         className="hidden h-auto w-full sm:block"
         role="img"
-        aria-label={`Your estimated range is ${cad(low)} to ${cad(high)}, above the market average.`}
+        aria-label={`Your estimated range is ${cad(low)} to ${cad(high)}.`}
       >
         <defs>
           <clipPath id="ao-band">

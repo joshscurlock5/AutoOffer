@@ -9,7 +9,7 @@ frontend:
         # Pass the app's runtime env vars (set in the Amplify console) through to
         # the Next.js server by writing them into .env.production at build time.
         # Amplify does not expose console env vars to the SSR runtime otherwise.
-        - "env | grep -E '^(APP_AWS_REGION|APP_AWS_ACCESS_KEY_ID|APP_AWS_SECRET_ACCESS_KEY|LEADS_TABLE|REFERRALS_TABLE|PHOTOS_BUCKET|ADMIN_PASSWORD)=' >> .env.production || true"
+        - "env | grep -E '^(APP_AWS_REGION|APP_AWS_ACCESS_KEY_ID|APP_AWS_SECRET_ACCESS_KEY|LEADS_TABLE|REFERRALS_TABLE|PHOTOS_BUCKET|ADMIN_PASSWORD|NEXT_PUBLIC_GA_ID)=' >> .env.production || true"
         - npm run build
   artifacts:
     baseDirectory: .next

@@ -39,8 +39,8 @@ const config: Config = {
         muted: "#475569",
       },
       fontFamily: {
-        sans: ["Hanken Grotesk", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
-        display: ["Bricolage Grotesque", "Hanken Grotesk", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
+        display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       maxWidth: {
         content: "1200px",

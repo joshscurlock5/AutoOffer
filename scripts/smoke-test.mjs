@@ -47,7 +47,7 @@ async function main() {
   ok("home value widget present", /See What Your Car Is Worth/.test(home));
   ok(
     "home shows two CTAs (estimate + call)",
-    /Get My Instant Estimate/.test(home) && /Call Now/.test(home),
+    /Get My Estimate/.test(home) && /Call Now/.test(home),
   );
 
   const admin = await (await fetch(BASE + "/admin")).text();
@@ -75,6 +75,21 @@ async function main() {
   const lj = await lr.json().catch(() => ({}));
   ok("POST /api/leads -> ok", lr.status === 200 && lj.ok === true, JSON.stringify(lj));
   const leadId = lj.id;
+
+  // --- email-only lead (no phone) must save (regression guard for the
+  //     silent-fail bug: client allowed it, server used to reject it) ---
+  const efd = new FormData();
+  efd.append("kind", "vehicle");
+  efd.append("year", "2018");
+  efd.append("make", "Honda");
+  efd.append("model", "Civic");
+  efd.append("mileageKm", "60000");
+  efd.append("name", "Email Only Test");
+  efd.append("email", "email-only-test@example.com");
+  efd.append("contactMethod", "email");
+  const elr = await fetch(BASE + "/api/leads", { method: "POST", body: efd });
+  const elj = await elr.json().catch(() => ({}));
+  ok("POST email-only lead (no phone) -> ok", elr.status === 200 && elj.ok === true, JSON.stringify(elj));
 
   // --- referral ---
   const rr = await fetch(BASE + "/api/referrals", {

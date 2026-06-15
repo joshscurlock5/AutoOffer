@@ -1,10 +1,25 @@
 import type { Metadata } from "next";
+import Script from "next/script";
+import { Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StickyMobileBar from "@/components/StickyMobileBar";
 import ExitIntent from "@/components/ExitIntent";
 import { site } from "@/lib/site-config";
+import { GA_ID } from "@/lib/analytics";
+
+// Self-hosted via next/font (no render-blocking request to fonts.googleapis.com).
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+});
+const body = Hanken_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://autooffer.ca"),
@@ -27,20 +42,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="flex min-h-screen flex-col pb-20 lg:pb-0">
+        {GA_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
+            </Script>
+          </>
+        )}
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />

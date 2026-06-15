@@ -28,7 +28,7 @@ export default function TrustBar() {
     <section className="border-y border-slate-100 bg-white">
       <div className="container-x py-10">
         <h2 className="text-center font-display text-xl font-bold text-navy">
-          Trusted by sellers across Canada
+          A safer, simpler way to sell — here&apos;s what you get
         </h2>
         <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {points.map((p) => {

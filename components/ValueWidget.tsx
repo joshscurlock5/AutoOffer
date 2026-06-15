@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import { ArrowRight, Car, Lock } from "./icons";
+import { track } from "@/lib/analytics";
+import { ArrowRight, Car, Lock, Check } from "./icons";
 
 export default function ValueWidget() {
   const router = useRouter();
@@ -12,13 +13,23 @@ export default function ValueWidget() {
   const [model, setModel] = useState("");
   const [trim, setTrim] = useState("");
   const [kmv, setKmv] = useState("");
+  const [showError, setShowError] = useState(false);
 
   const models = make ? modelsFor(make) : [];
   const ready = Boolean(year && make && model && kmv);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!ready) return;
+    if (!ready) {
+      // Keep the button live: on an incomplete submit, jump to the first gap.
+      setShowError(true);
+      const firstMissing = !year ? "vw-year" : !make ? "vw-make" : !model ? "vw-model" : "vw-km";
+      const el = document.getElementById(firstMissing);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus();
+      return;
+    }
+    track("widget_submit", { make, model, year });
     const q = new URLSearchParams({ year, make, model, trim, km: kmv });
     router.push(`/get-offer?${q.toString()}`);
   }
@@ -36,7 +47,7 @@ export default function ValueWidget() {
           See What Your Car Is Worth
         </h2>
         <p className="mt-2 text-sm text-muted">
-          Free estimate first. No obligation. Talk to a real buyer when you&apos;re ready.
+          Takes about a minute. See your estimated range, then talk to a real buyer when you&apos;re ready.
         </p>
       </div>
 
@@ -116,19 +127,33 @@ export default function ValueWidget() {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={!ready}
-        className="btn-primary mt-5 w-full text-lg disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Get My Instant Estimate
+      <p className="mt-3 text-center text-xs text-muted">
+        Don&apos;t see your make? Choose{" "}
+        <span className="font-semibold text-navy">&ldquo;Other / Not listed&rdquo;</span> — we still buy it.
+      </p>
+
+      <button type="submit" className="btn-primary mt-4 w-full text-lg">
+        Get My Estimate
         <ArrowRight className="h-5 w-5" />
       </button>
-      {!ready && (
-        <p className="mt-2 text-center text-xs text-muted">
-          Add your year, make, model, and mileage to see your estimate.
+      {showError && !ready && (
+        <p className="mt-2 text-center text-xs font-medium text-red-600">
+          Just add your year, make, model, and mileage to see your estimate.
         </p>
       )}
+
+      {/* Concrete, verifiable trust — not invented claims. */}
+      <ul className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-muted">
+        <li className="flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0 text-brand" /> Real buyers in Edmonton, AB
+        </li>
+        <li className="flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0 text-brand" /> A real person answers — 24/7
+        </li>
+        <li className="flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0 text-brand" /> Paid by e-transfer before we take the keys
+        </li>
+      </ul>
 
       <p className="mt-4 flex items-center justify-center gap-2 text-center text-sm text-muted">
         <Lock className="h-4 w-4" /> We never sell your information.

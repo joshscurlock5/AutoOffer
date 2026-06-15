@@ -49,21 +49,21 @@ export default function HomePage() {
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
         <div className="container-x relative grid items-center gap-10 py-12 lg:grid-cols-[0.9fr_1.1fr] lg:py-16">
-          {/* LEFT — short, tight, supporting */}
-          <div className="animate-fade-up">
+          {/* LEFT — short, tight, supporting (below the form on mobile) */}
+          <div className="order-2 animate-fade-up lg:order-1">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
                 <Check className="h-3 w-3" />
               </span>
-              Free instant estimate · we come to you
+              Free estimate · we come to you
             </span>
 
-            <h1 className="mt-5 font-display text-[2.6rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-6xl">
+            <h1 className="mt-5 font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-6xl">
               Sell your car<br className="hidden sm:block" /> the <span className="text-brand">easy way.</span>
             </h1>
 
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-              Get an instant estimate in minutes. We come to you, inspect the car, and
+              Get your estimate in minutes. We come to you, inspect the car, and
               pay the same visit by e-transfer or bank draft.
             </p>
 
@@ -100,8 +100,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* RIGHT — the form is the hero */}
-          <div className="animate-fade-up">
+          {/* RIGHT — the form is the hero (first on mobile) */}
+          <div id="estimate" className="order-1 animate-fade-up scroll-mt-24 lg:order-2">
             <ValueWidget />
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function HomePage() {
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
             <Link href="/get-offer" className="btn-gold text-lg">
-              Get My Instant Estimate <ArrowRight className="h-5 w-5" />
+              Get My Estimate <ArrowRight className="h-5 w-5" />
             </Link>
             <PhoneButton variant="ghost" label="Call Now" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" />
           </div>

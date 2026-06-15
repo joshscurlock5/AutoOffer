@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
+import { track } from "@/lib/analytics";
 import { X, ArrowRight, Phone, Tag } from "./icons";
 
 /**
- * Subtle exit-intent reminder. Shown once per browser session on EVERY page
- * (except the admin panel and the offer flow itself).
- *  - Desktop: when the cursor leaves toward the top of the window.
- *  - Mobile/touch: when the visitor scrolls down then quickly back to the top
- *    (a safe "I'm leaving" signal — we don't hijack the back button).
+ * Subtle exit-intent reminder. Shown once per browser session on deeper pages
+ * (NOT the homepage — the estimate form already lives there — nor the admin
+ * panel or the offer flow itself). Desktop only: fires when the cursor leaves
+ * toward the top of the window. We intentionally do NOT fire on a mobile
+ * scroll-up gesture — that's normal browsing, not an exit signal.
  *
  * Preview it any time by adding ?exitpreview=1 to any URL.
  */
@@ -31,12 +32,13 @@ export default function ExitIntent() {
     let done = false;
     const excluded = () => {
       const p = window.location.pathname;
-      return p.startsWith("/admin") || p.startsWith("/get-offer");
+      return p === "/" || p.startsWith("/admin") || p.startsWith("/get-offer");
     };
     const fire = () => {
       if (done || excluded()) return;
       done = true;
       setOpen(true);
+      track("exit_intent_shown");
       sessionStorage.setItem("ao_exit_shown", "1");
       cleanup();
     };
@@ -47,28 +49,15 @@ export default function ExitIntent() {
       armed = true;
     }, 1200);
 
-    // Desktop: cursor leaves the window via the top edge.
+    // Desktop only: cursor leaves the window via the top edge.
     const onMouseOut = (e: MouseEvent) => {
       if (armed && e.clientY <= 0 && !e.relatedTarget) fire();
     };
     document.addEventListener("mouseout", onMouseOut);
 
-    // Mobile/touch: scrolled down, then scrolling back up toward the top.
-    const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-    let wentDown = false;
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y > 500) wentDown = true;
-      if (armed && wentDown && y < 140 && y < lastY) fire();
-      lastY = y;
-    };
-    if (isTouch) window.addEventListener("scroll", onScroll, { passive: true });
-
     function cleanup() {
       clearTimeout(arm);
       document.removeEventListener("mouseout", onMouseOut);
-      window.removeEventListener("scroll", onScroll);
     }
     return cleanup;
   }, []);
@@ -95,8 +84,15 @@ export default function ExitIntent() {
           It takes about two minutes to get an instant estimate. No obligation, no
           spam — and a real {site.name} buyer confirms your firm offer.
         </p>
-        <Link href="/get-offer" onClick={() => setOpen(false)} className="btn-primary mt-5 w-full text-lg">
-          Get My Free Estimate <ArrowRight className="h-5 w-5" />
+        <Link
+          href="/get-offer"
+          onClick={() => {
+            track("exit_intent_clicked");
+            setOpen(false);
+          }}
+          className="btn-primary mt-5 w-full text-lg"
+        >
+          Get My Estimate <ArrowRight className="h-5 w-5" />
         </Link>
         <a
           href={telHref}

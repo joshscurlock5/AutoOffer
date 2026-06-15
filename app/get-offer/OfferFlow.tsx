@@ -7,6 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { estimateOffer } from "@/lib/offer";
 import type { OfferEstimate } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
+import { track } from "@/lib/analytics";
 import { site, telHref } from "@/lib/site-config";
 import OfferGauge from "@/components/OfferGauge";
 import PhoneButton from "@/components/PhoneButton";
@@ -93,10 +94,11 @@ export default function OfferFlow() {
     const est = estimateOffer({ year, make, model, mileageKm: Number(kmv) });
     setEstimate(est);
     setStep(2);
-    // Brief "calculating" skeleton so the offer reveal feels like a real lookup.
+    track("estimate_viewed", { make, model, year, unique: !!est.unique });
+    // Brief skeleton so the reveal doesn't flash; kept short to preserve momentum.
     setCalculating(true);
     if (calcTimer.current) clearTimeout(calcTimer.current);
-    calcTimer.current = setTimeout(() => setCalculating(false), 1300);
+    calcTimer.current = setTimeout(() => setCalculating(false), 600);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -134,9 +136,11 @@ export default function OfferFlow() {
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
+      track("lead_submitted", { contactMethod, unique: !!estimate?.unique });
       setStep(4);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
+      track("lead_error", { contactMethod });
       setError(
         "Something went wrong submitting your request. Please try again or call us.",
       );
@@ -274,7 +278,7 @@ export default function OfferFlow() {
               <div className="mb-6 flex items-center justify-center gap-3 text-navy">
                 <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
                 <span className="font-semibold">
-                  Pricing your {year} {make} {model} against recent sales…
+                  Calculating your estimate…
                 </span>
               </div>
               <OfferSkeleton />
@@ -313,8 +317,14 @@ export default function OfferFlow() {
                   No obligation. This range is free — a real buyer confirms your firm offer with you.
                 </p>
 
-                <button onClick={() => setStep(3)} className="btn-primary mt-6 text-lg">
-                  Send Me My Firm Offer <ArrowRight className="h-5 w-5" />
+                <button
+                  onClick={() => {
+                    track("contact_started");
+                    setStep(3);
+                  }}
+                  className="btn-primary mt-6 text-lg"
+                >
+                  Get My Firm Offer <ArrowRight className="h-5 w-5" />
                 </button>
                 <a
                   href={telHref}
@@ -375,7 +385,7 @@ export default function OfferFlow() {
             <form onSubmit={submitLead} className="mt-5 space-y-4">
               <div>
                 <label className="label" htmlFor="name">First name</label>
-                <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" />
+                <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" autoFocus />
               </div>
 
               <div>
@@ -427,11 +437,15 @@ export default function OfferFlow() {
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
               <button type="submit" disabled={submitting} className="btn-primary w-full text-lg disabled:opacity-60">
-                {submitting ? "Sending…" : "Send Me My Firm Offer"}
+                {submitting ? "Sending…" : "Get My Firm Offer"}
                 {!submitting && <ArrowRight className="h-5 w-5" />}
               </button>
               <p className="text-center text-xs text-muted">
-                No spam. No obligation. One quick conversation with a real person.
+                We use your details once — to send your offer. We never sell them.{" "}
+                <Link href="/privacy" className="font-medium text-brand hover:underline">
+                  See our privacy policy
+                </Link>
+                .
               </p>
               <a
                 href={telHref}

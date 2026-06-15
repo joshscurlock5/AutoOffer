@@ -31,22 +31,29 @@ export default function Footer() {
             or email, free vehicle pickup and inspection, and payment on the spot.
             No sign-up, no obligation, no dealership runaround.
           </p>
-          <div className="mt-5 flex gap-3">
-            <a
-              href={site.social.facebook}
-              aria-label="Facebook"
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition hover:bg-brand"
-            >
-              <Facebook className="h-5 w-5" />
-            </a>
-            <a
-              href={site.social.instagram}
-              aria-label="Instagram"
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition hover:bg-brand"
-            >
-              <Instagram className="h-5 w-5" />
-            </a>
-          </div>
+          {((site.social.facebook as string) !== "#" ||
+            (site.social.instagram as string) !== "#") && (
+            <div className="mt-5 flex gap-3">
+              {(site.social.facebook as string) !== "#" && (
+                <a
+                  href={site.social.facebook}
+                  aria-label="Facebook"
+                  className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition hover:bg-brand"
+                >
+                  <Facebook className="h-5 w-5" />
+                </a>
+              )}
+              {(site.social.instagram as string) !== "#" && (
+                <a
+                  href={site.social.instagram}
+                  aria-label="Instagram"
+                  className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition hover:bg-brand"
+                >
+                  <Instagram className="h-5 w-5" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Get in touch */}

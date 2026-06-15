@@ -17,15 +17,25 @@ export default function StickyMobileBar() {
     return null;
   }
 
+  // On the homepage the estimate form is already on the page — scroll to it
+  // instead of routing to a fresh, empty copy of the same form.
+  const onHome = pathname === "/";
+
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_-8px_24px_-12px_rgba(16,41,30,0.25)] backdrop-blur lg:hidden"
       style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto flex max-w-md items-center gap-2.5">
-        <Link href="/get-offer" className="btn-primary flex-1 py-3">
-          Get Estimate <ArrowRight className="h-4 w-4" />
-        </Link>
+        {onHome ? (
+          <a href="#estimate" className="btn-primary flex-1 py-3">
+            Get My Estimate <ArrowRight className="h-4 w-4" />
+          </a>
+        ) : (
+          <Link href="/get-offer" className="btn-primary flex-1 py-3">
+            Get My Estimate <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
         <a
           href={telHref}
           aria-label="Call or text us"

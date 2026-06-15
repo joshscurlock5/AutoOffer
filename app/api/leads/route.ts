@@ -25,9 +25,23 @@ export async function POST(req: NextRequest) {
       | "email";
     const bestTime = str(form.get("bestTime")) || undefined;
 
-    if (!name || !phone) {
+    // Require a name plus the contact channel that matches the chosen method.
+    // (Email-preference leads have no phone — they were silently rejected before.)
+    const missingChannel = contactMethod === "email" ? !email : !phone;
+    if (!name || missingChannel) {
       return NextResponse.json(
-        { error: "Name and phone are required." },
+        {
+          error:
+            contactMethod === "email"
+              ? "Name and email are required."
+              : "Name and phone are required.",
+        },
+        { status: 400 },
+      );
+    }
+    if (contactMethod === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address." },
         { status: 400 },
       );
     }
