@@ -534,67 +534,70 @@ function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Photo viewer"
     >
-      {/* top bar */}
-      <div className="flex items-center justify-between p-4 text-white" onClick={(e) => e.stopPropagation()}>
-        <span className="text-sm font-medium">
-          {index + 1} / {photos.length}
-          <span className="ml-3 text-white/60">{photo?.name}</span>
-        </span>
-        <button onClick={onClose} aria-label="Close" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
-          <X className="h-6 w-6" />
-        </button>
-      </div>
-
-      {/* image + arrows */}
-      <div className="relative flex flex-1 items-center justify-center px-4 pb-6" onClick={(e) => e.stopPropagation()}>
-        {photos.length > 1 && (
-          <button
-            onClick={() => go(-1)}
-            aria-label="Previous photo"
-            className="absolute left-3 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          >
-            <ChevronLeft className="h-7 w-7" />
+      {/* contained modal (~60% of the screen) so the image is never cut off */}
+      <div
+        className="flex max-h-[85vh] w-[90vw] max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-lift"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <span className="truncate text-sm font-medium text-navy">
+            {index + 1} / {photos.length}
+            <span className="ml-2 text-muted">{photo?.name}</span>
+          </span>
+          <button onClick={onClose} aria-label="Close" className="icon-btn h-9 w-9 text-muted hover:bg-slate-100">
+            <X className="h-5 w-5" />
           </button>
-        )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/api/uploads/${leadId}/${photo.file}`}
-          alt={photo?.name || "Vehicle photo"}
-          className="max-h-full max-w-full rounded-lg object-contain shadow-lift"
-        />
-        {photos.length > 1 && (
-          <button
-            onClick={() => go(1)}
-            aria-label="Next photo"
-            className="absolute right-3 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          >
-            <ChevronRight className="h-7 w-7" />
-          </button>
-        )}
-      </div>
-
-      {/* thumbnail strip */}
-      {photos.length > 1 && (
-        <div className="flex justify-center gap-2 overflow-x-auto p-3" onClick={(e) => e.stopPropagation()}>
-          {photos.map((p, i) => (
-            <button
-              key={p.file}
-              onClick={() => setState((lb) => (lb ? { ...lb, index: i } : lb))}
-              className={`h-14 w-14 shrink-0 overflow-hidden rounded-md border-2 ${i === index ? "border-accent" : "border-transparent opacity-60 hover:opacity-100"}`}
-              aria-label={`Go to photo ${i + 1}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/uploads/${leadId}/${p.file}`} alt={p.name} className="h-full w-full object-cover" />
-            </button>
-          ))}
         </div>
-      )}
+
+        <div className="relative grid flex-1 place-items-center bg-slate-50 p-3">
+          {photos.length > 1 && (
+            <button
+              onClick={() => go(-1)}
+              aria-label="Previous photo"
+              className="absolute left-2 z-10 grid h-10 w-10 place-items-center rounded-full bg-white text-navy shadow-soft hover:bg-slate-100"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/uploads/${leadId}/${photo.file}`}
+            alt={photo?.name || "Vehicle photo"}
+            className="max-h-[60vh] max-w-full rounded-lg object-contain"
+          />
+          {photos.length > 1 && (
+            <button
+              onClick={() => go(1)}
+              aria-label="Next photo"
+              className="absolute right-2 z-10 grid h-10 w-10 place-items-center rounded-full bg-white text-navy shadow-soft hover:bg-slate-100"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+        </div>
+
+        {photos.length > 1 && (
+          <div className="flex justify-center gap-2 overflow-x-auto border-t border-slate-100 p-3">
+            {photos.map((p, i) => (
+              <button
+                key={p.file}
+                onClick={() => setState((lb) => (lb ? { ...lb, index: i } : lb))}
+                className={`h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 ${i === index ? "border-brand" : "border-transparent opacity-60 hover:opacity-100"}`}
+                aria-label={`Go to photo ${i + 1}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/uploads/${leadId}/${p.file}`} alt={p.name} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

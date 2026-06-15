@@ -37,7 +37,6 @@ export default function OfferFlow() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [referralCode, setReferralCode] = useState("");
   const [contactMethod, setContactMethod] = useState<"call" | "text" | "email">("call");
   const [bestTime, setBestTime] = useState("Anytime");
 
@@ -54,7 +53,6 @@ export default function OfferFlow() {
     setModel(sp.get("model") || "");
     setTrim(sp.get("trim") || "");
     setKmv(sp.get("km") || "");
-    setReferralCode(sp.get("ref") || "");
   }, [sp]);
 
   // Revoke object URLs only on unmount (a [previews] dependency would revoke
@@ -105,12 +103,17 @@ export default function OfferFlow() {
   async function submitLead(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!name || !phone) {
-      setError("Please add your name and a phone number (or just call us).");
+    if (!name.trim()) {
+      setError("Please add your first name.");
       return;
     }
-    if (contactMethod === "email" && !email) {
-      setError("You chose email — please add your email address.");
+    if (contactMethod === "email") {
+      if (!email.trim()) {
+        setError("You chose email — please add your email address.");
+        return;
+      }
+    } else if (!phone.trim()) {
+      setError(`You chose ${contactMethod} — please add your phone number.`);
       return;
     }
     setSubmitting(true);
@@ -127,7 +130,6 @@ export default function OfferFlow() {
       fd.append("phone", phone);
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
-      fd.append("referralCode", referralCode);
       photos.forEach((f) => fd.append("photos", f));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
@@ -156,7 +158,7 @@ export default function OfferFlow() {
             Tell us about your vehicle
           </h1>
           <p className="mt-2 text-muted">
-            A few quick details and photos help us give you the most accurate estimate.
+            Just the basics to start — year, make, model and mileage. Everything else is optional.
           </p>
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
@@ -194,19 +196,23 @@ export default function OfferFlow() {
             </div>
             <div>
               <label className="label" htmlFor="trim">Trim <span className="font-normal text-muted">(optional)</span></label>
-              <input id="trim" className="field" placeholder="e.g. SE, Limited, Sport" value={trim} onChange={(e) => setTrim(e.target.value)} />
+              <input id="trim" className="field" placeholder="Not sure? Leave it blank" value={trim} onChange={(e) => setTrim(e.target.value)} />
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="km">Mileage (km)</label>
               <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
+              <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
             </div>
           </div>
 
           {/* Photo upload */}
           <div className="mt-6">
             <label className="label">
-              Photos <span className="font-normal text-muted">(optional, but speeds up your firm offer)</span>
+              Photos <span className="font-normal text-muted">(optional)</span>
             </label>
+            <p className="-mt-1 mb-2 text-sm text-muted">
+              Photos are optional, but they help us make a firmer offer faster. No car nearby? You can add them later.
+            </p>
             <label
               htmlFor="photos"
               className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-brand hover:bg-brand-50"
@@ -302,9 +308,13 @@ export default function OfferFlow() {
                   your {year} {make} {model} with {fmtKm(Number(kmv))}. Want your firm
                   offer? We can call, text, or email you after confirming a few details.
                 </p>
+                <p className="mt-3 flex items-start gap-2 text-sm text-muted">
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                  No obligation. This range is free — a real buyer confirms your firm offer with you.
+                </p>
 
                 <button onClick={() => setStep(3)} className="btn-primary mt-6 text-lg">
-                  Get My Firm Offer <ArrowRight className="h-5 w-5" />
+                  Send Me My Firm Offer <ArrowRight className="h-5 w-5" />
                 </button>
                 <a
                   href={telHref}
@@ -364,22 +374,12 @@ export default function OfferFlow() {
 
             <form onSubmit={submitLead} className="mt-5 space-y-4">
               <div>
-                <label className="label" htmlFor="name">Full name</label>
-                <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" />
+                <label className="label" htmlFor="name">First name</label>
+                <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" />
               </div>
+
               <div>
-                <label className="label" htmlFor="cphone">Mobile phone or text</label>
-                <input id="cphone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(___) ___-____" autoComplete="tel" />
-                <p className="mt-1.5 text-xs text-muted">
-                  We&apos;ll only use this to discuss your vehicle and give you a real offer. No spam.
-                </p>
-              </div>
-              <div>
-                <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-                <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
-              </div>
-              <div>
-                <span className="label">Preferred contact method</span>
+                <span className="label">How should we reach you?</span>
                 <div className="grid grid-cols-3 gap-2">
                   {(["call", "text", "email"] as const).map((m) => (
                     <button
@@ -398,26 +398,41 @@ export default function OfferFlow() {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="label" htmlFor="besttime">Best time to reach you</label>
-                <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
-                  <option>Anytime</option>
-                  <option>Morning</option>
-                  <option>Afternoon</option>
-                  <option>Evening</option>
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="ref">Referral code <span className="font-normal text-muted">(optional)</span></label>
-                <input id="ref" className="field" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder="Were you referred by a friend?" />
-              </div>
+
+              {contactMethod === "email" ? (
+                <div>
+                  <label className="label" htmlFor="email">Email</label>
+                  <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="label" htmlFor="cphone">
+                      Mobile {contactMethod === "text" ? "number (for text)" : "phone"}
+                    </label>
+                    <input id="cphone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(___) ___-____" autoComplete="tel" />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
+                    <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
+                      <option>Anytime</option>
+                      <option>Morning</option>
+                      <option>Afternoon</option>
+                      <option>Evening</option>
+                    </select>
+                  </div>
+                </>
+              )}
 
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
               <button type="submit" disabled={submitting} className="btn-primary w-full text-lg disabled:opacity-60">
-                {submitting ? "Submitting…" : "Get My Firm Offer"}
+                {submitting ? "Sending…" : "Send Me My Firm Offer"}
                 {!submitting && <ArrowRight className="h-5 w-5" />}
               </button>
+              <p className="text-center text-xs text-muted">
+                No spam. No obligation. One quick conversation with a real person.
+              </p>
               <a
                 href={telHref}
                 className="btn w-full border-2 border-brand bg-white py-3.5 text-brand hover:-translate-y-0.5 hover:bg-brand-50"
@@ -425,16 +440,20 @@ export default function OfferFlow() {
                 <Phone className="h-5 w-5" /> Call Now Instead
               </a>
 
-              <div className="space-y-1.5 pt-1 text-center text-xs text-muted">
-                <p className="flex items-center justify-center gap-2">
-                  <Shield className="h-4 w-4" /> No spam, no obligation — one quick conversation with a real person.
+              <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
+                <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
+                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> You&apos;ll hear from {site.name} only — no dealership spam.</li>
+                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> No obligation — the estimate is free.</li>
+                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> A real person reviews your vehicle.</li>
+                <li className="flex gap-2"><Phone className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Prefer to talk now? Call or text{" "}
+                  <a href={telHref} className="font-semibold text-brand hover:underline">{site.phoneDisplay}</a>.
+                </li>
+              </ul>
+              {(site.amvicNumber || site.insured) && (
+                <p className="text-center text-xs font-medium text-navy">
+                  {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
                 </p>
-                {(site.amvicNumber || site.insured) && (
-                  <p className="font-medium text-navy">
-                    {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
-                  </p>
-                )}
-              </div>
+              )}
             </form>
           </div>
           <button onClick={() => setStep(2)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand">
@@ -450,18 +469,17 @@ export default function OfferFlow() {
             <Check className="h-10 w-10" />
           </span>
           <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">
-            You&apos;re all set, {name.split(" ")[0] || "thanks"}!
+            Thanks{name.trim() ? `, ${name.trim()}` : ""} — we got it!
           </h1>
           <p className="mt-3 text-lg text-muted">
-            We&apos;ve received your {year} {make} {model}. A specialist will reach out
-            by <span className="font-semibold text-navy">{contactMethod}</span>
-            {bestTime !== "Anytime" ? ` (${bestTime.toLowerCase()})` : ""} at{" "}
-            <span className="font-semibold text-navy">{phone}</span> with your firm offer.
+            A real {site.name} buyer will contact you soon by{" "}
+            <span className="font-semibold text-navy">{contactMethod}</span> with your firm
+            offer for the {year} {make} {model}.
           </p>
           <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-left">
-            <p className="font-semibold text-navy">In a hurry? Call us now.</p>
+            <p className="font-semibold text-navy">Want it faster? Call or text us now.</p>
             <p className="mt-1 text-sm text-muted">
-              Skip the wait — our team is ready to finalize your offer over the phone.
+              Skip the wait — our team can finalize your offer right over the phone.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <PhoneButton variant="primary" />
