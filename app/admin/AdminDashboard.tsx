@@ -1,30 +1,36 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, LeadStatus, Referral } from "@/lib/types";
+import type { Lead, LeadStatus, Referral, UploadedPhoto } from "@/lib/types";
 import { LEAD_STATUSES } from "@/lib/types";
 import { cad, km as fmtKm, formatDateTime, timeAgo } from "@/lib/format";
 import { site } from "@/lib/site-config";
 import {
-  Phone, Mail, Car, Trash, Search, Gift, Check, Camera,
+  Phone, Mail, Car, Trash, Search, Gift, Check, Camera, Star, X,
+  ChevronLeft, ChevronRight, Dollar,
 } from "@/components/icons";
 
-const STATUS_LABEL: Record<LeadStatus, string> = {
+const STATUS_LABEL: Record<string, string> = {
   new: "New",
   contacted: "Contacted",
   scheduled: "Scheduled",
-  paid: "Paid",
+  closed: "Closed",
   lost: "Lost",
+  spam: "Spam",
 };
-
-const STATUS_STYLE: Record<LeadStatus, string> = {
+const STATUS_STYLE: Record<string, string> = {
   new: "bg-brand-50 text-brand",
   contacted: "bg-amber-50 text-amber-700",
   scheduled: "bg-purple-50 text-purple-700",
-  paid: "bg-green-50 text-green-700",
+  closed: "bg-green-50 text-green-700",
   lost: "bg-slate-100 text-slate-500",
+  spam: "bg-red-50 text-red-600",
 };
+const labelOf = (s: string) => STATUS_LABEL[s] ?? s;
+const styleOf = (s: string) => STATUS_STYLE[s] ?? "bg-slate-100 text-slate-500";
+
+type LightboxState = { leadId: string; photos: UploadedPhoto[]; index: number };
 
 export default function AdminDashboard({
   initialLeads,
@@ -38,21 +44,30 @@ export default function AdminDashboard({
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
   const [tab, setTab] = useState<"leads" | "referrals">("leads");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | LeadStatus>("all");
+  const [filter, setFilter] = useState<"all" | "bookmarked" | LeadStatus>("all");
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const [priceModal, setPriceModal] = useState<Lead | null>(null);
 
-  const counts = useMemo(() => {
-    return {
-      total: leads.length,
+  const counts = useMemo(
+    () => ({
+      total: leads.filter((l) => l.status !== "spam").length,
       new: leads.filter((l) => l.status === "new").length,
-      scheduled: leads.filter((l) => l.status === "scheduled").length,
-      paid: leads.filter((l) => l.status === "paid").length,
-    };
-  }, [leads]);
+      closed: leads.filter((l) => l.status === "closed").length,
+      saved: leads.filter((l) => l.bookmarked).length,
+    }),
+    [leads],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return leads.filter((l) => {
-      if (filter !== "all" && l.status !== filter) return false;
+      if (filter === "all") {
+        if (l.status === "spam") return false;
+      } else if (filter === "bookmarked") {
+        if (!l.bookmarked) return false;
+      } else if (l.status !== filter) {
+        return false;
+      }
       if (!q) return true;
       const hay = [
         l.contact.name, l.contact.email, l.contact.phone,
@@ -82,6 +97,15 @@ export default function AdminDashboard({
     });
   }
 
+  // Changing status to "Closed" requires a purchase price first.
+  function changeStatus(lead: Lead, status: LeadStatus) {
+    if (status === "closed" && lead.purchasePrice == null) {
+      setPriceModal(lead);
+      return;
+    }
+    patchLead(lead.id, { status });
+  }
+
   async function patchReferral(id: string, patch: Partial<Referral>) {
     setReferrals((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     await fetch("/api/admin/leads", {
@@ -96,9 +120,26 @@ export default function AdminDashboard({
     router.refresh();
   }
 
+  // Lightbox keyboard controls
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+      else if (e.key === "ArrowRight")
+        setLightbox((lb) => (lb ? { ...lb, index: (lb.index + 1) % lb.photos.length } : lb));
+      else if (e.key === "ArrowLeft")
+        setLightbox((lb) => (lb ? { ...lb, index: (lb.index - 1 + lb.photos.length) % lb.photos.length } : lb));
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  const filterChips: ("all" | "bookmarked" | LeadStatus)[] = [
+    "all", "bookmarked", ...LEAD_STATUSES,
+  ];
+
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* top bar */}
       <div className="border-b border-slate-200 bg-white">
         <div className="container-x flex h-16 items-center justify-between">
           <div className="flex items-center gap-3">
@@ -119,10 +160,10 @@ export default function AdminDashboard({
         {/* stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[
-            { label: "Total leads", value: counts.total },
+            { label: "Active leads", value: counts.total },
             { label: "New", value: counts.new },
-            { label: "Scheduled", value: counts.scheduled },
-            { label: "Paid", value: counts.paid },
+            { label: "Closed", value: counts.closed },
+            { label: "★ Saved", value: counts.saved },
           ].map((s) => (
             <div key={s.label} className="card p-5">
               <div className="text-sm text-muted">{s.label}</div>
@@ -149,7 +190,6 @@ export default function AdminDashboard({
 
         {tab === "leads" && (
           <>
-            {/* controls */}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative w-full sm:max-w-xs">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -161,23 +201,24 @@ export default function AdminDashboard({
                 />
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {(["all", ...LEAD_STATUSES] as const).map((s) => (
+                {filterChips.map((s) => (
                   <button
                     key={s}
                     onClick={() => setFilter(s)}
                     className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${filter === s ? "bg-brand text-white" : "bg-white text-muted hover:text-navy"}`}
                   >
-                    {s === "all" ? "All" : STATUS_LABEL[s]}
+                    {s === "all" ? "All" : s === "bookmarked" ? "★ Saved" : labelOf(s)}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* list */}
             <div className="mt-5 space-y-4">
               {filtered.length === 0 && (
                 <div className="card p-12 text-center text-muted">
-                  No leads yet. New submissions will appear here automatically.
+                  {filter === "spam"
+                    ? "No spam leads. Mark fake submissions as Spam to move them here."
+                    : "No leads here yet. New submissions appear automatically."}
                 </div>
               )}
               {filtered.map((lead) => (
@@ -186,6 +227,9 @@ export default function AdminDashboard({
                   lead={lead}
                   onPatch={patchLead}
                   onDelete={removeLead}
+                  onStatusChange={changeStatus}
+                  onToggleBookmark={(l) => patchLead(l.id, { bookmarked: !l.bookmarked })}
+                  onOpenPhoto={(l, index) => setLightbox({ leadId: l.id, photos: l.photos, index })}
                 />
               ))}
             </div>
@@ -200,13 +244,11 @@ export default function AdminDashboard({
             {referrals.map((r) => (
               <div key={r.id} className="card p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-navy"><Gift className="h-5 w-5" /></span>
-                      <div>
-                        <div className="font-bold text-navy">{r.referrer.name}</div>
-                        <div className="text-xs text-muted">{formatDateTime(r.createdAt)}</div>
-                      </div>
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-navy"><Gift className="h-5 w-5" /></span>
+                    <div>
+                      <div className="font-bold text-navy">{r.referrer.name}</div>
+                      <div className="text-xs text-muted">{formatDateTime(r.createdAt)}</div>
                     </div>
                   </div>
                   <span className="rounded-lg bg-brand-50 px-3 py-1 font-mono text-sm font-bold text-brand">{r.code}</span>
@@ -242,6 +284,23 @@ export default function AdminDashboard({
           </div>
         )}
       </div>
+
+      {/* photo lightbox */}
+      {lightbox && lightbox.photos.length > 0 && (
+        <Lightbox state={lightbox} setState={setLightbox} onClose={() => setLightbox(null)} />
+      )}
+
+      {/* purchase-price prompt when closing a deal */}
+      {priceModal && (
+        <PriceModal
+          lead={priceModal}
+          onCancel={() => setPriceModal(null)}
+          onConfirm={(price) => {
+            patchLead(priceModal.id, { status: "closed", purchasePrice: price });
+            setPriceModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -250,23 +309,32 @@ function LeadCard({
   lead,
   onPatch,
   onDelete,
+  onStatusChange,
+  onToggleBookmark,
+  onOpenPhoto,
 }: {
   lead: Lead;
   onPatch: (id: string, patch: Partial<Lead>) => void;
   onDelete: (id: string) => void;
+  onStatusChange: (lead: Lead, status: LeadStatus) => void;
+  onToggleBookmark: (lead: Lead) => void;
+  onOpenPhoto: (lead: Lead, index: number) => void;
 }) {
   const [note, setNote] = useState(lead.notes || "");
+  const [price, setPrice] = useState(lead.purchasePrice != null ? String(lead.purchasePrice) : "");
   const noteChanged = note !== (lead.notes || "");
+  const priceNum = Math.round(Number(price.replace(/[^0-9.]/g, "")));
+  const priceChanged =
+    price.trim() !== "" && (!Number.isNaN(priceNum)) && priceNum !== (lead.purchasePrice ?? -1);
   const v = lead.vehicle;
 
   return (
     <div className="card overflow-hidden">
       <div className="grid gap-0 md:grid-cols-[1fr_300px]">
-        {/* main */}
         <div className="p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLE[lead.status]}`}>
-              {STATUS_LABEL[lead.status]}
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${styleOf(lead.status)}`}>
+              {labelOf(lead.status)}
             </span>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
               {lead.kind === "vehicle" ? "Vehicle offer" : "Inquiry"}
@@ -276,9 +344,25 @@ function LeadCard({
                 Ref: {lead.referralCode}
               </span>
             )}
-            <span className="ml-auto text-xs text-muted" title={formatDateTime(lead.createdAt)}>
-              {timeAgo(lead.createdAt)}
-            </span>
+            {lead.purchasePrice != null && (
+              <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-bold text-green-700">
+                Bought {cad(lead.purchasePrice)}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted" title={formatDateTime(lead.createdAt)}>
+                {timeAgo(lead.createdAt)}
+              </span>
+              <button
+                onClick={() => onToggleBookmark(lead)}
+                aria-label={lead.bookmarked ? "Remove bookmark" : "Bookmark lead"}
+                aria-pressed={!!lead.bookmarked}
+                className="icon-btn h-8 w-8"
+                title={lead.bookmarked ? "Saved" : "Save"}
+              >
+                <Star className={`h-5 w-5 ${lead.bookmarked ? "text-accent" : "text-slate-300 hover:text-accent/60"}`} />
+              </button>
+            </div>
           </div>
 
           {v ? (
@@ -305,7 +389,6 @@ function LeadCard({
             <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-muted">{lead.message}</p>
           )}
 
-          {/* contact */}
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             <div>
               <div className="text-xs uppercase tracking-wide text-muted">Name</div>
@@ -328,22 +411,20 @@ function LeadCard({
           {(lead.contact.contactMethod || lead.contact.bestTime) && (
             <p className="mt-2 text-xs text-muted">
               Prefers{" "}
-              <span className="font-semibold capitalize text-navy">
-                {lead.contact.contactMethod || "call"}
-              </span>
+              <span className="font-semibold capitalize text-navy">{lead.contact.contactMethod || "call"}</span>
               {lead.contact.bestTime ? ` · ${lead.contact.bestTime}` : ""}
             </p>
           )}
 
-          {/* status + notes + actions */}
+          {/* status + actions */}
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
             <select
               className="field max-w-[170px] py-1.5 text-sm"
               value={lead.status}
-              onChange={(e) => onPatch(lead.id, { status: e.target.value as LeadStatus })}
+              onChange={(e) => onStatusChange(lead, e.target.value as LeadStatus)}
             >
               {LEAD_STATUSES.map((s) => (
-                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                <option key={s} value={s}>{labelOf(s)}</option>
               ))}
             </select>
             <a href={`tel:${lead.contact.phone}`} className="btn-primary px-4 py-2 text-sm">
@@ -358,6 +439,32 @@ function LeadCard({
             </button>
           </div>
 
+          {/* purchase price */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label htmlFor={`price-${lead.id}`} className="text-sm text-muted">Purchased for</label>
+            <div className="relative">
+              <Dollar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+              <input
+                id={`price-${lead.id}`}
+                type="number"
+                min={0}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="—"
+                className="field max-w-[150px] py-1.5 pl-7 text-sm"
+              />
+            </div>
+            {priceChanged && (
+              <button
+                onClick={() => onPatch(lead.id, { purchasePrice: priceNum })}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
+              >
+                <Check className="h-4 w-4" /> Save
+              </button>
+            )}
+          </div>
+
+          {/* notes */}
           <div className="mt-3">
             <textarea
               rows={2}
@@ -384,29 +491,161 @@ function LeadCard({
           </div>
           {lead.photos.length > 0 ? (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              {lead.photos.map((p) => (
-                <a
+              {lead.photos.map((p, i) => (
+                <button
                   key={p.file}
-                  href={`/api/uploads/${lead.id}/${p.file}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="relative aspect-square overflow-hidden rounded-lg border border-slate-200"
+                  type="button"
+                  onClick={() => onOpenPhoto(lead, i)}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200"
+                  aria-label={`View photo ${i + 1} of ${lead.photos.length}`}
                 >
-                  {/* shimmer shows until the photo finishes loading, then the
-                      opaque image paints over it */}
                   <span className="skeleton absolute inset-0" aria-hidden />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/api/uploads/${lead.id}/${p.file}`}
                     alt={p.name}
-                    className="relative h-full w-full object-cover transition hover:scale-105"
+                    className="relative h-full w-full object-cover transition group-hover:scale-105"
                   />
-                </a>
+                </button>
               ))}
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">No photos submitted.</p>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Lightbox({
+  state,
+  setState,
+  onClose,
+}: {
+  state: LightboxState;
+  setState: (fn: (lb: LightboxState | null) => LightboxState | null) => void;
+  onClose: () => void;
+}) {
+  const { leadId, photos, index } = state;
+  const photo = photos[index];
+  const go = (delta: number) =>
+    setState((lb) => (lb ? { ...lb, index: (lb.index + delta + lb.photos.length) % lb.photos.length } : lb));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Photo viewer"
+    >
+      {/* top bar */}
+      <div className="flex items-center justify-between p-4 text-white" onClick={(e) => e.stopPropagation()}>
+        <span className="text-sm font-medium">
+          {index + 1} / {photos.length}
+          <span className="ml-3 text-white/60">{photo?.name}</span>
+        </span>
+        <button onClick={onClose} aria-label="Close" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+          <X className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* image + arrows */}
+      <div className="relative flex flex-1 items-center justify-center px-4 pb-6" onClick={(e) => e.stopPropagation()}>
+        {photos.length > 1 && (
+          <button
+            onClick={() => go(-1)}
+            aria-label="Previous photo"
+            className="absolute left-3 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <ChevronLeft className="h-7 w-7" />
+          </button>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/api/uploads/${leadId}/${photo.file}`}
+          alt={photo?.name || "Vehicle photo"}
+          className="max-h-full max-w-full rounded-lg object-contain shadow-lift"
+        />
+        {photos.length > 1 && (
+          <button
+            onClick={() => go(1)}
+            aria-label="Next photo"
+            className="absolute right-3 grid h-12 w-12 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <ChevronRight className="h-7 w-7" />
+          </button>
+        )}
+      </div>
+
+      {/* thumbnail strip */}
+      {photos.length > 1 && (
+        <div className="flex justify-center gap-2 overflow-x-auto p-3" onClick={(e) => e.stopPropagation()}>
+          {photos.map((p, i) => (
+            <button
+              key={p.file}
+              onClick={() => setState((lb) => (lb ? { ...lb, index: i } : lb))}
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-md border-2 ${i === index ? "border-accent" : "border-transparent opacity-60 hover:opacity-100"}`}
+              aria-label={`Go to photo ${i + 1}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/uploads/${leadId}/${p.file}`} alt={p.name} className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriceModal({
+  lead,
+  onCancel,
+  onConfirm,
+}: {
+  lead: Lead;
+  onCancel: () => void;
+  onConfirm: (price: number) => void;
+}) {
+  const [value, setValue] = useState("");
+  const num = Math.round(Number(value.replace(/[^0-9.]/g, "")));
+  const valid = value.trim() !== "" && !Number.isNaN(num) && num > 0;
+  const v = lead.vehicle;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
+      <div className="card w-full max-w-sm p-6">
+        <h3 className="font-display text-xl font-bold text-navy">Closing this deal</h3>
+        <p className="mt-1 text-sm text-muted">
+          How much did you buy{" "}
+          <span className="font-semibold text-navy">
+            {v ? `the ${v.year} ${v.make} ${v.model}` : "this vehicle"}
+          </span>{" "}
+          for?
+        </p>
+        <div className="relative mt-4">
+          <Dollar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            autoFocus
+            type="number"
+            min={0}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && valid) onConfirm(num); }}
+            placeholder="e.g. 19000"
+            className="field pl-8 text-lg"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
+          <button
+            onClick={() => valid && onConfirm(num)}
+            disabled={!valid}
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" /> Mark Closed
+          </button>
         </div>
       </div>
     </div>

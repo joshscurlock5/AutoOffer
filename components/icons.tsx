@@ -48,6 +48,18 @@ export const ChevronDown = ({ className }: P) => (
   </svg>
 );
 
+export const ChevronLeft = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
+export const ChevronRight = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
+
 export const ArrowRight = ({ className }: P) => (
   <svg {...base(className)}>
     <path d="M5 12h14" />

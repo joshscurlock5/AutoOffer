@@ -6,15 +6,17 @@ export type LeadStatus =
   | "new"
   | "contacted"
   | "scheduled"
-  | "paid"
-  | "lost";
+  | "closed"
+  | "lost"
+  | "spam";
 
 export const LEAD_STATUSES: LeadStatus[] = [
   "new",
   "contacted",
   "scheduled",
-  "paid",
+  "closed",
   "lost",
+  "spam",
 ];
 
 export interface UploadedPhoto {
@@ -69,6 +71,10 @@ export interface Lead {
   referralCode?: string;
   /** Internal admin notes. */
   notes?: string;
+  /** Starred by an admin for quick access. */
+  bookmarked?: boolean;
+  /** Final price the vehicle was purchased for (CAD). */
+  purchasePrice?: number;
   source: string;
 }
 
