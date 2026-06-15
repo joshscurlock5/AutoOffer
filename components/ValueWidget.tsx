@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import { site, telHref } from "@/lib/site-config";
-import { ArrowRight, Phone } from "./icons";
+import { ArrowRight, Car, Lock } from "./icons";
 
 export default function ValueWidget() {
   const router = useRouter();
@@ -27,14 +26,16 @@ export default function ValueWidget() {
   return (
     <form
       onSubmit={submit}
-      className="card w-full overflow-hidden border border-slate-100 p-6 sm:p-7"
+      className="card w-full overflow-hidden border border-slate-100 p-7 sm:p-9"
     >
       <div className="text-center">
-        <h2 className="font-display text-2xl font-bold text-navy">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand">
+          <Car className="h-6 w-6" />
+        </span>
+        <h2 className="mt-4 font-display text-2xl font-bold text-navy">
           See What Your Car Is Worth
         </h2>
-        <div className="mx-auto mt-2 h-1 w-14 rounded-full bg-brand" />
-        <p className="mt-3 text-sm text-muted">
+        <p className="mt-2 text-sm text-muted">
           Free estimate first. No obligation. Talk to a real buyer when you&apos;re ready.
         </p>
       </div>
@@ -118,10 +119,10 @@ export default function ValueWidget() {
       <button
         type="submit"
         disabled={!ready}
-        className="btn-primary mt-5 w-full disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-primary mt-5 w-full text-lg disabled:cursor-not-allowed disabled:opacity-50"
       >
         Get My Instant Estimate
-        <ArrowRight className="h-4 w-4" />
+        <ArrowRight className="h-5 w-5" />
       </button>
       {!ready && (
         <p className="mt-2 text-center text-xs text-muted">
@@ -129,11 +130,8 @@ export default function ValueWidget() {
         </p>
       )}
 
-      <p className="mt-4 text-center text-sm text-muted">
-        Prefer to talk?{" "}
-        <a href={telHref} className="inline-flex items-center gap-1 font-bold text-brand hover:underline">
-          <Phone className="h-4 w-4" /> Call or text {site.phoneDisplay}
-        </a>
+      <p className="mt-4 flex items-center justify-center gap-2 text-center text-sm text-muted">
+        <Lock className="h-4 w-4" /> We never sell your information.
       </p>
     </form>
   );

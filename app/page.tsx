@@ -8,12 +8,11 @@ import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
 import MapEmbed from "@/components/MapEmbed";
 import PhoneButton from "@/components/PhoneButton";
-import HeroArt from "@/components/HeroArt";
 import Reveal from "@/components/Reveal";
 import { Section, SectionHeading } from "@/components/Section";
 import { site } from "@/lib/site-config";
 import {
-  Check, Shield, Car, Bolt, Banknote, ArrowRight, Phone,
+  Check, Shield, Car, Bolt, Banknote, ArrowRight, Phone, Tag, MapPin, Dollar,
 } from "@/components/icons";
 
 const smallBenefits = [
@@ -49,12 +48,12 @@ export default function HomePage() {
       {/* ---------------- HERO ---------------- */}
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
-        <div className="container-x relative grid items-start gap-12 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:py-16">
+        <div className="container-x relative grid items-center gap-10 py-12 lg:grid-cols-[0.9fr_1.1fr] lg:py-16">
+          {/* LEFT — short, tight, supporting */}
           <div className="animate-fade-up">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-brand opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-600" />
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
+                <Check className="h-3 w-3" />
               </span>
               Free instant estimate · we come to you
             </span>
@@ -68,48 +67,42 @@ export default function HomePage() {
               pay the same visit by e-transfer or bank draft.
             </p>
 
-            {/* Big hero buttons on desktop only — on mobile the sticky bottom
-                bar carries the CTAs, so the form sits higher. */}
-            <div className="mt-7 hidden flex-col gap-3 sm:flex-row lg:flex">
-              <Link href="/get-offer" className="btn-primary text-lg">
-                Get My Instant Estimate <ArrowRight className="h-5 w-5" />
-              </Link>
-              <a
-                href={`tel:${site.phoneE164}`}
-                className="btn border-2 border-brand bg-white px-6 py-3.5 text-lg text-brand shadow-soft hover:-translate-y-0.5 hover:bg-brand-50 active:translate-y-0"
-              >
-                <Phone className="h-5 w-5" /> Call Now
+            <ul className="mt-7 space-y-3.5">
+              {[
+                { icon: Tag, label: "Free & no obligation" },
+                { icon: MapPin, label: "We come to you" },
+                { icon: Dollar, label: "Paid same visit" },
+              ].map((b) => {
+                const Icon = b.icon;
+                return (
+                  <li key={b.label} className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="text-lg font-semibold text-navy">{b.label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="mt-7 border-t border-slate-200 pt-6">
+              <a href={`tel:${site.phoneE164}`} className="group flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
+                  <Phone className="h-5 w-5" />
+                </span>
+                <span className="leading-snug">
+                  <span className="block font-semibold text-navy">
+                    Prefer to talk? Call or text <span className="text-brand">{site.phoneDisplay}</span>
+                  </span>
+                  <span className="block text-sm text-muted">We&apos;re available 24/7.</span>
+                </span>
               </a>
             </div>
-            <p className="mt-3 hidden text-sm text-muted lg:block">
-              Want a firm number faster?{" "}
-              <a href={`tel:${site.phoneE164}`} className="font-semibold text-navy hover:text-brand">
-                Call us at {site.phoneDisplay}
-              </a>{" "}
-              and we&apos;ll walk through it with you.
-            </p>
-
-            <ul className="mt-6 flex flex-wrap gap-2">
-              {["Free & no obligation", "We come to you", "Paid same visit"].map((b) => (
-                <li
-                  key={b}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand"
-                >
-                  <Check className="h-3.5 w-3.5" /> {b}
-                </li>
-              ))}
-            </ul>
           </div>
 
+          {/* RIGHT — the form is the hero */}
           <div className="animate-fade-up">
-            <div className="relative">
-              {/* Decorative car graphic shows on desktop only — on mobile the form
-                  comes right after the trust bullets so users reach it faster. */}
-              <HeroArt className="hidden w-full drop-shadow-[0_24px_50px_rgba(16,41,30,0.28)] lg:block" />
-              <div className="relative z-10 mx-auto w-full lg:-mt-16 lg:w-[94%]">
-                <ValueWidget />
-              </div>
-            </div>
+            <ValueWidget />
           </div>
         </div>
       </section>
