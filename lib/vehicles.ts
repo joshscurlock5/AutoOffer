@@ -216,8 +216,37 @@ export const MAKES: MakeData[] = [
   },
 ];
 
+// Common spelling/abbreviation aliases (VIN decoders return e.g. "RAM", "VW").
+const MAKE_ALIASES: Record<string, string> = {
+  ram: "Ram",
+  vw: "Volkswagen",
+  volkswagen: "Volkswagen",
+  chevy: "Chevrolet",
+  chevrolet: "Chevrolet",
+  gmc: "GMC",
+  bmw: "BMW",
+  mini: "MINI",
+  "mini cooper": "MINI",
+  mercedes: "Mercedes-Benz",
+  "mercedes benz": "Mercedes-Benz",
+  "mercedes-benz": "Mercedes-Benz",
+  benz: "Mercedes-Benz",
+  "land rover": "Land Rover",
+  "range rover": "Land Rover",
+};
+
+/** Canonical catalog spelling for a make (case-insensitive + common aliases). */
+export function canonicalMake(name: string): string {
+  const key = (name || "").trim().toLowerCase();
+  if (MAKE_ALIASES[key]) return MAKE_ALIASES[key];
+  const hit = MAKES.find((m) => m.name.toLowerCase() === key);
+  return hit ? hit.name : (name || "").trim();
+}
+
 export function getMake(name: string): MakeData | undefined {
-  return MAKES.find((m) => m.name === name);
+  const key = (name || "").trim().toLowerCase();
+  const aliased = (MAKE_ALIASES[key] ?? key).toLowerCase();
+  return MAKES.find((m) => m.name.toLowerCase() === aliased);
 }
 
 export function modelsFor(makeName: string): string[] {
@@ -225,7 +254,7 @@ export function modelsFor(makeName: string): string[] {
 }
 
 // Year dropdown: a year ahead of the current model year down to 1990.
-const NEWEST_YEAR = 2027;
+const NEWEST_YEAR = new Date().getFullYear() + 1;
 const OLDEST_YEAR = 1990;
 export const YEARS: number[] = Array.from(
   { length: NEWEST_YEAR - OLDEST_YEAR + 1 },

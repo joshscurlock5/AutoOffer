@@ -1,13 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addLead, savePhotos } from "@/lib/store";
-import { estimateOffer } from "@/lib/offer";
+import { getEstimate } from "@/lib/valuation";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 function str(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
+}
+
+/** Defensively parse the estimate the client was shown (used only as a fallback). */
+function parseShownEstimate(raw: string): OfferEstimate | undefined {
+  if (!raw) return undefined;
+  try {
+    const o = JSON.parse(raw);
+    if (!o || o.unique) return undefined;
+    const low = Number(o.low);
+    const high = Number(o.high);
+    const mid = Number(o.mid);
+    if (![low, high, mid].every((n) => Number.isFinite(n) && n >= 0)) return undefined;
+    if (high < low) return undefined;
+    return {
+      low,
+      high,
+      mid,
+      currency: "CAD",
+      source: o.source === "market" ? "market" : "estimate",
+      ...(Number.isFinite(Number(o.comps)) ? { comps: Number(o.comps) } : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -59,8 +83,16 @@ export async function POST(req: NextRequest) {
       const mileageKm = Number(str(form.get("mileageKm"))) || 0;
 
       vehicle = { year, make, model, trim: trim || undefined, mileageKm };
-      // Re-compute the estimate server-side (never trust the client).
-      estimate = estimateOffer({ year, make, model, mileageKm });
+      // Re-derive the estimate server-side. Normally a warm-cache hit (the user
+      // just viewed it), so usually no extra MarketCheck call; on a cold/expired
+      // cache it may spend one budget-gated call (and fails closed to "unique").
+      estimate = await getEstimate({ year, make, model, mileageKm });
+      // If we couldn't re-price it but the customer was already shown a concrete
+      // range, store what they actually saw so the lead matches the screen.
+      if (estimate.unique) {
+        const shown = parseShownEstimate(str(form.get("estimateJson")));
+        if (shown) estimate = shown;
+      }
 
       const files = form
         .getAll("photos")

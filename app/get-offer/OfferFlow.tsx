@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import { estimateOffer } from "@/lib/offer";
-import type { OfferEstimate } from "@/lib/types";
+import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
 import { site, telHref } from "@/lib/site-config";
@@ -15,15 +14,19 @@ import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import {
   ArrowRight, Phone, Check, Camera, Trash, Calendar, Dollar,
-  Sparkles, Shield,
+  Sparkles, Shield, Car,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4;
+type InputMode = "manual" | "vin";
 const MAX_PHOTOS = 12;
+const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
+const UNIQUE: OfferEstimate = { low: 0, high: 0, mid: 0, currency: "CAD", unique: true };
 
 export default function OfferFlow() {
   const sp = useSearchParams();
   const [step, setStep] = useState<Step>(1);
+  const [inputMode, setInputMode] = useState<InputMode>("manual");
 
   // vehicle
   const [year, setYear] = useState("");
@@ -33,6 +36,13 @@ export default function OfferFlow() {
   const [kmv, setKmv] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+
+  // VIN flow
+  const [vin, setVin] = useState("");
+  const [vinError, setVinError] = useState("");
+  const [decoding, setDecoding] = useState(false);
+  const [decoded, setDecoded] = useState<DecodedVehicle | null>(null);
+  const [pendingEstimate, setPendingEstimate] = useState<OfferEstimate | null>(null);
 
   // contact
   const [name, setName] = useState("");
@@ -52,13 +62,14 @@ export default function OfferFlow() {
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
 
-  // Prefill from query string (from the homepage widget).
+  // Prefill from query string (from the homepage widget); mode=vin opens VIN tab.
   useEffect(() => {
     setYear(sp.get("year") || "");
     setMake(sp.get("make") || "");
     setModel(sp.get("model") || "");
     setTrim(sp.get("trim") || "");
     setKmv(sp.get("km") || "");
+    if (sp.get("mode") === "vin") setInputMode("vin");
   }, [sp]);
 
   // Funnel start — fires for EVERY way into /get-offer (homepage widget OR a
@@ -85,6 +96,8 @@ export default function OfferFlow() {
 
   const models = make ? modelsFor(make) : [];
   const step1Valid = Boolean(year && make && model && kmv);
+  const vinValid = VIN_RE.test(vin.trim().toUpperCase()) && Boolean(kmv);
+  const source = () => (sp.get("make") ? "widget" : "direct");
 
   function addPhotos(list: FileList | null) {
     if (!list) return;
@@ -102,21 +115,122 @@ export default function OfferFlow() {
     setPreviews((p) => p.filter((_, idx) => idx !== i));
   }
 
-  function goToOffer(e: React.FormEvent) {
+  /** Fetch the real (market-based) estimate from the server. */
+  async function fetchEstimate(y: string, mk: string, md: string, kmNum: number): Promise<OfferEstimate> {
+    const res = await fetch("/api/estimate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year: y, make: mk, model: md, mileageKm: kmNum }),
+    });
+    if (!res.ok) throw new Error("estimate failed");
+    const data = await res.json();
+    return data.estimate as OfferEstimate;
+  }
+
+  function revealEstimate(est: OfferEstimate, ctx: { make: string; model: string; year: number }) {
+    setEstimate(est);
+    track("estimate_viewed", {
+      make: ctx.make,
+      model: ctx.model,
+      year: ctx.year,
+      unique: !!est.unique,
+      source: est.source || "estimate",
+      comps: est.comps ?? 0,
+      reentry: estimateViews.current > 0,
+    });
+    estimateViews.current += 1;
+  }
+
+  // MANUAL path -> real estimate.
+  async function goToOffer(e: React.FormEvent) {
     e.preventDefault();
     if (!step1Valid) return;
     const yr = Number(year);
-    track("step1_submitted", { make, model, year: yr, source: sp.get("make") ? "widget" : "direct" });
-    const est = estimateOffer({ year, make, model, mileageKm: Number(kmv) });
-    setEstimate(est);
+    const kmNum = Number(kmv);
+    setError("");
+    track("step1_submitted", { make, model, year: yr, source: source() });
     setStep(2);
-    track("estimate_viewed", { make, model, year: yr, unique: !!est.unique, reentry: estimateViews.current > 0 });
-    estimateViews.current += 1;
-    // Brief skeleton so the reveal doesn't flash; kept short to preserve momentum.
+    setCalculating(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      const est = await fetchEstimate(year, make, model, kmNum);
+      revealEstimate(est, { make, model, year: yr });
+    } catch {
+      // Network hiccup — route to the human "custom offer" flow, never a guess.
+      revealEstimate(UNIQUE, { make, model, year: yr });
+    } finally {
+      setCalculating(false);
+    }
+  }
+
+  // VIN path -> decode (+ estimate) then confirm.
+  async function decodeAndEstimate(e: React.FormEvent) {
+    e.preventDefault();
+    const v = vin.trim().toUpperCase();
+    if (!VIN_RE.test(v)) {
+      setVinError("Please enter a valid 17-character VIN (no spaces).");
+      return;
+    }
+    if (!kmv) {
+      setVinError("Please add your mileage (km).");
+      return;
+    }
+    setVinError("");
+    setDecoding(true);
+    track("vin_submitted", {});
+    try {
+      const res = await fetch("/api/decode-vin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vin: v, mileageKm: Number(kmv) }),
+      });
+      const data = await res.json();
+      if (!data.ok || !data.vehicle) {
+        setVinError("We couldn't read that VIN. Double-check it, or switch to “Enter details” above.");
+        return;
+      }
+      setDecoded(data.vehicle as DecodedVehicle);
+      setPendingEstimate((data.estimate as OfferEstimate) || null);
+    } catch {
+      setVinError("Something went wrong. Please try again, or enter your details manually.");
+    } finally {
+      setDecoding(false);
+    }
+  }
+
+  function confirmDecoded() {
+    if (!decoded) return;
+    setYear(decoded.year ? String(decoded.year) : "");
+    setMake(decoded.make || "");
+    setModel(decoded.model || "");
+    setTrim(decoded.trim || "");
+    track("vin_confirmed", {});
+    track("step1_submitted", {
+      make: decoded.make || "",
+      model: decoded.model || "",
+      year: decoded.year || 0,
+      source: "vin",
+    });
+    const est = pendingEstimate || UNIQUE;
+    setDecoded(null);
+    setStep(2);
     setCalculating(true);
     if (calcTimer.current) clearTimeout(calcTimer.current);
-    calcTimer.current = setTimeout(() => setCalculating(false), 600);
+    calcTimer.current = setTimeout(() => setCalculating(false), 500);
+    revealEstimate(est, {
+      make: decoded.make || "",
+      model: decoded.model || "",
+      year: decoded.year || 0,
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function rejectDecoded() {
+    if (decoded?.year) setYear(String(decoded.year));
+    track("vin_rejected", {});
+    setDecoded(null);
+    setPendingEstimate(null);
+    setInputMode("manual");
   }
 
   async function submitLead(e: React.FormEvent) {
@@ -149,6 +263,8 @@ export default function OfferFlow() {
       fd.append("phone", phone);
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
+      // The estimate the customer was shown — stored only if the server can't re-price.
+      if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
       photos.forEach((f) => fd.append("photos", f));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
@@ -175,8 +291,7 @@ export default function OfferFlow() {
     }
   }
 
-  // Advance to the contact step from EITHER the normal or unique-vehicle branch,
-  // so contact_started isn't undercounted for unpriceable vehicles.
+  // Advance to the contact step from EITHER the priced or unique branch.
   function advanceToContact() {
     track("contact_started", { unique: !!estimate?.unique, reentry: contactStarts.current > 0 });
     contactStarts.current += 1;
@@ -185,127 +300,203 @@ export default function OfferFlow() {
 
   const isUnique = estimate?.unique;
 
+  const photoBlock = (
+    <div className="mt-6">
+      <label className="label">
+        Photos <span className="font-normal text-muted">(optional)</span>
+      </label>
+      <p className="-mt-1 mb-2 text-sm text-muted">
+        Photos are optional, but they help us make a firmer offer faster. No car nearby? You can add them later.
+      </p>
+      <label
+        htmlFor="photos"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-brand hover:bg-brand-50"
+      >
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-brand text-white">
+          <Camera className="h-6 w-6" />
+        </span>
+        <span className="mt-3 font-semibold text-navy">Add photos of your car</span>
+        <span className="mt-1 text-sm text-muted">
+          Front, back, sides, interior &amp; odometer work best. Up to {MAX_PHOTOS} photos.
+        </span>
+        <input
+          id="photos"
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+        />
+      </label>
+
+      {previews.length > 0 && (
+        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {previews.map((src, i) => (
+            <div key={src} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt={`Vehicle photo ${i + 1}`} className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removePhoto(i)}
+                className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
+                aria-label="Remove photo"
+              >
+                <Trash className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const callLine = (
+    <p className="text-sm text-muted">
+      Prefer to talk? Call{" "}
+      <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand hover:underline">{site.phoneDisplay}</a>
+    </p>
+  );
+
   return (
     <div className="container-x max-w-4xl py-10 sm:py-14">
       {step < 4 && <Stepper step={step} />}
 
       {/* -------------------- STEP 1: vehicle details -------------------- */}
-      {step === 1 && (
-        <form onSubmit={goToOffer} className="card mt-8 animate-fade-up p-6 sm:p-9">
+      {step === 1 && !decoded && (
+        <div className="card mt-8 animate-fade-up p-6 sm:p-9">
           <h1 className="font-display text-2xl font-bold text-navy sm:text-3xl">
             Tell us about your vehicle
           </h1>
           <p className="mt-2 text-muted">
-            Just the basics to start — year, make, model and mileage. Everything else is optional.
+            {inputMode === "vin"
+              ? "Enter your VIN and we'll pull up your exact vehicle — fastest and most accurate."
+              : "Just the basics — year, make, model and mileage. Everything else is optional."}
           </p>
 
-          <div className="mt-7 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="year">Year</label>
-              <select id="year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
-                <option value="">Select year</option>
-                {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="make">Make</label>
-              <select
-                id="make"
-                className="field"
-                value={make}
-                onChange={(e) => { setMake(e.target.value); setModel(""); }}
-              >
-                <option value="">Select make</option>
-                {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="model">Model</label>
-              <select
-                id="model"
-                className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                value={model}
-                disabled={!make}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                <option value="">{make ? "Select model" : "Select make first"}</option>
-                {models.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="trim">Trim <span className="font-normal text-muted">(optional)</span></label>
-              <input id="trim" className="field" placeholder="Not sure? Leave it blank" value={trim} onChange={(e) => setTrim(e.target.value)} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label" htmlFor="km">Mileage (km)</label>
-              <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
-              <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
-            </div>
-          </div>
-
-          {/* Photo upload */}
-          <div className="mt-6">
-            <label className="label">
-              Photos <span className="font-normal text-muted">(optional)</span>
-            </label>
-            <p className="-mt-1 mb-2 text-sm text-muted">
-              Photos are optional, but they help us make a firmer offer faster. No car nearby? You can add them later.
-            </p>
-            <label
-              htmlFor="photos"
-              className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-brand hover:bg-brand-50"
+          {/* Mode toggle */}
+          <div className="mt-5 inline-flex rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setInputMode("manual")}
+              aria-pressed={inputMode === "manual"}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
             >
-              <span className="grid h-12 w-12 place-items-center rounded-full bg-brand text-white">
-                <Camera className="h-6 w-6" />
-              </span>
-              <span className="mt-3 font-semibold text-navy">Add photos of your car</span>
-              <span className="mt-1 text-sm text-muted">
-                Front, back, sides, interior & odometer work best. Up to {MAX_PHOTOS} photos.
-              </span>
-              <input
-                id="photos"
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
-              />
-            </label>
-
-            {previews.length > 0 && (
-              <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {previews.map((src, i) => (
-                  <div key={src} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`Vehicle photo ${i + 1}`} className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(i)}
-                      className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
-                      aria-label="Remove photo"
-                    >
-                      <Trash className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-            <p className="text-sm text-muted">
-              Prefer to talk? Call{" "}
-              <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand hover:underline">{site.phoneDisplay}</a>
-            </p>
-            <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
-              See My Estimate <ArrowRight className="h-4 w-4" />
+              Enter details
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("vin")}
+              aria-pressed={inputMode === "vin"}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
+            >
+              <Car className="h-4 w-4" /> Enter VIN <span className="text-brand">(faster)</span>
             </button>
           </div>
-        </form>
+
+          {inputMode === "vin" ? (
+            <form onSubmit={decodeAndEstimate}>
+              <div className="mt-6 grid gap-4">
+                <div>
+                  <label className="label" htmlFor="vin">VIN <span className="font-normal text-muted">(17 characters)</span></label>
+                  <input
+                    id="vin"
+                    className="field font-mono uppercase tracking-wide"
+                    value={vin}
+                    onChange={(e) => setVin(e.target.value.toUpperCase())}
+                    placeholder="e.g. 1HGCM82633A004352"
+                    maxLength={17}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  <p className="mt-1.5 text-xs text-muted">
+                    Find it on your registration, insurance card, or the driver-side dashboard / door jamb.
+                  </p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="vkm">Mileage (km)</label>
+                  <input id="vkm" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
+                  <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
+                </div>
+              </div>
+
+              {photoBlock}
+
+              {vinError && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{vinError}</p>}
+
+              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+                {callLine}
+                <button type="submit" disabled={decoding || !vinValid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
+                  {decoding ? "Looking up your VIN…" : <>See My Estimate <ArrowRight className="h-4 w-4" /></>}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={goToOffer}>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="year">Year</label>
+                  <select id="year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+                    <option value="">Select year</option>
+                    {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="make">Make</label>
+                  <select
+                    id="make"
+                    className="field"
+                    value={make}
+                    onChange={(e) => { setMake(e.target.value); setModel(""); }}
+                  >
+                    <option value="">Select make</option>
+                    {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="model">Model</label>
+                  <select
+                    id="model"
+                    className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    value={model}
+                    disabled={!make}
+                    onChange={(e) => setModel(e.target.value)}
+                  >
+                    <option value="">{make ? "Select model" : "Select make first"}</option>
+                    {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="trim">Trim <span className="font-normal text-muted">(optional)</span></label>
+                  <input id="trim" className="field" placeholder="Not sure? Leave it blank" value={trim} onChange={(e) => setTrim(e.target.value)} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="km">Mileage (km)</label>
+                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
+                  <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
+                </div>
+              </div>
+
+              {photoBlock}
+
+              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+                {callLine}
+                <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
+                  See My Estimate <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* -------------------- STEP 1b: confirm decoded VIN -------------------- */}
+      {step === 1 && decoded && (
+        <ConfirmCard decoded={decoded} onConfirm={confirmDecoded} onReject={rejectDecoded} />
       )}
 
       {/* -------------------- STEP 2: offer -------------------- */}
-      {step === 2 && estimate && (
+      {step === 2 && (
         <div className="mt-8 animate-fade-up">
           {calculating ? (
             <div className="animate-fade-up">
@@ -317,7 +508,7 @@ export default function OfferFlow() {
               </div>
               <OfferSkeleton />
             </div>
-          ) : isUnique ? (
+          ) : !estimate ? null : isUnique ? (
             <UniqueOffer onContinue={advanceToContact} onBack={() => setStep(1)} vehicle={{ year, make, model, trim }} />
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
@@ -341,6 +532,11 @@ export default function OfferFlow() {
                   <CountUp value={estimate.low} format={cad} /> –{" "}
                   <CountUp value={estimate.high} format={cad} />
                 </div>
+                {estimate.source === "market" && estimate.comps ? (
+                  <p className="mt-2 text-xs font-medium text-muted">
+                    Based on {estimate.comps.toLocaleString()} recent Canadian listings.
+                  </p>
+                ) : null}
                 <p className="mt-3 text-muted">
                   This is an <span className="font-semibold text-navy">estimated range</span> for
                   your {year} {make} {model} with {fmtKm(Number(kmv))}. Want your firm
@@ -567,6 +763,38 @@ function Stepper({ step }: { step: Step }) {
   );
 }
 
+function ConfirmCard({
+  decoded,
+  onConfirm,
+  onReject,
+}: {
+  decoded: DecodedVehicle;
+  onConfirm: () => void;
+  onReject: () => void;
+}) {
+  const label = [decoded.year, decoded.make, decoded.model, decoded.trim].filter(Boolean).join(" ");
+  const details = [decoded.bodyType, decoded.drivetrain, decoded.transmission].filter(Boolean).join(" · ");
+  return (
+    <div className="card mx-auto mt-8 max-w-xl animate-fade-up p-6 text-center sm:p-9">
+      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand">
+        <Car className="h-7 w-7" />
+      </span>
+      <h1 className="mt-4 font-display text-2xl font-bold text-navy">Is this your vehicle?</h1>
+      <p className="mt-2 text-muted">We decoded your VIN as:</p>
+      <p className="mt-3 font-display text-2xl font-extrabold text-navy">{label || "Unknown vehicle"}</p>
+      {details && <p className="mt-1 text-sm text-muted">{details}</p>}
+      <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+        <button onClick={onConfirm} className="btn-primary">
+          Yes, that&apos;s my car <ArrowRight className="h-4 w-4" />
+        </button>
+        <button onClick={onReject} className="btn border-2 border-slate-200 bg-white text-navy hover:border-brand">
+          No, enter details manually
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UniqueOffer({
   vehicle,
   onContinue,
@@ -580,19 +808,20 @@ function UniqueOffer({
     <div className="overflow-hidden rounded-2xl shadow-card">
       <div className="bg-gradient-to-r from-brand to-brand-600 px-6 py-8 text-center text-white">
         <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
-          This one&apos;s worth a <span className="text-accent">human look</span>
+          We&apos;ll put together a <span className="text-accent">custom offer</span>
         </h1>
         <p className="mt-2 text-white/90">
-          Our quick estimate works best on common models. For your {vehicle.year}{" "}
+          There aren&apos;t enough recent Canadian listings for your {vehicle.year}{" "}
           {vehicle.make} {vehicle.model}
-          {vehicle.trim ? ` ${vehicle.trim}` : ""}, a specialist will put together a
-          custom offer — leave your details and we&apos;ll be in touch shortly.
+          {vehicle.trim ? ` ${vehicle.trim}` : ""} to price it instantly. Rather than
+          guess, one of our buyers will work out a custom offer for you — just leave your
+          details and we&apos;ll reach out shortly.
         </p>
       </div>
       <div className="bg-white p-6 text-center sm:p-8">
         <p className="text-muted">
-          Some vehicles are best priced by a real person. Don&apos;t worry — it&apos;s
-          still fast, free and with no obligation.
+          No guesswork — a real person reviews your vehicle. Still fast, free, and with no
+          obligation.
         </p>
         <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
           <button onClick={onContinue} className="btn-primary">

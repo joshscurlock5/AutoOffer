@@ -8,6 +8,7 @@ import {
   DynamoDBClient,
   CreateTableCommand,
   DescribeTableCommand,
+  UpdateTimeToLiveCommand,
 } from "@aws-sdk/client-dynamodb";
 import {
   S3Client,
@@ -31,6 +32,7 @@ if (!credentials.accessKeyId || !credentials.secretAccessKey) {
 
 const LEADS = process.env.LEADS_TABLE || "AutoOfferLeads";
 const REFS = process.env.REFERRALS_TABLE || "AutoOfferReferrals";
+const MARKET_CACHE = process.env.MARKET_CACHE_TABLE || "AutoOfferMarketCache";
 const BUCKET = process.env.PHOTOS_BUCKET;
 
 const ddb = new DynamoDBClient({ region, credentials });
@@ -92,9 +94,26 @@ async function ensureBucket(name) {
   } catch {}
 }
 
+async function enableTtl(name) {
+  try {
+    await ddb.send(
+      new UpdateTimeToLiveCommand({
+        TableName: name,
+        TimeToLiveSpecification: { Enabled: true, AttributeName: "ttl" },
+      }),
+    );
+    console.log(`✓ TTL enabled on: ${name}`);
+  } catch (e) {
+    // Already enabled (or enabling) — DynamoDB rejects re-enabling; that's fine.
+    console.log(`• TTL already set on: ${name}`);
+  }
+}
+
 console.log(`\nProvisioning Auto Offer storage in ${region}...\n`);
 await ensureTable(LEADS);
 await ensureTable(REFS);
+await ensureTable(MARKET_CACHE);
+await enableTtl(MARKET_CACHE);
 if (!BUCKET) {
   console.error("✗ Missing PHOTOS_BUCKET in .env.local");
   process.exit(1);

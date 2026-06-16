@@ -132,7 +132,7 @@ async function main() {
   const found = (aj.leads || []).find((l) => l.id === leadId);
   ok("submitted lead is visible in admin", !!found, `leadCount=${(aj.leads || []).length}`);
   if (found) {
-    ok("lead has server-computed estimate", !!found.estimate && found.estimate.low > 0, JSON.stringify(found.estimate));
+    ok("lead has server-computed estimate", !!found.estimate && (found.estimate.low > 0 || found.estimate.unique === true), JSON.stringify(found.estimate));
     ok("lead retained uploaded photo", Array.isArray(found.photos) && found.photos.length >= 1, `photos=${found.photos?.length}`);
     ok("lead vehicle data correct", found.vehicle?.make === "Dodge" && found.vehicle?.model === "Challenger");
     ok("lead referral code captured", found.referralCode === "FRIEND-AB12");

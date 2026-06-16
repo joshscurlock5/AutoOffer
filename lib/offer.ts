@@ -8,7 +8,7 @@ import type { OfferEstimate, VehicleInfo } from "./types";
 //  Tune the constants below.
 // ---------------------------------------------------------------------------
 
-const CURRENT_YEAR = 2026;
+const CURRENT_YEAR = new Date().getFullYear();
 const KM_PER_YEAR = 18000; // typical Canadian annual mileage
 const COST_PER_KM = 0.07; // value lost per km above/below expected
 const FLOOR = 900; // we still buy older cars
@@ -77,7 +77,7 @@ export function estimateOffer(v: {
   const low = roundTo(mid * (1 - SPREAD), 50);
   const high = roundTo(mid * (1 + SPREAD), 50);
 
-  return { low, high, mid, currency: "CAD" };
+  return { low, high, mid, currency: "CAD", source: "estimate" };
 }
 
 export function estimateForVehicle(v: VehicleInfo): OfferEstimate {

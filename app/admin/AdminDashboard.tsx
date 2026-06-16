@@ -375,7 +375,15 @@ function LeadCard({
                 <div className="text-sm text-muted">
                   {fmtKm(v.mileageKm)}
                   {lead.estimate && !lead.estimate.unique && (
-                    <> · Est. <span className="font-semibold text-navy">{cad(lead.estimate.low)} – {cad(lead.estimate.high)}</span></>
+                    <> · Est. <span className="font-semibold text-navy">{cad(lead.estimate.low)} – {cad(lead.estimate.high)}</span>
+                      {lead.estimate.source === "market" ? (
+                        <span className="ml-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                          Market{lead.estimate.comps != null ? ` · ${lead.estimate.comps} comps` : ""}
+                        </span>
+                      ) : (
+                        <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Model est.</span>
+                      )}
+                    </>
                   )}
                   {lead.estimate?.unique && <> · <span className="font-semibold text-amber-600">Unique — needs manual quote</span></>}
                 </div>

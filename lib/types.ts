@@ -43,6 +43,23 @@ export interface OfferEstimate {
   currency: "CAD";
   /** True when we could not price the vehicle (routes to "unique" flow). */
   unique?: boolean;
+  /** Where the number came from: real market data vs the fallback model. */
+  source?: "market" | "estimate";
+  /** Number of comparable Canadian listings used (market source only). */
+  comps?: number;
+}
+
+/** A vehicle decoded from a VIN (shared by the API + the client form). */
+export interface DecodedVehicle {
+  valid: boolean;
+  year?: number;
+  make?: string;
+  model?: string;
+  trim?: string;
+  bodyType?: string;
+  drivetrain?: string;
+  transmission?: string;
+  fuelType?: string;
 }
 
 export interface Contact {
