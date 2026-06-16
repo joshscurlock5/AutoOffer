@@ -109,7 +109,7 @@ export default function Footer() {
             We Buy Every Brand
           </h4>
           <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            {brands.map((b) => (
+            {[...brands].sort((a, b) => a.localeCompare(b)).map((b) => (
               <li key={b}>
                 <Link href="/get-offer" className="hover:text-white">{b}</Link>
               </li>

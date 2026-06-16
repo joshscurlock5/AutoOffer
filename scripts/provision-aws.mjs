@@ -33,6 +33,7 @@ if (!credentials.accessKeyId || !credentials.secretAccessKey) {
 const LEADS = process.env.LEADS_TABLE || "AutoOfferLeads";
 const REFS = process.env.REFERRALS_TABLE || "AutoOfferReferrals";
 const MARKET_CACHE = process.env.MARKET_CACHE_TABLE || "AutoOfferMarketCache";
+const CHATS = process.env.CHATS_TABLE || "AutoOfferChats";
 const BUCKET = process.env.PHOTOS_BUCKET;
 
 const ddb = new DynamoDBClient({ region, credentials });
@@ -114,6 +115,7 @@ await ensureTable(LEADS);
 await ensureTable(REFS);
 await ensureTable(MARKET_CACHE);
 await enableTtl(MARKET_CACHE);
+await ensureTable(CHATS);
 if (!BUCKET) {
   console.error("✗ Missing PHOTOS_BUCKET in .env.local");
   process.exit(1);

@@ -6,20 +6,40 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track } from "@/lib/analytics";
 import { ArrowRight, Car, Lock, Check } from "./icons";
 
+const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
+
 export default function ValueWidget() {
   const router = useRouter();
+  const [inputMode, setInputMode] = useState<"manual" | "vin">("manual");
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [trim, setTrim] = useState("");
   const [kmv, setKmv] = useState("");
+  const [vin, setVin] = useState("");
   const [showError, setShowError] = useState(false);
 
   const models = make ? modelsFor(make) : [];
   const ready = Boolean(year && make && model && kmv);
+  const vinReady = VIN_RE.test(vin.trim().toUpperCase()) && Boolean(kmv);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (inputMode === "vin") {
+      if (!vinReady) {
+        setShowError(true);
+        const el = document.getElementById(!VIN_RE.test(vin.trim().toUpperCase()) ? "vw-vin" : "vw-km");
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus();
+        return;
+      }
+      track("widget_submit", { mode: "vin" });
+      const q = new URLSearchParams({ mode: "vin", vin: vin.trim().toUpperCase(), km: kmv });
+      router.push(`/get-offer?${q.toString()}`);
+      return;
+    }
+
     if (!ready) {
       // Keep the button live: on an incomplete submit, jump to the first gap.
       setShowError(true);
@@ -51,94 +71,148 @@ export default function ValueWidget() {
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor="vw-year">Year</label>
-          <select
-            id="vw-year"
-            className="field"
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
+      {/* Mode toggle */}
+      <div className="mt-5 flex justify-center">
+        <div className="inline-flex rounded-xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setInputMode("manual")}
+            aria-pressed={inputMode === "manual"}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
           >
-            <option value="">Year</option>
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="vw-make">Make</label>
-          <select
-            id="vw-make"
-            className="field"
-            value={make}
-            onChange={(e) => {
-              setMake(e.target.value);
-              setModel("");
-            }}
+            Enter details
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMode("vin")}
+            aria-pressed={inputMode === "vin"}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
           >
-            <option value="">Make</option>
-            {MAKES.map((m) => (
-              <option key={m.name} value={m.name}>{m.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="vw-model">Model</label>
-          <select
-            id="vw-model"
-            className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-            value={model}
-            disabled={!make}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            <option value="">{make ? "Model" : "Select make first"}</option>
-            {models.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="vw-trim">Trim <span className="font-normal text-muted">(optional)</span></label>
-          <input
-            id="vw-trim"
-            className="field"
-            placeholder="e.g. SE, Limited"
-            value={trim}
-            onChange={(e) => setTrim(e.target.value)}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="label" htmlFor="vw-km">Mileage (km)</label>
-          <input
-            id="vw-km"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            className="field"
-            placeholder="e.g. 80000"
-            value={kmv}
-            onChange={(e) => setKmv(e.target.value)}
-          />
+            <Car className="h-4 w-4" /> Enter VIN <span className="text-brand">(faster)</span>
+          </button>
         </div>
       </div>
 
-      <p className="mt-3 text-center text-xs text-muted">
-        Don&apos;t see your make? Choose{" "}
-        <span className="font-semibold text-navy">&ldquo;Other / Not listed&rdquo;</span> — we still buy it.
-      </p>
+      {inputMode === "vin" ? (
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          <div>
+            <label className="label" htmlFor="vw-vin">VIN <span className="font-normal text-muted">(17 characters)</span></label>
+            <input
+              id="vw-vin"
+              className="field font-mono uppercase tracking-wide"
+              value={vin}
+              onChange={(e) => setVin(e.target.value.toUpperCase())}
+              placeholder="e.g. 1HGCM82633A004352"
+              maxLength={17}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <p className="mt-1.5 text-xs text-muted">On your registration, insurance card, or driver-side door jamb.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="vw-km">Mileage (km)</label>
+            <input
+              id="vw-km"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              className="field"
+              placeholder="e.g. 80000"
+              value={kmv}
+              onChange={(e) => setKmv(e.target.value)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="vw-year">Year</label>
+            <select id="vw-year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+              <option value="">Year</option>
+              {YEARS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="vw-make">Make</label>
+            <select
+              id="vw-make"
+              className="field"
+              value={make}
+              onChange={(e) => {
+                setMake(e.target.value);
+                setModel("");
+              }}
+            >
+              <option value="">Make</option>
+              {MAKES.map((m) => (
+                <option key={m.name} value={m.name}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="vw-model">Model</label>
+            <select
+              id="vw-model"
+              className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              value={model}
+              disabled={!make}
+              onChange={(e) => setModel(e.target.value)}
+            >
+              <option value="">{make ? "Model" : "Select make first"}</option>
+              {models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="vw-trim">Trim <span className="font-normal text-muted">(optional)</span></label>
+            <input
+              id="vw-trim"
+              className="field"
+              placeholder="e.g. SE, Limited"
+              value={trim}
+              onChange={(e) => setTrim(e.target.value)}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="vw-km">Mileage (km)</label>
+            <input
+              id="vw-km"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              className="field"
+              placeholder="e.g. 80000"
+              value={kmv}
+              onChange={(e) => setKmv(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {inputMode === "manual" && (
+        <p className="mt-3 text-center text-xs text-muted">
+          Don&apos;t see your make? Choose{" "}
+          <span className="font-semibold text-navy">&ldquo;Other / Not listed&rdquo;</span> — we still buy it.
+        </p>
+      )}
 
       <button type="submit" className="btn-primary mt-4 w-full text-lg">
         Get My Estimate
         <ArrowRight className="h-5 w-5" />
       </button>
-      {showError && !ready && (
+      {showError && ((inputMode === "vin" && !vinReady) || (inputMode === "manual" && !ready)) && (
         <p className="mt-2 text-center text-xs font-medium text-red-600">
-          Just add your year, make, model, and mileage to see your estimate.
+          {inputMode === "vin"
+            ? "Add your 17-character VIN and mileage to see your estimate."
+            : "Just add your year, make, model, and mileage to see your estimate."}
         </p>
       )}
 

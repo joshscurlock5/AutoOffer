@@ -69,6 +69,7 @@ export default function OfferFlow() {
     setModel(sp.get("model") || "");
     setTrim(sp.get("trim") || "");
     setKmv(sp.get("km") || "");
+    if (sp.get("vin")) setVin((sp.get("vin") || "").toUpperCase());
     if (sp.get("mode") === "vin") setInputMode("vin");
   }, [sp]);
 

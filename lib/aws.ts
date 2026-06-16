@@ -25,4 +25,5 @@ export const s3 = new S3Client({ region, credentials });
 export const LEADS_TABLE = process.env.LEADS_TABLE || "AutoOfferLeads";
 export const REFERRALS_TABLE =
   process.env.REFERRALS_TABLE || "AutoOfferReferrals";
+export const CHATS_TABLE = process.env.CHATS_TABLE || "AutoOfferChats";
 export const PHOTOS_BUCKET = process.env.PHOTOS_BUCKET || "";

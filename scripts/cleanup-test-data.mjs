@@ -21,10 +21,12 @@ const ddb = DynamoDBDocumentClient.from(
 
 const LEADS = process.env.LEADS_TABLE || "AutoOfferLeads";
 const REFS = process.env.REFERRALS_TABLE || "AutoOfferReferrals";
+const CHATS = process.env.CHATS_TABLE || "AutoOfferChats";
 
 const TEST_NAMES = new Set(["Test Seller", "Email Only Test"]);
 const TEST_EMAILS = new Set(["test@example.com", "email-only-test@example.com"]);
 const TEST_REF_EMAILS = new Set(["jane@example.com"]);
+const CHAT_MARKER = "AO_CHAT_SMOKE_TEST";
 
 const leads = (await ddb.send(new ScanCommand({ TableName: LEADS }))).Items || [];
 let dl = 0;
@@ -46,4 +48,15 @@ for (const r of refs) {
   }
 }
 
-console.log(`\nCleanup done: ${dl} test lead(s), ${dr} test referral(s) removed.`);
+const chats = (await ddb.send(new ScanCommand({ TableName: CHATS }))).Items || [];
+let dc = 0;
+for (const c of chats) {
+  const hit = (c?.messages || []).some((m) => typeof m?.text === "string" && m.text.includes(CHAT_MARKER));
+  if (hit) {
+    await ddb.send(new DeleteCommand({ TableName: CHATS, Key: { id: c.id } }));
+    dc++;
+    console.log("deleted chat    ", c.id);
+  }
+}
+
+console.log(`\nCleanup done: ${dl} test lead(s), ${dr} test referral(s), ${dc} test chat(s) removed.`);

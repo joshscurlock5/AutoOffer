@@ -201,6 +201,19 @@ export const Lock = ({ className }: P) => (
   </svg>
 );
 
+export const Chat = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+  </svg>
+);
+
+export const Send = ({ className }: P) => (
+  <svg {...base(className)}>
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
+  </svg>
+);
+
 export const Tag = ({ className }: P) => (
   <svg {...base(className)}>
     <path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />

@@ -1,9 +1,11 @@
 import "server-only";
+import crypto from "crypto";
 import {
   PutCommand,
   GetCommand,
   ScanCommand,
   DeleteCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
   PutObjectCommand,
@@ -11,8 +13,8 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
-import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, UploadedPhoto } from "./types";
+import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, CHATS_TABLE, PHOTOS_BUCKET } from "./aws";
+import type { Lead, Referral, UploadedPhoto, ChatConversation, ChatMessage } from "./types";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -141,5 +143,68 @@ export async function readPhoto(
     return Buffer.from(bytes);
   } catch {
     return null;
+  }
+}
+
+// ---- Live chat (DynamoDB) -------------------------------------------------
+
+const MAX_CHAT_MESSAGES = 300;
+
+export async function getConversations(): Promise<ChatConversation[]> {
+  const res = await ddb.send(new ScanCommand({ TableName: CHATS_TABLE }));
+  const items = (res.Items || []) as ChatConversation[];
+  return items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+}
+
+export async function getConversation(id: string): Promise<ChatConversation | null> {
+  const res = await ddb.send(new GetCommand({ TableName: CHATS_TABLE, Key: { id } }));
+  return (res.Item as ChatConversation) || null;
+}
+
+/**
+ * Append a message to a conversation (atomic list_append, so concurrent
+ * visitor + admin sends can't clobber each other). Creates the conversation if
+ * it doesn't exist when a visitor writes. Admins can only reply to an existing
+ * one. Caps conversation length to guard against abuse.
+ */
+export async function addChatMessage(opts: {
+  conversationId?: string;
+  role: "visitor" | "admin";
+  text: string;
+  name?: string;
+}): Promise<ChatConversation | null> {
+  const now = new Date().toISOString();
+  const id = opts.conversationId || crypto.randomUUID();
+  const msg: ChatMessage = { id: crypto.randomUUID(), role: opts.role, text: opts.text, at: now };
+
+  if (opts.role === "admin") {
+    const existing = await getConversation(id);
+    if (!existing) return null;
+  }
+
+  try {
+    const res = await ddb.send(
+      new UpdateCommand({
+        TableName: CHATS_TABLE,
+        Key: { id },
+        UpdateExpression:
+          "SET messages = list_append(if_not_exists(messages, :empty), :m), updatedAt = :now, lastSender = :ls, createdAt = if_not_exists(createdAt, :now), #nm = if_not_exists(#nm, :name)",
+        ConditionExpression: "attribute_not_exists(messages) OR size(messages) < :cap",
+        ExpressionAttributeNames: { "#nm": "name" },
+        ExpressionAttributeValues: {
+          ":empty": [],
+          ":m": [msg],
+          ":now": now,
+          ":ls": opts.role,
+          ":cap": MAX_CHAT_MESSAGES,
+          ":name": opts.name ?? null,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+    return (res.Attributes as ChatConversation) || null;
+  } catch {
+    // Cap exceeded (or a conditional failure) — return current state unchanged.
+    return await getConversation(id);
   }
 }

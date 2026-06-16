@@ -9,7 +9,7 @@ export interface MakeData {
   models: string[];
 }
 
-export const MAKES: MakeData[] = [
+const RAW_MAKES: MakeData[] = [
   {
     name: "Toyota",
     base: 40000,
@@ -215,6 +215,24 @@ export const MAKES: MakeData[] = [
     models: ["Other"],
   },
 ];
+
+// Alphabetise everything, but keep "Other / Not listed" pinned last.
+function byMakeName(a: { name: string }, b: { name: string }): number {
+  const ao = a.name.startsWith("Other") ? 1 : 0;
+  const bo = b.name.startsWith("Other") ? 1 : 0;
+  return ao - bo || a.name.localeCompare(b.name);
+}
+function sortModels(models: string[]): string[] {
+  return [...models].sort((a, b) => {
+    const ao = a === "Other" ? 1 : 0;
+    const bo = b === "Other" ? 1 : 0;
+    return ao - bo || a.localeCompare(b);
+  });
+}
+
+export const MAKES: MakeData[] = [...RAW_MAKES]
+  .sort(byMakeName)
+  .map((m) => ({ ...m, models: sortModels(m.models) }));
 
 // Common spelling/abbreviation aliases (VIN decoders return e.g. "RAM", "VW").
 const MAKE_ALIASES: Record<string, string> = {

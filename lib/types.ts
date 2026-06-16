@@ -106,3 +106,21 @@ export interface Referral {
   code: string;
   notes?: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  role: "visitor" | "admin";
+  text: string;
+  at: string; // ISO timestamp
+}
+
+export interface ChatConversation {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Optional visitor name. */
+  name?: string | null;
+  messages: ChatMessage[];
+  /** Who sent the most recent message (drives the admin "needs reply" cue). */
+  lastSender: "visitor" | "admin";
+}

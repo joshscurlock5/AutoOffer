@@ -30,7 +30,7 @@ export default function Brands() {
 
         <div className="card-outline p-7 sm:p-8">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3.5">
-            {brands.map((b) => (
+            {[...brands].sort((a, b) => a.localeCompare(b)).map((b) => (
               <Link
                 key={b}
                 href="/get-offer"

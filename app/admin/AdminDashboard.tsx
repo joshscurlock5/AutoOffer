@@ -1,15 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, LeadStatus, Referral, UploadedPhoto } from "@/lib/types";
+import type { Lead, LeadStatus, Referral, UploadedPhoto, ChatConversation } from "@/lib/types";
 import { LEAD_STATUSES } from "@/lib/types";
 import { cad, km as fmtKm, formatDateTime, timeAgo } from "@/lib/format";
 import { site } from "@/lib/site-config";
 import {
   Phone, Mail, Car, Trash, Search, Gift, Check, Camera, Star, X,
-  ChevronLeft, ChevronRight, Dollar,
+  ChevronLeft, ChevronRight, Dollar, Chat, Send,
 } from "@/components/icons";
+
+type ChatSummary = {
+  id: string;
+  name: string | null;
+  updatedAt: string;
+  lastSender: "visitor" | "admin";
+  count: number;
+  preview: string;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New",
@@ -42,11 +51,14 @@ export default function AdminDashboard({
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
-  const [tab, setTab] = useState<"leads" | "referrals">("leads");
+  const [tab, setTab] = useState<"leads" | "referrals" | "chats">("leads");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "bookmarked" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [activeChat, setActiveChat] = useState<ChatConversation | null>(null);
+  const chatsNeedingReply = chats.filter((c) => c.lastSender === "visitor").length;
 
   const counts = useMemo(
     () => ({
@@ -120,6 +132,66 @@ export default function AdminDashboard({
     router.refresh();
   }
 
+  async function refreshChats() {
+    try {
+      const r = await fetch("/api/admin/chats");
+      const d = await r.json();
+      if (Array.isArray(d.conversations)) setChats(d.conversations);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function openChat(id: string) {
+    try {
+      const r = await fetch(`/api/admin/chats?conversationId=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      if (d.conversation) setActiveChat(d.conversation);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function sendReply(text: string) {
+    if (!activeChat || !text.trim()) return;
+    try {
+      const r = await fetch("/api/admin/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: activeChat.id, text: text.trim() }),
+      });
+      const d = await r.json();
+      if (d.conversation) setActiveChat(d.conversation);
+      refreshChats();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Poll the conversation list (keeps the Messages badge live).
+  useEffect(() => {
+    refreshChats();
+    const t = setInterval(refreshChats, 8000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Poll the open conversation for new visitor messages.
+  useEffect(() => {
+    if (!activeChat) return;
+    const id = activeChat.id;
+    const t = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/admin/chats?conversationId=${encodeURIComponent(id)}`);
+        const d = await r.json();
+        if (d.conversation) setActiveChat(d.conversation);
+      } catch {
+        /* ignore */
+      }
+    }, 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChat?.id]);
+
   // Lightbox keyboard controls
   useEffect(() => {
     if (!lightbox) return;
@@ -185,6 +257,17 @@ export default function AdminDashboard({
             className={`rounded-full px-4 py-2 text-sm font-semibold transition ${tab === "referrals" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}
           >
             Referrals ({referrals.length})
+          </button>
+          <button
+            onClick={() => setTab("chats")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition ${tab === "chats" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}
+          >
+            <Chat className="h-4 w-4" /> Messages
+            {chatsNeedingReply > 0 && (
+              <span className="grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-brand px-1 text-[11px] font-bold text-white">
+                {chatsNeedingReply}
+              </span>
+            )}
           </button>
         </div>
 
@@ -282,6 +365,10 @@ export default function AdminDashboard({
               </div>
             ))}
           </div>
+        )}
+
+        {tab === "chats" && (
+          <ChatsPanel chats={chats} active={activeChat} onOpen={openChat} onSend={sendReply} />
         )}
       </div>
 
@@ -658,6 +745,106 @@ function PriceModal({
             <Check className="h-4 w-4" /> Mark Closed
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatsPanel({
+  chats,
+  active,
+  onOpen,
+  onSend,
+}: {
+  chats: ChatSummary[];
+  active: ChatConversation | null;
+  onOpen: (id: string) => void;
+  onSend: (text: string) => void;
+}) {
+  const [reply, setReply] = useState("");
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setReply(""), [active?.id]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [active?.messages?.length]);
+
+  return (
+    <div className="mt-5 grid gap-4 lg:grid-cols-[320px_1fr]">
+      {/* conversation list */}
+      <div className="card max-h-[34rem] divide-y divide-slate-100 overflow-y-auto">
+        {chats.length === 0 && (
+          <div className="p-8 text-center text-sm text-muted">No messages yet.</div>
+        )}
+        {chats.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onOpen(c.id)}
+            className={`flex w-full flex-col gap-1 p-4 text-left transition hover:bg-slate-50 ${active?.id === c.id ? "bg-brand-50" : ""}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-navy">{c.name || "Visitor"}</span>
+              <span className="shrink-0 text-[11px] text-muted">{timeAgo(c.updatedAt)}</span>
+            </div>
+            <span className="truncate text-sm text-muted">{c.preview}</span>
+            {c.lastSender === "visitor" && (
+              <span className="w-fit rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                Needs reply
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* thread */}
+      <div className="card flex h-[34rem] flex-col overflow-hidden">
+        {!active ? (
+          <div className="grid flex-1 place-items-center p-8 text-center text-sm text-muted">
+            Select a conversation to read and reply.
+          </div>
+        ) : (
+          <>
+            <div className="border-b border-slate-100 px-4 py-3">
+              <span className="font-semibold text-navy">{active.name || "Visitor"}</span>
+              <span className="ml-2 text-xs text-muted">{active.messages.length} messages</span>
+            </div>
+            <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+              {active.messages.map((m) => (
+                <div key={m.id} className={`flex ${m.role === "admin" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm ${
+                      m.role === "admin" ? "bg-brand text-white" : "bg-white text-navy shadow-soft"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+              <div ref={endRef} />
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (reply.trim()) {
+                  onSend(reply);
+                  setReply("");
+                }
+              }}
+              className="flex items-center gap-2 border-t border-slate-100 p-3"
+            >
+              <input
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="Type your reply…"
+                maxLength={2000}
+                className="field flex-1 py-2"
+              />
+              <button type="submit" disabled={!reply.trim()} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                <Send className="h-4 w-4" /> Send
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );

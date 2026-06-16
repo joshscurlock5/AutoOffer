@@ -9,6 +9,7 @@ import StickyMobileBar from "@/components/StickyMobileBar";
 import ExitIntent from "@/components/ExitIntent";
 import Analytics from "@/components/Analytics";
 import CookieNotice from "@/components/CookieNotice";
+import ChatWidget from "@/components/ChatWidget";
 import { site } from "@/lib/site-config";
 import { GA_ID } from "@/lib/analytics";
 
@@ -71,6 +72,7 @@ export default function RootLayout({
         <StickyMobileBar />
         <ExitIntent />
         <CookieNotice />
+        <ChatWidget />
       </body>
     </html>
   );
