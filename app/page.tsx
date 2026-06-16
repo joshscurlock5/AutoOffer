@@ -49,61 +49,78 @@ export default function HomePage() {
       {/* ---------------- HERO ---------------- */}
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
-        <div className="container-x relative grid items-center gap-10 py-12 lg:grid-cols-[0.9fr_1.1fr] lg:py-16">
-          {/* LEFT — short, tight, supporting (below the form on mobile) */}
-          <div className="order-2 animate-fade-up lg:order-1">
+        <div className="container-x relative py-12 lg:py-16">
+          {/* Mobile-only header — sits ABOVE the form so the headline reads first */}
+          <div className="mb-8 animate-fade-up lg:hidden">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
                 <Check className="h-3 w-3" />
               </span>
               Free estimate · we come to you
             </span>
-
-            <h1 className="mt-5 font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-6xl">
-              Sell your car<br className="hidden sm:block" /> the <span className="text-brand">easy way.</span>
+            <h1 className="mt-4 font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-5xl">
+              Sell your car the <span className="text-brand">easy way.</span>
             </h1>
-
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-              Get your estimate in minutes. We come to you, inspect the car, and
-              pay the same visit by e-transfer or bank draft.
-            </p>
-
-            <ul className="mt-7 space-y-3.5">
-              {[
-                { icon: Tag, label: "Free & no obligation" },
-                { icon: MapPin, label: "We come to you" },
-                { icon: Dollar, label: "Paid same visit" },
-              ].map((b) => {
-                const Icon = b.icon;
-                return (
-                  <li key={b.label} className="flex items-center gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="text-lg font-semibold text-navy">{b.label}</span>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="mt-7 border-t border-slate-200 pt-6">
-              <TelLink location="hero" className="group flex items-start gap-3">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
-                  <Phone className="h-5 w-5" />
-                </span>
-                <span className="leading-snug">
-                  <span className="block font-semibold text-navy">
-                    Prefer to talk? Call or text <span className="text-brand">{site.phoneDisplay}</span>
-                  </span>
-                  <span className="block text-sm text-muted">We&apos;re available 24/7.</span>
-                </span>
-              </TelLink>
-            </div>
           </div>
 
-          {/* RIGHT — the form is the hero (first on mobile) */}
-          <div id="estimate" className="order-1 animate-fade-up scroll-mt-24 lg:order-2">
-            <ValueWidget />
+          <div className="grid items-start gap-10 lg:grid-cols-[0.9fr_1.1fr]">
+            {/* LEFT — supporting copy (below the form on mobile, full column on desktop) */}
+            <div className="order-2 animate-fade-up lg:order-1">
+              {/* badge + headline repeat here for desktop only (mobile shows them above) */}
+              <span className="hidden items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft lg:inline-flex">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
+                  <Check className="h-3 w-3" />
+                </span>
+                Free estimate · we come to you
+              </span>
+
+              <h1 className="mt-5 hidden font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-6xl lg:block">
+                Sell your car<br className="hidden sm:block" /> the <span className="text-brand">easy way.</span>
+              </h1>
+
+              <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
+                Get your estimate in minutes. We come to you, inspect the car, and
+                pay the same visit by e-transfer or bank draft.
+              </p>
+
+              {/* benefit bullets — desktop only (redundant with the form + section below on mobile) */}
+              <ul className="mt-7 hidden space-y-3.5 lg:block">
+                {[
+                  { icon: Tag, label: "Free & no obligation" },
+                  { icon: MapPin, label: "We come to you" },
+                  { icon: Dollar, label: "Paid same visit" },
+                ].map((b) => {
+                  const Icon = b.icon;
+                  return (
+                    <li key={b.label} className="flex items-center gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="text-lg font-semibold text-navy">{b.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="mt-7 border-t border-slate-200 pt-6">
+                <TelLink location="hero" className="group flex items-start gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
+                    <Phone className="h-5 w-5" />
+                  </span>
+                  <span className="leading-snug">
+                    <span className="block font-semibold text-navy">
+                      Prefer to talk? Call or text <span className="text-brand">{site.phoneDisplay}</span>
+                    </span>
+                    <span className="block text-sm text-muted">We&apos;re available 24/7.</span>
+                  </span>
+                </TelLink>
+              </div>
+            </div>
+
+            {/* RIGHT — the form is the hero (first on mobile) */}
+            <div id="estimate" className="order-1 animate-fade-up scroll-mt-24 lg:order-2">
+              <ValueWidget />
+            </div>
           </div>
         </div>
       </section>
