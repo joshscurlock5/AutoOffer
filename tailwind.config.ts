@@ -10,32 +10,32 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Dark surfaces & headings — a deep forest "ink", not the stock Stripe navy.
+        // Dark surfaces & headings — a lighter, friendly navy-blue (less heavy).
         navy: {
-          DEFAULT: "#10291E",
-          700: "#17402E",
-          800: "#10291E",
-          900: "#0A1C14",
+          DEFAULT: "#1E4A7E",
+          700: "#285A93",
+          800: "#1E4A7E",
+          900: "#16365C",
         },
-        // Primary — confident "money" green (not Tailwind's default blue).
+        // Primary — a light, bright high-trust blue (modern fintech sky-blue).
         brand: {
-          DEFAULT: "#1A7F54",
-          50: "#ECFBF2",
-          100: "#D5F4E2",
-          200: "#A7E8C8",
-          500: "#1A7F54",
-          600: "#156945",
-          700: "#114F35",
+          DEFAULT: "#3B82F6",
+          50: "#EFF6FF",
+          100: "#DBEAFE",
+          200: "#BFDBFE",
+          500: "#3B82F6",
+          600: "#2563EB",
+          700: "#1D4FD0",
         },
-        // Secondary — a real gold that does work everywhere (CTAs, offer figure, stats).
+        // Secondary — a brighter sky/azure for highlights, badges & promos.
         accent: {
-          DEFAULT: "#F0B429",
-          600: "#D69A1C",
-          700: "#B7831A",
+          DEFAULT: "#2E90FA",
+          600: "#1E7AD8",
+          700: "#1763C4",
         },
-        // Warm neutral for alternating section backgrounds (vs cold slate).
-        cream: "#FAF6EE",
-        ink: "#12231B",
+        // Cool light neutral for alternating section backgrounds (trust reads cool).
+        cream: "#F1F5FB",
+        ink: "#0E1B2E",
         muted: "#475569",
       },
       fontFamily: {
@@ -50,9 +50,9 @@ const config: Config = {
         "2xl": "20px",
       },
       boxShadow: {
-        card: "0 10px 30px -12px rgba(16,41,30,0.16)",
-        soft: "0 4px 20px -8px rgba(16,41,30,0.14)",
-        lift: "0 24px 60px -20px rgba(16,41,30,0.28)",
+        card: "0 10px 30px -12px rgba(16,42,76,0.16)",
+        soft: "0 4px 20px -8px rgba(16,42,76,0.14)",
+        lift: "0 24px 60px -20px rgba(16,42,76,0.28)",
       },
       keyframes: {
         "fade-up": {

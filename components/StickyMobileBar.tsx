@@ -24,7 +24,7 @@ export default function StickyMobileBar() {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_-8px_24px_-12px_rgba(16,41,30,0.25)] backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_-8px_24px_-12px_rgba(16,42,76,0.25)] backdrop-blur lg:hidden"
       style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto flex max-w-md items-center gap-2.5">

@@ -427,7 +427,7 @@ function LeadCard({
               {lead.kind === "vehicle" ? "Vehicle offer" : "Inquiry"}
             </span>
             {lead.referralCode && (
-              <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+              <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent-700">
                 Ref: {lead.referralCode}
               </span>
             )}

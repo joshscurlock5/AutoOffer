@@ -15,7 +15,7 @@ export default function ContactPage() {
     <>
       {/* Hero with the phone front and centre */}
       <section className="bg-gradient-to-b from-brand-50 to-white">
-        <div className="container-x py-16 text-center sm:py-20">
+        <div className="container-x py-12 text-center sm:py-16">
           <h1 className="font-display text-4xl font-extrabold text-navy sm:text-5xl">
             Let&apos;s talk about your car
           </h1>
@@ -45,7 +45,7 @@ export default function ContactPage() {
       </section>
 
       {/* Contact methods + form */}
-      <section className="py-16 sm:py-20">
+      <section className="py-12 sm:py-16">
         <div className="container-x grid gap-10 lg:grid-cols-2">
           <div>
             <h2 className="h-section">Get in touch</h2>

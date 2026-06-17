@@ -85,7 +85,7 @@ export default function ValueWidget() {
   return (
     <form
       onSubmit={submit}
-      className="card w-full overflow-hidden border border-slate-100 p-7 sm:p-9"
+      className="card w-full overflow-hidden border border-slate-100 p-6 sm:p-8"
     >
       <div className="text-center">
         <h2 className="font-display text-2xl font-bold text-navy">
@@ -249,13 +249,13 @@ export default function ValueWidget() {
         </p>
       )}
 
-      {/* Concrete, verifiable trust — not invented claims. */}
-      <ul className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-muted">
-        <li className="flex items-center gap-2">
-          <Check className="h-4 w-4 shrink-0 text-brand" /> A real person answers — 24/7
+      {/* Concrete, verifiable trust — not invented claims. Side-by-side on desktop. */}
+      <ul className="mt-5 grid gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm text-muted sm:grid-cols-2">
+        <li className="flex items-start gap-2">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Paid by e-transfer before we take the keys
         </li>
-        <li className="flex items-center gap-2">
-          <Check className="h-4 w-4 shrink-0 text-brand" /> Paid by e-transfer before we take the keys
+        <li className="flex items-start gap-2">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> A real person answers — 24/7
         </li>
       </ul>
 

@@ -21,7 +21,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="mt-8 bg-navy text-slate-300">
-      <div className="container-x grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-5">
+      <div className="container-x grid gap-10 py-12 md:grid-cols-2 lg:grid-cols-5">
         {/* Brand */}
         <div className="lg:col-span-2">
           <div className="font-display text-2xl font-extrabold tracking-tight text-white">

@@ -49,15 +49,8 @@ export default function Header() {
     >
       <div className="container-x flex h-[72px] items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-2" aria-label={site.name}>
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white shadow-soft">
-            <Phone className="hidden" />
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 13.5 5 8a3 3 0 0 1 2.8-2h8.4A3 3 0 0 1 19 8l2 5.5" />
-              <path d="M3 13.5h18V18a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" />
-              <circle cx="7.5" cy="16" r="0.6" fill="currentColor" />
-              <circle cx="16.5" cy="16" r="0.6" fill="currentColor" />
-            </svg>
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="DriveOffer" className="h-9 w-auto" />
           <span className="font-display text-xl font-extrabold tracking-tight text-navy">
             Drive<span className="text-brand">Offer</span>
           </span>

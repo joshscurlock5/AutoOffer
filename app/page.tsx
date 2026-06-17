@@ -1,19 +1,16 @@
 import Link from "next/link";
 import ValueWidget from "@/components/ValueWidget";
-import TrustBar from "@/components/TrustBar";
 import HowItWorks from "@/components/HowItWorks";
-import Brands from "@/components/Brands";
 import ReferralBanner from "@/components/ReferralBanner";
 import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
-import MapEmbed from "@/components/MapEmbed";
 import PhoneButton from "@/components/PhoneButton";
 import TelLink from "@/components/TelLink";
 import Reveal from "@/components/Reveal";
 import { Section, SectionHeading } from "@/components/Section";
 import { site } from "@/lib/site-config";
 import {
-  Check, Shield, Car, Bolt, Banknote, ArrowRight, Phone, Tag, MapPin, Dollar,
+  Check, Shield, Car, Bolt, Banknote, ArrowRight, Phone, Dollar,
 } from "@/components/icons";
 
 const smallBenefits = [
@@ -21,25 +18,25 @@ const smallBenefits = [
     icon: Bolt,
     tone: "brand",
     title: "Your estimate in minutes",
-    body: "Answer a few questions and see an honest estimated range right away. A specialist confirms your firm number by phone or text.",
+    body: "See an honest range right away — we confirm your firm number by phone.",
   },
   {
     icon: Car,
     tone: "brand",
     title: "We come to you",
-    body: "Free inspection at your home or work, anywhere we serve. You never have to drive to a lot or wait around.",
+    body: "Free inspection at your home or work, anywhere we serve.",
   },
   {
     icon: Banknote,
     tone: "gold",
     title: "Paid on the spot",
-    body: "Interac e-transfer or bank draft before we load the car. No envelopes of cash, no sketchy meetups.",
+    body: "Interac e-transfer or bank draft before we load the car.",
   },
   {
     icon: Shield,
     tone: "brand",
     title: "We handle the paperwork",
-    body: "Financed or leased? We deal with your lender directly and clear the lien. You just sign and get paid.",
+    body: "Financed or leased? We deal with your lender and clear the lien.",
   },
 ];
 
@@ -49,9 +46,9 @@ export default function HomePage() {
       {/* ---------------- HERO ---------------- */}
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
-        <div className="container-x relative py-12 lg:py-16">
+        <div className="container-x relative py-10 lg:py-14">
           {/* Mobile-only header — sits ABOVE the form so the headline reads first */}
-          <div className="mb-8 animate-fade-up lg:hidden">
+          <div className="mb-6 animate-fade-up lg:hidden">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
                 <Check className="h-3 w-3" />
@@ -79,28 +76,13 @@ export default function HomePage() {
               </h1>
 
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-                Get your estimate in minutes. We come to you, inspect the car, and
-                pay the same visit by e-transfer or bank draft.
+                Get a fair offer in minutes — then we come to you and pay on the spot.
               </p>
 
-              {/* benefit bullets — desktop only (redundant with the form + section below on mobile) */}
-              <ul className="mt-7 hidden space-y-3.5 lg:block">
-                {[
-                  { icon: Tag, label: "Free & no obligation" },
-                  { icon: MapPin, label: "We come to you" },
-                  { icon: Dollar, label: "Paid same visit" },
-                ].map((b) => {
-                  const Icon = b.icon;
-                  return (
-                    <li key={b.label} className="flex items-center gap-3">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span className="text-lg font-semibold text-navy">{b.label}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <p className="mt-4 max-w-xl text-base text-muted">
+                A local Edmonton business — your written firm offer is the price you&apos;re
+                paid, with no surprise deductions.
+              </p>
 
               <div className="mt-7 border-t border-slate-200 pt-6">
                 <TelLink location="hero" className="group flex items-start gap-3">
@@ -125,30 +107,32 @@ export default function HomePage() {
         </div>
       </section>
 
-      <TrustBar />
-
       {/* ---------------- BENEFITS (asymmetric) ---------------- */}
       <Section className="bg-white">
         <SectionHeading
           eyebrow={`Why ${site.name}`}
           title="A better way to sell, start to finish"
-          subtitle="No listings, no tire-kickers, no lowball trade-in. Just a fair number and a team that comes to you."
+          subtitle="No listings, no tire-kickers, no lowball trade-ins — just a fair number."
         />
-        <div className="mt-12 grid gap-5 lg:grid-cols-3 lg:grid-rows-2">
+        <div className="mt-10 grid gap-5 lg:grid-cols-3 lg:grid-rows-2">
           {/* spotlight */}
           <Reveal className="lg:col-span-1 lg:row-span-2">
-            <div className="card-spotlight flex h-full flex-col p-8">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-accent text-navy">
-                <Banknote className="h-7 w-7" />
+            <div className="flex h-full flex-col rounded-2xl border border-brand-100 bg-brand-50 p-8 shadow-soft">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
+                <Dollar className="h-7 w-7" />
               </span>
-              <h3 className="mt-6 font-display text-2xl font-bold">More money in your pocket</h3>
-              <p className="mt-3 text-slate-300">
-                We skip the dealership overhead and reconditioning markup, so your
-                offer reflects what the car is actually worth — usually more than a
-                trade-in counter will give you.
+              <h3 className="mt-6 font-display text-2xl font-bold text-navy">More money in your pocket</h3>
+              <p className="mt-3 text-muted">
+                We skip dealership overhead, so your offer reflects what the car&apos;s
+                actually worth — often more than a trade-in.
+              </p>
+              <p className="mt-3 text-muted">
+                Dealers bake their resale margin and lot costs into a trade-in price. We
+                buy to resell ourselves — so there&apos;s no middleman markup subtracted
+                from your number.
               </p>
               <div className="mt-auto pt-8">
-                <Link href="/get-offer" className="inline-flex items-center gap-2 font-semibold text-accent hover:gap-3">
+                <Link href="/get-offer" className="inline-flex items-center gap-2 font-semibold text-brand hover:gap-3">
                   See what yours is worth <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
@@ -178,30 +162,27 @@ export default function HomePage() {
       </Section>
 
       <HowItWorks />
-      <Brands />
       <ReferralBanner />
       <Promise />
       <Faq />
-      <MapEmbed />
 
       {/* ---------------- FINAL CTA (distinct finale) ---------------- */}
-      <section className="relative overflow-hidden bg-navy">
-        <div className="bg-grid pointer-events-none absolute inset-0 opacity-[0.15]" />
-        <div className="container-x relative flex flex-col items-start gap-8 py-16 md:flex-row md:items-center md:justify-between">
+      <section className="relative overflow-hidden bg-brand">
+        <div className="container-x relative flex flex-col items-start gap-8 py-12 md:flex-row md:items-center md:justify-between">
           <div className="max-w-xl">
             <h2 className="font-display text-3xl font-extrabold leading-tight text-white sm:text-4xl">
-              Find out what your car is worth — <span className="text-accent">today.</span>
+              Find out what your car is worth — today.
             </h2>
-            <p className="mt-3 text-lg text-slate-300">
+            <p className="mt-3 text-lg text-white/90">
               It takes about two minutes and it&apos;s completely free. No obligation,
               no pressure — just a fair offer.
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Link href="/get-offer" className="btn-gold text-lg">
+            <Link href="/get-offer" className="btn bg-white px-6 py-3.5 text-lg text-brand shadow-soft hover:-translate-y-0.5 hover:bg-brand-50 active:translate-y-0">
               Get My Estimate <ArrowRight className="h-5 w-5" />
             </Link>
-            <PhoneButton variant="ghost" label="Call Now" location="final_cta" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" />
+            <PhoneButton variant="ghost" label="Call Now" location="final_cta" className="border-white/50 bg-transparent text-white hover:bg-white/10 hover:text-white" />
           </div>
         </div>
       </section>

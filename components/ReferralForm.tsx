@@ -51,7 +51,7 @@ export default function ReferralForm() {
   if (state === "done") {
     return (
       <div className="card p-8 text-center">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-green-100 text-green-600">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand">
           <Check className="h-8 w-8" />
         </span>
         <h3 className="mt-5 font-display text-2xl font-bold text-navy">You&apos;re in!</h3>

@@ -8,23 +8,21 @@ import { Check, Shield, ArrowRight, Star } from "./icons";
 // reviews, drop them into the right-hand card (set `site.reviewsUrl`), or embed a
 // reviews widget. Never ship invented quotes.
 const promises = [
-  "A real, no-obligation offer — walk away any time, always free.",
-  "The number we agree on is the number you're paid. No surprise deductions.",
-  "You're paid before we take the keys — Interac e-transfer or bank draft.",
-  "We come to you and handle the lien and paperwork ourselves.",
+  "The number we agree on is the number you're paid — no surprise deductions.",
   "A real local person answers the phone — never a call centre.",
+  "No obligation, ever — the estimate is free and you can walk away any time.",
 ];
 
 export default function Promise() {
   return (
     <Section className="bg-white">
-      <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+      <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
         <div>
           <p className="eyebrow">Our Promise</p>
           <h2 className="h-section mt-2">No games. Just a fair deal.</h2>
           <p className="mt-4 text-lg text-muted">
-            Selling a car to a stranger shouldn&apos;t feel risky. Here&apos;s exactly
-            what you can count on from {site.name}, every time.
+            Selling to a stranger shouldn&apos;t feel risky — here&apos;s what you can
+            count on, every time.
           </p>
           <ul className="mt-7 space-y-4">
             {promises.map((p, i) => (
@@ -41,28 +39,26 @@ export default function Promise() {
         </div>
 
         <Reveal>
-          <div className="card-spotlight relative overflow-hidden p-8 sm:p-10">
-            <div className="bg-grid pointer-events-none absolute inset-0 opacity-[0.12]" />
+          <div className="card relative overflow-hidden p-8 sm:p-10">
             <div className="relative">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-accent text-navy">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
                 <Shield className="h-7 w-7" />
               </span>
-              <h3 className="mt-6 font-display text-2xl font-bold text-white">
+              <h3 className="mt-6 font-display text-2xl font-bold text-navy">
                 The {site.name} guarantee
               </h3>
-              <p className="mt-3 text-slate-300">
-                If the car matches what you told us, we honour our offer in full and
-                pay you on the spot. If anything&apos;s different, we&apos;ll show you
-                exactly what changed — and you&apos;re free to walk away.
+              <p className="mt-3 text-muted">
+                If the car matches what you told us, we pay our offer in full on the
+                spot. If anything&apos;s different, you&apos;re free to walk away.
               </p>
 
-              <div className="mt-7 flex items-center gap-3 rounded-2xl bg-white/5 p-4">
-                <span className="flex text-accent" role="img" aria-label="Five stars">
+              <div className="mt-7 flex items-center gap-3 rounded-2xl bg-brand-50 p-4">
+                <span className="flex text-brand" role="img" aria-label="Five stars">
                   {[0, 1, 2, 3, 4].map((i) => <Star key={i} className="h-4 w-4" />)}
                 </span>
-                <div className="text-sm text-slate-300">
+                <div className="text-sm text-muted">
                   Sold with us?{" "}
-                  <Link href={site.reviewsUrl || "#"} className="font-semibold text-white underline-offset-2 hover:underline">
+                  <Link href={site.reviewsUrl || "#"} className="font-semibold text-navy underline-offset-2 hover:underline">
                     Leave a review
                   </Link>{" "}
                   — we&apos;re building ours from real customers.
@@ -71,7 +67,7 @@ export default function Promise() {
 
               <Link
                 href="/get-offer"
-                className="mt-7 inline-flex items-center gap-2 font-semibold text-accent hover:gap-3"
+                className="mt-7 inline-flex items-center gap-2 font-semibold text-brand hover:gap-3"
               >
                 Get your fair offer <ArrowRight className="h-4 w-4" />
               </Link>

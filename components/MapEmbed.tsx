@@ -6,7 +6,7 @@ import { MapPin, Phone, Mail, Clock, ExternalLink } from "./icons";
 export default function MapEmbed() {
   return (
     <section className="bg-slate-50">
-      <Container className="py-16 sm:py-20">
+      <Container className="py-12 sm:py-16">
         <div className="mb-8 flex items-center justify-center gap-3">
           <span className="h-px w-8 bg-slate-300" />
           <h2 className="font-display text-xl font-bold text-navy">

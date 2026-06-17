@@ -14,7 +14,7 @@ import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import {
   ArrowRight, Phone, Check, Camera, Trash, Calendar, Dollar,
-  Sparkles, Shield, Car,
+  Send, Shield, Car,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4;
@@ -23,22 +23,34 @@ const MAX_PHOTOS = 12;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 const UNIQUE: OfferEstimate = { low: 0, high: 0, mid: 0, currency: "CAD", unique: true };
 
+/** Live-format a phone number to (XXX) XXX-XXXX as the user types. */
+function formatPhone(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 export default function OfferFlow() {
   const sp = useSearchParams();
+  // Did we arrive from the home form with a complete vehicle? If so we show a
+  // summary card (with Edit) instead of re-asking for everything.
+  const cameFromWidget = Boolean(sp.get("year") && sp.get("make") && sp.get("model") && sp.get("km"));
   const [step, setStep] = useState<Step>(1);
-  const [inputMode, setInputMode] = useState<InputMode>("manual");
+  const [inputMode, setInputMode] = useState<InputMode>(() => (sp.get("mode") === "vin" ? "vin" : "manual"));
+  const [editing, setEditing] = useState(false);
 
-  // vehicle
-  const [year, setYear] = useState("");
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
-  const [trim, setTrim] = useState("");
-  const [kmv, setKmv] = useState("");
+  // vehicle (prefilled from the home-form query string)
+  const [year, setYear] = useState(() => sp.get("year") || "");
+  const [make, setMake] = useState(() => sp.get("make") || "");
+  const [model, setModel] = useState(() => sp.get("model") || "");
+  const [trim, setTrim] = useState(() => sp.get("trim") || "");
+  const [kmv, setKmv] = useState(() => sp.get("km") || "");
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
 
   // VIN flow
-  const [vin, setVin] = useState("");
+  const [vin, setVin] = useState(() => (sp.get("vin") || "").toUpperCase());
   const [vinError, setVinError] = useState("");
   const [decoding, setDecoding] = useState(false);
   const [decoded, setDecoded] = useState<DecodedVehicle | null>(null);
@@ -66,20 +78,11 @@ export default function OfferFlow() {
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
 
-  // Prefill from query string (from the homepage widget); mode=vin opens VIN tab.
-  useEffect(() => {
-    setYear(sp.get("year") || "");
-    setMake(sp.get("make") || "");
-    setModel(sp.get("model") || "");
-    setTrim(sp.get("trim") || "");
-    setKmv(sp.get("km") || "");
-    if (sp.get("vin")) setVin((sp.get("vin") || "").toUpperCase());
-    if (sp.get("mode") === "vin") setInputMode("vin");
-  }, [sp]);
+  // (Prefill comes from the query string via the useState initializers above.)
 
   // Load the real trims for the chosen year/make/model (manual entry only).
   useEffect(() => {
-    if (inputMode !== "manual" || !year || !make || !model) {
+    if (inputMode !== "manual" || !year || !make || !model || (cameFromWidget && !editing)) {
       setTrims([]);
       return;
     }
@@ -100,7 +103,7 @@ export default function OfferFlow() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputMode, year, make, model]);
+  }, [inputMode, year, make, model, cameFromWidget, editing]);
 
   // Funnel start — fires for EVERY way into /get-offer (homepage widget OR a
   // direct entry via header/sticky/exit/footer), so step-1 bounce is visible.
@@ -127,6 +130,8 @@ export default function OfferFlow() {
   const models = make ? modelsFor(make) : [];
   const step1Valid = Boolean(year && make && model && kmv);
   const vinValid = VIN_RE.test(vin.trim().toUpperCase()) && Boolean(kmv);
+  // Manual + arrived complete + not actively editing -> show the summary card.
+  const showSummary = inputMode === "manual" && cameFromWidget && !editing;
   const source = () => (sp.get("make") ? "widget" : "direct");
 
   function addPhotos(list: FileList | null) {
@@ -275,8 +280,8 @@ export default function OfferFlow() {
         setError("You chose email — please add your email address.");
         return;
       }
-    } else if (!phone.trim()) {
-      setError(`You chose ${contactMethod} — please add your phone number.`);
+    } else if (phone.replace(/\D/g, "").length < 10) {
+      setError(`You chose ${contactMethod} — please add a 10-digit phone number.`);
       return;
     }
     setSubmitting(true);
@@ -394,9 +399,54 @@ export default function OfferFlow() {
       {/* -------------------- STEP 1: vehicle details -------------------- */}
       {step === 1 && !decoded && (
         <div className="card mt-8 animate-fade-up p-6 sm:p-9">
-          <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
-            Tell us about your vehicle
-          </h1>
+          {showSummary ? (
+            <>
+              <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
+                You&apos;re almost there
+              </h1>
+              <p className="mt-2 text-center text-muted">
+                Here&apos;s your vehicle. Add a few photos if you&apos;d like — then see your estimate.
+              </p>
+              <form onSubmit={goToOffer}>
+                <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex items-center gap-4">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand">
+                      <Car className="h-6 w-6" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
+                      <p className="font-display text-lg font-bold text-navy sm:text-xl">
+                        {year} {make} {model}
+                      </p>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {trim ? `${trim} · ` : ""}{fmtKm(Number(kmv))}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-brand hover:text-brand"
+                  >
+                    Edit
+                  </button>
+                </div>
+
+                {photoBlock}
+
+                <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+                  {callLine}
+                  <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
+                    See My Estimate <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
+                Tell us about your vehicle
+              </h1>
           <p className="mt-2 text-center text-muted">
             {inputMode === "vin"
               ? "Enter your VIN and we'll pull up your exact vehicle — fastest and most accurate."
@@ -535,6 +585,8 @@ export default function OfferFlow() {
               </div>
             </form>
           )}
+            </>
+          )}
         </div>
       )}
 
@@ -557,7 +609,7 @@ export default function OfferFlow() {
               <OfferSkeleton />
             </div>
           ) : !estimate ? null : isUnique ? (
-            <UniqueOffer onContinue={advanceToContact} onBack={() => setStep(1)} vehicle={{ year, make, model, trim }} />
+            <UniqueOffer onContinue={advanceToContact} onBack={() => { setEditing(true); setStep(1); }} vehicle={{ year, make, model, trim }} />
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
               <div className="card p-6 sm:p-8">
@@ -615,7 +667,7 @@ export default function OfferFlow() {
                   </ul>
                 </div>
 
-                <button onClick={() => setStep(1)} className="mt-4 text-sm font-medium text-muted hover:text-brand">
+                <button onClick={() => { setEditing(true); setStep(1); }} className="mt-4 text-sm font-medium text-muted hover:text-brand">
                   ← Edit vehicle details
                 </button>
               </div>
@@ -630,7 +682,7 @@ export default function OfferFlow() {
           <div className="card p-6 sm:p-9">
             <div className="text-center">
               <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
-                <Sparkles className="h-7 w-7" />
+                <Send className="h-7 w-7" />
               </span>
               <h1 className="mt-4 font-display text-2xl font-bold text-navy">
                 Where should we send your firm offer?
@@ -651,8 +703,8 @@ export default function OfferFlow() {
             </div>
 
             <div className="mt-6 rounded-xl bg-brand-50 px-4 py-3 text-center text-sm text-navy">
-              We can <span className="font-semibold">call or text</span> you with your firm
-              offer. Prefer email? No problem.
+              Your <span className="font-semibold">firm offer comes in writing</span> — the
+              price we agree on is what you&apos;re paid, with no surprise deductions at your door.
             </div>
 
             <form onSubmit={submitLead} className="mt-5 space-y-4">
@@ -693,7 +745,7 @@ export default function OfferFlow() {
                     <label className="label" htmlFor="cphone">
                       Mobile {contactMethod === "text" ? "number (for text)" : "phone"}
                     </label>
-                    <input id="cphone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(___) ___-____" autoComplete="tel" />
+                    <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
                   </div>
                   <div>
                     <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
@@ -713,7 +765,7 @@ export default function OfferFlow() {
                 {submitting ? "Sending…" : "Get My Firm Offer"}
                 {!submitting && <ArrowRight className="h-5 w-5" />}
               </button>
-              <p className="text-center text-xs text-muted">
+              <p className="text-center text-sm text-muted">
                 We use your details once — to send your offer. We never sell them.{" "}
                 <Link href="/privacy" className="font-medium text-brand hover:underline">
                   See our privacy policy
@@ -730,12 +782,8 @@ export default function OfferFlow() {
 
               <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
                 <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
-                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> You&apos;ll hear from {site.name} only — no dealership spam.</li>
                 <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> No obligation — the estimate is free.</li>
                 <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> A real person reviews your vehicle.</li>
-                <li className="flex gap-2"><Phone className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Prefer to talk now? Call or text{" "}
-                  <a href={telHref} className="font-semibold text-brand hover:underline">{site.phoneDisplay}</a>.
-                </li>
               </ul>
               {(site.amvicNumber || site.insured) && (
                 <p className="text-center text-xs font-medium text-navy">
@@ -753,7 +801,7 @@ export default function OfferFlow() {
       {/* -------------------- STEP 4: success -------------------- */}
       {step === 4 && (
         <div className="mx-auto mt-10 max-w-xl animate-fade-up text-center">
-          <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-green-100 text-green-600">
+          <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-brand-50 text-brand">
             <Check className="h-10 w-10" />
           </span>
           <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">

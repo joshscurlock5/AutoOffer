@@ -23,7 +23,7 @@ export default function ReferralPage() {
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-[0.12]" />
         <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rotate-12 rounded-[2rem] border-8 border-accent/25" />
         <div className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 -rotate-6 rounded-[2rem] border-8 border-white/10" />
-        <div className="container-x relative py-16 text-center sm:py-20">
+        <div className="container-x relative py-12 text-center sm:py-16">
           <span className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-sm font-bold text-navy">
             <Gift className="h-4 w-4" /> Referral Program
           </span>
@@ -41,7 +41,7 @@ export default function ReferralPage() {
       {/* How it works */}
       <Section className="bg-white">
         <SectionHeading center eyebrow="How It Works" title={`Earn $${site.referralReward} in 3 simple steps`} />
-        <div className="relative mt-12 grid gap-6 md:grid-cols-3">
+        <div className="relative mt-10 grid gap-6 md:grid-cols-3">
           <div className="absolute left-0 right-0 top-9 hidden h-px bg-gradient-to-r from-transparent via-brand-100 to-transparent md:block" />
           {steps.map((s) => {
             const Icon = s.icon;

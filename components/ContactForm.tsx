@@ -35,7 +35,7 @@ export default function ContactForm() {
   if (state === "done") {
     return (
       <div className="card p-8 text-center">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-green-100 text-green-600">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand">
           <Check className="h-8 w-8" />
         </span>
         <h3 className="mt-5 font-display text-2xl font-bold text-navy">Message sent!</h3>
@@ -81,7 +81,7 @@ export default function ContactForm() {
           {state === "sending" ? "Sending…" : "Send Message"}
           {state !== "sending" && <ArrowRight className="h-5 w-5" />}
         </button>
-        <p className="flex items-center justify-center gap-2 text-center text-xs text-muted">
+        <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
           <Shield className="h-4 w-4" /> Your information is private and never sold.
         </p>
       </div>

@@ -30,7 +30,7 @@ export default function AboutPage() {
     <>
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
-        <div className="container-x relative py-16 text-center sm:py-20">
+        <div className="container-x relative py-12 text-center sm:py-16">
           <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
             <MapleLeaf className="h-4 w-4 text-accent" /> Canadian-owned &amp; operated
           </span>
@@ -59,7 +59,7 @@ export default function AboutPage() {
 
       {/* Story */}
       <Section className="bg-white">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
             <SectionHeading eyebrow="Our Story" title="Why we started DriveOffer" />
             {/* Owner: personalize this with your founding year, city, and a real
@@ -85,8 +85,8 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl bg-navy p-8 text-white shadow-lift">
-            <h3 className="font-display text-2xl font-bold">Why sellers choose us</h3>
+          <div className="rounded-3xl border border-brand-100 bg-brand-50 p-8 shadow-soft ring-1 ring-brand-100">
+            <h3 className="font-display text-2xl font-bold text-navy">Why sellers choose us</h3>
             <ul className="mt-6 space-y-4">
               {[
                 "Free, no-obligation offers",
@@ -99,7 +99,7 @@ export default function AboutPage() {
                   <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-white">
                     <Check className="h-4 w-4" />
                   </span>
-                  <span className="text-slate-200">{p}</span>
+                  <span className="text-navy">{p}</span>
                 </li>
               ))}
             </ul>
@@ -110,7 +110,7 @@ export default function AboutPage() {
       {/* Values */}
       <Section className="bg-slate-50">
         <SectionHeading center eyebrow="What We Stand For" title="Our values" subtitle="Everything we do comes back to making this the easiest, most honest way to sell a car." />
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {values.map((v) => {
             const Icon = v.icon;
             return (
@@ -139,7 +139,7 @@ export default function AboutPage() {
       </Section>
 
       <section className="bg-brand">
-        <div className="container-x flex flex-col items-center gap-6 py-16 text-center">
+        <div className="container-x flex flex-col items-center gap-6 py-12 text-center">
           <h2 className="font-display text-3xl font-extrabold text-white sm:text-4xl">Ready to see your offer?</h2>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href="/get-offer" className="btn bg-white px-7 py-3.5 text-brand hover:bg-brand-50">Get My Instant Estimate <ArrowRight className="h-5 w-5" /></Link>

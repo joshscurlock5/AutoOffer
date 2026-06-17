@@ -49,7 +49,7 @@ export const site = {
   // so nothing fake is ever shown. Fill them in once you have them.
   amvicNumber: "", //  e.g. "AMVIC #123456"                  PLACEHOLDER
   businessNumber: "", //  e.g. "AB Corp. #2021234567"        PLACEHOLDER
-  insured: true, //  show a "Bonded & insured" trust line
+  insured: false, //  show a "Bonded & insured" trust line — OFF until the bond/insurance is real & verified
 
   // ---- REFERRAL PROGRAM ---------------------------------------------------
   referralReward: 100, // dollars paid when a referred friend sells

@@ -11,7 +11,7 @@ body {
 }
 
 ::selection {
-  background-color: rgba(26, 127, 84, 0.18);
+  background-color: rgba(59, 130, 246, 0.18);
 }
 
 @keyframes shimmer {
@@ -103,7 +103,7 @@ body {
     @apply rounded-2xl border border-slate-200 bg-white;
   }
   .card-spotlight {
-    @apply rounded-2xl bg-navy text-white shadow-lift;
+    @apply rounded-2xl bg-navy-900 text-white shadow-lift;
   }
 
   /* Type helpers */
@@ -116,7 +116,7 @@ body {
 
   /* Subtle dot grid for hero/section backgrounds (replaces blur blobs). */
   .bg-grid {
-    background-image: radial-gradient(rgba(16, 41, 30, 0.07) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(16, 42, 76, 0.07) 1px, transparent 1px);
     background-size: 22px 22px;
   }
 }
