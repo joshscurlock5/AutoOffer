@@ -15,9 +15,9 @@ const BASE = "https://api.marketcheck.com/v2";
 const API_KEY = process.env.MARKETCHECK_API_KEY || "";
 export const COUNTRY = process.env.MARKETCHECK_COUNTRY || "ca";
 // Province codes to scope comps to a local market (comma-separated). Default
-// AB,BC — the Canadian region within ~1,250 km of Edmonton. MarketCheck's CA
+// AB,BC,SK — the Canadian region within ~1,250 km of Edmonton. MarketCheck's CA
 // data has no working lat/long radius, so we scope by province instead.
-export const STATES = (process.env.MARKETCHECK_STATES || "AB,BC").trim();
+export const STATES = (process.env.MARKETCHECK_STATES || "AB,BC,SK").trim();
 const TIMEOUT_MS = Number(process.env.MARKETCHECK_TIMEOUT_MS || 4500);
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_WINDOW = Number(process.env.MARKETCHECK_YEAR_WINDOW || 2);
