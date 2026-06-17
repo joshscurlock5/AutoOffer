@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function ReferralPage() {
   const steps = [
-    { icon: Gift, title: "Refer a friend", body: "Fill out the form below or share your code. Tell anyone looking to sell their car about Auto Offer." },
+    { icon: Gift, title: "Refer a friend", body: "Fill out the form below or share your code. Tell anyone looking to sell their car about DriveOffer." },
     { icon: Car, title: "They sell their car", body: "Your friend gets a fast, fair offer and sells their vehicle to us — just like you would." },
     { icon: Dollar, title: `You get $${site.referralReward}`, body: `Once their sale is complete, we send you $${site.referralReward}. Refer as many friends as you like.` },
   ];

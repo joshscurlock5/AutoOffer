@@ -1,15 +1,10 @@
-import { Shield, Users, Calendar, Dollar } from "./icons";
+import { Shield, Calendar, Dollar } from "./icons";
 
 const points = [
   {
     icon: Shield,
     title: "No obligation",
     sub: "Get your estimate free. No pressure to sell.",
-  },
-  {
-    icon: Users,
-    title: "Real local buyers",
-    sub: "Work with a real AutoOffer buyer, not a call center.",
   },
   {
     icon: Calendar,
@@ -30,7 +25,7 @@ export default function TrustBar() {
         <h2 className="text-center font-display text-xl font-bold text-navy">
           A safer, simpler way to sell — here&apos;s what you get
         </h2>
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
           {points.map((p) => {
             const Icon = p.icon;
             return (

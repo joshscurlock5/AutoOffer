@@ -1,21 +1,21 @@
 // ===========================================================================
-//  Auto Offer — site configuration (SINGLE SOURCE OF TRUTH)
+//  DriveOffer — site configuration (SINGLE SOURCE OF TRUTH)
 //  Replace every value marked PLACEHOLDER with your real business details.
 //  Everything on the site (header, footer, contact page, call buttons, map)
 //  reads from here, so you only edit it once.
 // ===========================================================================
 
 export const site = {
-  name: "Auto Offer",
-  legalName: "Auto Offer Inc.",
+  name: "DriveOffer",
+  legalName: "DriveOffer Inc.",
   tagline: "Sell your car the easy way.",
   description:
-    "Auto Offer buys cars right across Canada. Get a fast, fair offer by phone or email, we inspect at a time and place that works for you, and you get paid — no haggling, no dealership runaround.",
+    "DriveOffer buys cars right across Canada. Get a fast, fair offer by phone or email, we inspect at a time and place that works for you, and you get paid — no haggling, no dealership runaround.",
 
   // ---- CONTACT — PLACEHOLDERS (replace with your real details) -------------
   phoneDisplay: "(780) 952-4504", //                         PLACEHOLDER
   phoneE164: "+17809524504", //  used for tel: links —        PLACEHOLDER
-  email: "offers@autooffer.ca", //                           PLACEHOLDER
+  email: "offers@driveoffer.ca", //                          PLACEHOLDER
 
   address: {
     line1: "16075 66 St NW",

@@ -110,7 +110,7 @@ async function enableTtl(name) {
   }
 }
 
-console.log(`\nProvisioning Auto Offer storage in ${region}...\n`);
+console.log(`\nProvisioning DriveOffer storage in ${region}...\n`);
 await ensureTable(LEADS);
 await ensureTable(REFS);
 await ensureTable(MARKET_CACHE);

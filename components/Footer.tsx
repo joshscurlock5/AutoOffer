@@ -25,7 +25,7 @@ export default function Footer() {
         {/* Brand */}
         <div className="lg:col-span-2">
           <div className="font-display text-2xl font-extrabold tracking-tight text-white">
-            Auto<span className="text-brand-200">Offer</span>
+            Drive<span className="text-brand-200">Offer</span>
           </div>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">
             {site.name} buys cars right across Canada. Fast, fair offers by phone

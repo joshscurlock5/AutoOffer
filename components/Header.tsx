@@ -59,7 +59,7 @@ export default function Header() {
             </svg>
           </span>
           <span className="font-display text-xl font-extrabold tracking-tight text-navy">
-            Auto<span className="text-brand">Offer</span>
+            Drive<span className="text-brand">Offer</span>
           </span>
         </Link>
 

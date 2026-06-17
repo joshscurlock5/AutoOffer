@@ -44,6 +44,10 @@ export default function OfferFlow() {
   const [decoded, setDecoded] = useState<DecodedVehicle | null>(null);
   const [pendingEstimate, setPendingEstimate] = useState<OfferEstimate | null>(null);
 
+  // trims (manual mode) — loaded for the chosen year/make/model
+  const [trims, setTrims] = useState<{ item: string; count: number }[]>([]);
+  const [trimsLoading, setTrimsLoading] = useState(false);
+
   // contact
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -72,6 +76,32 @@ export default function OfferFlow() {
     if (sp.get("vin")) setVin((sp.get("vin") || "").toUpperCase());
     if (sp.get("mode") === "vin") setInputMode("vin");
   }, [sp]);
+
+  // Load the real trims for the chosen year/make/model (manual entry only).
+  useEffect(() => {
+    if (inputMode !== "manual" || !year || !make || !model) {
+      setTrims([]);
+      return;
+    }
+    let active = true;
+    setTrimsLoading(true);
+    setTrim(""); // reset the selection when the vehicle changes
+    fetch(`/api/trims?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${encodeURIComponent(year)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setTrims(Array.isArray(d.trims) ? d.trims : []);
+      })
+      .catch(() => {
+        if (active) setTrims([]);
+      })
+      .finally(() => {
+        if (active) setTrimsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputMode, year, make, model]);
 
   // Funnel start — fires for EVERY way into /get-offer (homepage widget OR a
   // direct entry via header/sticky/exit/footer), so step-1 bounce is visible.
@@ -121,7 +151,7 @@ export default function OfferFlow() {
     const res = await fetch("/api/estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year: y, make: mk, model: md, mileageKm: kmNum }),
+      body: JSON.stringify({ year: y, make: mk, model: md, mileageKm: kmNum, trim }),
     });
     if (!res.ok) throw new Error("estimate failed");
     const data = await res.json();
@@ -365,17 +395,18 @@ export default function OfferFlow() {
       {/* -------------------- STEP 1: vehicle details -------------------- */}
       {step === 1 && !decoded && (
         <div className="card mt-8 animate-fade-up p-6 sm:p-9">
-          <h1 className="font-display text-2xl font-bold text-navy sm:text-3xl">
+          <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
             Tell us about your vehicle
           </h1>
-          <p className="mt-2 text-muted">
+          <p className="mt-2 text-center text-muted">
             {inputMode === "vin"
               ? "Enter your VIN and we'll pull up your exact vehicle — fastest and most accurate."
               : "Just the basics — year, make, model and mileage. Everything else is optional."}
           </p>
 
           {/* Mode toggle */}
-          <div className="mt-5 inline-flex rounded-xl bg-slate-100 p-1">
+          <div className="mt-5 flex justify-center">
+            <div className="inline-flex rounded-xl bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => setInputMode("manual")}
@@ -392,6 +423,7 @@ export default function OfferFlow() {
             >
               <Car className="h-4 w-4" /> Enter VIN <span className="text-brand">(faster)</span>
             </button>
+            </div>
           </div>
 
           {inputMode === "vin" ? (
@@ -468,8 +500,24 @@ export default function OfferFlow() {
                   </select>
                 </div>
                 <div>
-                  <label className="label" htmlFor="trim">Trim <span className="font-normal text-muted">(optional)</span></label>
-                  <input id="trim" className="field" placeholder="Not sure? Leave it blank" value={trim} onChange={(e) => setTrim(e.target.value)} />
+                  <label className="label" htmlFor="trim">Trim</label>
+                  <select
+                    id="trim"
+                    className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    value={trim}
+                    disabled={!model || trimsLoading}
+                    onChange={(e) => setTrim(e.target.value)}
+                  >
+                    <option value="">
+                      {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Any / not sure"}
+                    </option>
+                    {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
+                      <option key={t.item} value={t.item}>{t.item}</option>
+                    ))}
+                  </select>
+                  {model && !trimsLoading && trims.length === 0 && (
+                    <p className="mt-1.5 text-xs text-muted">We&apos;ll price across all trims for this model.</p>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="label" htmlFor="km">Mileage (km)</label>

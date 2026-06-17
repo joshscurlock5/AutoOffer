@@ -2,7 +2,7 @@ import { cad } from "@/lib/format";
 
 /**
  * "Where your offer sits" graphic. Gold tails = below/above average, green band
- * = the Auto Offer. Full bell curve on sm+, a legible stacked bar on phones.
+ * = the DriveOffer range. Full bell curve on sm+, a legible stacked bar on phones.
  */
 export default function OfferGauge({
   low,

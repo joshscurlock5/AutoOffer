@@ -61,7 +61,7 @@ export default function AboutPage() {
       <Section className="bg-white">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
-            <SectionHeading eyebrow="Our Story" title="Why we started Auto Offer" />
+            <SectionHeading eyebrow="Our Story" title="Why we started DriveOffer" />
             {/* Owner: personalize this with your founding year, city, and a real
                 number of cars bought once you're ready — specifics build real trust. */}
             <div className="mt-5 space-y-4 text-muted">

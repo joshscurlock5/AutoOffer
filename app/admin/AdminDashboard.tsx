@@ -216,7 +216,7 @@ export default function AdminDashboard({
         <div className="container-x flex h-16 items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="font-display text-lg font-extrabold text-navy">
-              Auto<span className="text-brand">Offer</span>
+              Drive<span className="text-brand">Offer</span>
             </span>
             <span className="rounded-full bg-navy px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
               Admin

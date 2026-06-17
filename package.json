@@ -1,8 +1,8 @@
 {
-  "name": "auto-offer",
+  "name": "drive-offer",
   "version": "1.0.0",
   "private": true,
-  "description": "Auto Offer — Canada's easy way to sell your car. Get a fast, fair offer.",
+  "description": "DriveOffer — Canada's easy way to sell your car. Get a fast, fair offer.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

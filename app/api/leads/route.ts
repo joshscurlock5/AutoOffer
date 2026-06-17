@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       // Re-derive the estimate server-side. Normally a warm-cache hit (the user
       // just viewed it), so usually no extra MarketCheck call; on a cold/expired
       // cache it may spend one budget-gated call (and fails closed to "unique").
-      estimate = await getEstimate({ year, make, model, mileageKm });
+      estimate = await getEstimate({ year, make, model, mileageKm, trim: trim || undefined });
       // If we couldn't re-price it but the customer was already shown a concrete
       // range, store what they actually saw so the lead matches the screen.
       if (estimate.unique) {

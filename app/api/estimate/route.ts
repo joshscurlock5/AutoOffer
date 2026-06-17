@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       make: String(body.make || ""),
       model: String(body.model || ""),
       mileageKm: Number(body.mileageKm || 0),
+      trim: body.trim ? String(body.trim) : undefined,
     });
     return NextResponse.json({ ok: true, estimate });
   } catch (err) {

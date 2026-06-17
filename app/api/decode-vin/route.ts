@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         make: specs.make,
         model: specs.model,
         mileageKm,
+        trim: specs.trim,
       });
     }
 

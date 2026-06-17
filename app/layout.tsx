@@ -26,7 +26,7 @@ const body = Hanken_Grotesk({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://autooffer.ca"),
+  metadataBase: new URL("https://driveoffer.ca"),
   title: {
     default: `${site.name} — ${site.tagline}`,
     template: `%s | ${site.name}`,

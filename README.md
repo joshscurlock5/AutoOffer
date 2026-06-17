@@ -1,4 +1,4 @@
-# Auto Offer
+# DriveOffer
 
 Canada's easy way to sell a car. Customers enter their vehicle details + photos,
 get an **instant estimated offer range**, accept it, and leave their contact info.

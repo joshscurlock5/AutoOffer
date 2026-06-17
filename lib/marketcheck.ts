@@ -121,6 +121,7 @@ export async function getMarketPriceStats(opts: {
   make: string;
   model: string;
   year: number;
+  trim?: string;
 }): Promise<{ stats: MarketPriceStats | null; attempts: number }> {
   const { make, model, year } = opts;
   if (!make || !model || !year) return { stats: null, attempts: 0 };
@@ -133,6 +134,7 @@ export async function getMarketPriceStats(opts: {
     rows: "0",
     stats: "price",
   });
+  if (opts.trim && opts.trim.trim()) params.set("trim", opts.trim.trim());
   const { data, attempts } = await mcFetch(`/search/car/active?${params.toString()}`);
   if (!data || !data.stats || !data.stats.price) return { stats: null, attempts };
   const p = data.stats.price;
@@ -148,5 +150,36 @@ export async function getMarketPriceStats(opts: {
       mean: numOrNull(p.mean),
     },
   };
+}
+
+export interface TrimOption {
+  item: string;
+  count: number;
+}
+
+/** Distinct trims (with live Canadian listing counts) for a year/make/model. */
+export async function getModelTrims(opts: {
+  make: string;
+  model: string;
+  year: number;
+}): Promise<{ trims: TrimOption[]; attempts: number }> {
+  const { make, model, year } = opts;
+  if (!make || !model || !year) return { trims: [], attempts: 0 };
+  const params = new URLSearchParams({
+    country: COUNTRY,
+    car_type: "used",
+    make: make.trim().toLowerCase(),
+    model: model.trim().toLowerCase(),
+    year: yearList(year),
+    rows: "0",
+    facets: "trim|0|100|1",
+  });
+  const { data, attempts } = await mcFetch(`/search/car/active?${params.toString()}`);
+  const arr = data?.facets?.trim;
+  if (!Array.isArray(arr)) return { trims: [], attempts };
+  const trims: TrimOption[] = arr
+    .map((t: any) => ({ item: String(t?.item ?? "").trim(), count: Number(t?.count) || 0 }))
+    .filter((t: TrimOption) => t.item.length > 0);
+  return { trims, attempts };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -14,7 +14,6 @@ export default function ValueWidget() {
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
-  const [trim, setTrim] = useState("");
   const [kmv, setKmv] = useState("");
   const [vin, setVin] = useState("");
   const [showError, setShowError] = useState(false);
@@ -50,7 +49,7 @@ export default function ValueWidget() {
       return;
     }
     track("widget_submit", { make, model, year: Number(year) });
-    const q = new URLSearchParams({ year, make, model, trim, km: kmv });
+    const q = new URLSearchParams({ year, make, model, km: kmv });
     router.push(`/get-offer?${q.toString()}`);
   }
 
@@ -60,14 +59,11 @@ export default function ValueWidget() {
       className="card w-full overflow-hidden border border-slate-100 p-7 sm:p-9"
     >
       <div className="text-center">
-        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand">
-          <Car className="h-6 w-6" />
-        </span>
-        <h2 className="mt-4 font-display text-2xl font-bold text-navy">
+        <h2 className="font-display text-2xl font-bold text-navy">
           See What Your Car Is Worth
         </h2>
         <p className="mt-2 text-sm text-muted">
-          Takes about a minute. See your estimated range, then talk to a real buyer when you&apos;re ready.
+          Takes about a minute. See your estimated range, then talk to our team when you&apos;re ready.
         </p>
       </div>
 
@@ -154,7 +150,7 @@ export default function ValueWidget() {
             </select>
           </div>
 
-          <div>
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="vw-model">Model</label>
             <select
               id="vw-model"
@@ -168,17 +164,6 @@ export default function ValueWidget() {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="label" htmlFor="vw-trim">Trim <span className="font-normal text-muted">(optional)</span></label>
-            <input
-              id="vw-trim"
-              className="field"
-              placeholder="e.g. SE, Limited"
-              value={trim}
-              onChange={(e) => setTrim(e.target.value)}
-            />
           </div>
 
           <div className="sm:col-span-2">
@@ -218,9 +203,6 @@ export default function ValueWidget() {
 
       {/* Concrete, verifiable trust — not invented claims. */}
       <ul className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-muted">
-        <li className="flex items-center gap-2">
-          <Check className="h-4 w-4 shrink-0 text-brand" /> Real buyers in Edmonton, AB
-        </li>
         <li className="flex items-center gap-2">
           <Check className="h-4 w-4 shrink-0 text-brand" /> A real person answers — 24/7
         </li>
