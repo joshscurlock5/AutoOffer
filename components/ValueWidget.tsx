@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track } from "@/lib/analytics";
@@ -14,13 +14,41 @@ export default function ValueWidget() {
   const [year, setYear] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
+  const [trim, setTrim] = useState("");
   const [kmv, setKmv] = useState("");
   const [vin, setVin] = useState("");
   const [showError, setShowError] = useState(false);
 
+  const [trims, setTrims] = useState<{ item: string; count: number }[]>([]);
+  const [trimsLoading, setTrimsLoading] = useState(false);
+
   const models = make ? modelsFor(make) : [];
   const ready = Boolean(year && make && model && kmv);
   const vinReady = VIN_RE.test(vin.trim().toUpperCase()) && Boolean(kmv);
+
+  // Load the real trims for the chosen year/make/model (manual entry only).
+  useEffect(() => {
+    if (inputMode !== "manual" || !year || !make || !model) {
+      setTrims([]);
+      return;
+    }
+    let active = true;
+    setTrimsLoading(true);
+    fetch(`/api/trims?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${encodeURIComponent(year)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setTrims(Array.isArray(d.trims) ? d.trims : []);
+      })
+      .catch(() => {
+        if (active) setTrims([]);
+      })
+      .finally(() => {
+        if (active) setTrimsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [inputMode, year, make, model]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +78,7 @@ export default function ValueWidget() {
     }
     track("widget_submit", { make, model, year: Number(year) });
     const q = new URLSearchParams({ year, make, model, km: kmv });
+    if (trim) q.set("trim", trim);
     router.push(`/get-offer?${q.toString()}`);
   }
 
@@ -124,7 +153,7 @@ export default function ValueWidget() {
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="vw-year">Year</label>
-            <select id="vw-year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+            <select id="vw-year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setTrim(""); }}>
               <option value="">Year</option>
               {YEARS.map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -141,6 +170,7 @@ export default function ValueWidget() {
               onChange={(e) => {
                 setMake(e.target.value);
                 setModel("");
+                setTrim("");
               }}
             >
               <option value="">Make</option>
@@ -150,18 +180,36 @@ export default function ValueWidget() {
             </select>
           </div>
 
-          <div className="sm:col-span-2">
+          <div>
             <label className="label" htmlFor="vw-model">Model</label>
             <select
               id="vw-model"
               className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
               value={model}
               disabled={!make}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => { setModel(e.target.value); setTrim(""); }}
             >
               <option value="">{make ? "Model" : "Select make first"}</option>
               {models.map((m) => (
                 <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="vw-trim">Trim</label>
+            <select
+              id="vw-trim"
+              className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              value={trim}
+              disabled={!model || trimsLoading}
+              onChange={(e) => setTrim(e.target.value)}
+            >
+              <option value="">
+                {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Any / not sure"}
+              </option>
+              {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
+                <option key={t.item} value={t.item}>{t.item}</option>
               ))}
             </select>
           </div>

@@ -85,7 +85,6 @@ export default function OfferFlow() {
     }
     let active = true;
     setTrimsLoading(true);
-    setTrim(""); // reset the selection when the vehicle changes
     fetch(`/api/trims?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${encodeURIComponent(year)}`)
       .then((r) => r.json())
       .then((d) => {
@@ -469,7 +468,7 @@ export default function OfferFlow() {
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="label" htmlFor="year">Year</label>
-                  <select id="year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+                  <select id="year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setTrim(""); }}>
                     <option value="">Select year</option>
                     {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
@@ -480,7 +479,7 @@ export default function OfferFlow() {
                     id="make"
                     className="field"
                     value={make}
-                    onChange={(e) => { setMake(e.target.value); setModel(""); }}
+                    onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}
                   >
                     <option value="">Select make</option>
                     {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
@@ -493,7 +492,7 @@ export default function OfferFlow() {
                     className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                     value={model}
                     disabled={!make}
-                    onChange={(e) => setModel(e.target.value)}
+                    onChange={(e) => { setModel(e.target.value); setTrim(""); }}
                   >
                     <option value="">{make ? "Select model" : "Select make first"}</option>
                     {models.map((m) => <option key={m} value={m}>{m}</option>)}
