@@ -6,6 +6,7 @@ import {
   getModelTrims,
   marketCheckEnabled,
   COUNTRY,
+  STATES,
   type MarketPriceStats,
   type TrimOption,
 } from "./marketcheck";
@@ -99,7 +100,7 @@ async function fetchStats(
   trim?: string,
 ): Promise<MarketPriceStats | null> {
   const tkey = trim && trim.trim() ? `:${norm(trim)}` : "";
-  const cacheKey = `mc:${COUNTRY}:${norm(make)}:${norm(model)}:${year}${tkey}`;
+  const cacheKey = `mc:${COUNTRY}:${norm(STATES)}:${norm(make)}:${norm(model)}:${year}${tkey}`;
 
   const cached = await cacheGet<any>(cacheKey);
   if (cached && cached.miss) return null;
@@ -170,7 +171,7 @@ export async function getTrims(opts: {
   const { make, model, year } = opts;
   if (!getMake(make) || !model || !year || !Number.isFinite(year)) return [];
 
-  const cacheKey = `trims:${COUNTRY}:${norm(make)}:${norm(model)}:${year}`;
+  const cacheKey = `trims:${COUNTRY}:${norm(STATES)}:${norm(make)}:${norm(model)}:${year}`;
   const cached = await cacheGet<any>(cacheKey);
   if (cached && Array.isArray(cached.trims)) return cached.trims as TrimOption[];
   if (cached && cached.miss) return [];

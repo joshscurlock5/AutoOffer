@@ -14,6 +14,10 @@ import "server-only";
 const BASE = "https://api.marketcheck.com/v2";
 const API_KEY = process.env.MARKETCHECK_API_KEY || "";
 export const COUNTRY = process.env.MARKETCHECK_COUNTRY || "ca";
+// Province codes to scope comps to a local market (comma-separated). Default
+// AB,BC — the Canadian region within ~1,250 km of Edmonton. MarketCheck's CA
+// data has no working lat/long radius, so we scope by province instead.
+export const STATES = (process.env.MARKETCHECK_STATES || "AB,BC").trim();
 const TIMEOUT_MS = Number(process.env.MARKETCHECK_TIMEOUT_MS || 4500);
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_WINDOW = Number(process.env.MARKETCHECK_YEAR_WINDOW || 2);
@@ -134,6 +138,7 @@ export async function getMarketPriceStats(opts: {
     rows: "0",
     stats: "price",
   });
+  if (STATES) params.set("state", STATES);
   if (opts.trim && opts.trim.trim()) params.set("trim", opts.trim.trim());
   const { data, attempts } = await mcFetch(`/search/car/active?${params.toString()}`);
   if (!data || !data.stats || !data.stats.price) return { stats: null, attempts };
@@ -174,6 +179,7 @@ export async function getModelTrims(opts: {
     rows: "0",
     facets: "trim|0|100|1",
   });
+  if (STATES) params.set("state", STATES);
   const { data, attempts } = await mcFetch(`/search/car/active?${params.toString()}`);
   const arr = data?.facets?.trim;
   if (!Array.isArray(arr)) return { trims: [], attempts };
