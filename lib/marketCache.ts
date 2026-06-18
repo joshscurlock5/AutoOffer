@@ -1,6 +1,7 @@
 import "server-only";
 import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ddb } from "./aws";
+import { allowApiSpend } from "./rateLimit";
 
 // ---------------------------------------------------------------------------
 //  DynamoDB-backed cache + monthly call budget for the MarketCheck free tier
@@ -71,6 +72,9 @@ export function hasBudget(count: number): boolean {
  * CLOSED (returns false) when over budget or on any DynamoDB error.
  */
 export async function reserveApiCall(): Promise<boolean> {
+  // Per-IP rate limit first (counts only real spends; refusal degrades to the
+  // "custom offer" flow). No-ops without an IP context (e.g. local/smoke test).
+  if (!(await allowApiSpend())) return false;
   try {
     await ddb.send(
       new UpdateCommand({

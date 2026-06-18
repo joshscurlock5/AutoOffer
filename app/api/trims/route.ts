@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTrims } from "@/lib/valuation";
+import { withClientIp, clientIpFrom } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     if (!make || !model || !year) {
       return NextResponse.json({ ok: true, trims: [] });
     }
-    const trims = await getTrims({ make, model, year });
+    const trims = await withClientIp(clientIpFrom(req), () => getTrims({ make, model, year }));
     return NextResponse.json({ ok: true, trims });
   } catch (err) {
     console.error("GET /api/trims failed", err);

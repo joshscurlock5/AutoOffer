@@ -3,6 +3,7 @@ import { decodeVin, isValidVinFormat, type VinSpecs } from "@/lib/marketcheck";
 import { cacheGet, cachePut, reserveApiCall, recordApiCalls } from "@/lib/marketCache";
 import { canonicalMake } from "@/lib/vehicles";
 import { getEstimate } from "@/lib/valuation";
+import { withClientIp, clientIpFrom } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,7 @@ type CacheEntry = VinSpecs | { miss: true };
  */
 export async function POST(req: NextRequest) {
   try {
+    return await withClientIp(clientIpFrom(req), async () => {
     const body = await req.json().catch(() => ({}));
     const vin = String(body.vin || "").trim().toUpperCase();
     const mileageKm = Number(body.mileageKm || 0);
@@ -63,6 +65,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, vehicle: specs, estimate });
+    });
   } catch (err) {
     console.error("POST /api/decode-vin failed", err);
     return NextResponse.json({ error: "Server error." }, { status: 500 });
