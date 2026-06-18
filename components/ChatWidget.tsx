@@ -101,10 +101,9 @@ export default function ChatWidget() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Chat with us"
-          className="fixed bottom-24 right-4 z-50 flex items-center gap-2 rounded-full bg-brand px-4 py-3 text-white shadow-lift transition hover:bg-brand-600 lg:bottom-5 lg:right-5"
+          className="fixed bottom-24 right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-navy text-white shadow-lift transition hover:-translate-y-0.5 hover:bg-navy-700 lg:bottom-5 lg:right-5"
         >
-          <Chat className="h-5 w-5" />
-          <span className="text-sm font-semibold">Chat</span>
+          <Chat className="h-6 w-6" />
         </button>
       )}
 
@@ -116,7 +115,7 @@ export default function ChatWidget() {
               <Chat className="h-5 w-5 text-brand-200" />
               <div className="leading-tight">
                 <div className="text-sm font-bold">Chat with {site.name}</div>
-                <div className="text-[11px] text-white/70">A real person — usually replies fast</div>
+                <div className="text-xs text-white/85">A real person — usually replies fast</div>
               </div>
             </div>
             <button onClick={() => setOpen(false)} aria-label="Close chat" className="rounded-lg p-1 text-white/80 hover:bg-white/10">
@@ -148,7 +147,7 @@ export default function ChatWidget() {
               type="submit"
               disabled={!input.trim() || sending}
               aria-label="Send"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand text-white transition hover:bg-brand-600 disabled:opacity-50"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </button>

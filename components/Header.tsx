@@ -48,11 +48,9 @@ export default function Header() {
       }`}
     >
       <div className="container-x flex h-[72px] items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2" aria-label={site.name}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="DriveOffer" className="h-9 w-auto" />
+        <Link href="/" className="flex items-center" aria-label={site.name}>
           <span className="font-display text-xl font-extrabold tracking-tight text-navy">
-            Drive<span className="text-brand">Offer</span>
+            Drive<span className="text-brand-700">Offer</span>
           </span>
         </Link>
 
@@ -62,7 +60,7 @@ export default function Header() {
               <Link
                 key={n.href}
                 href={n.href}
-                className="text-sm font-medium text-navy/80 transition hover:text-brand"
+                className="text-[15px] font-medium text-navy/80 transition hover:text-brand"
               >
                 {n.label}
               </Link>
@@ -74,16 +72,16 @@ export default function Header() {
           <a
             href={telHref}
             onClick={() => track("phone_click", { location: "header_desktop" })}
-            className="group flex items-center gap-2 rounded-full px-3 py-2 text-navy transition hover:text-brand"
+            className="group flex items-center gap-2 rounded-full px-3 py-2 text-navy transition hover:text-navy-700"
           >
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-navy transition group-hover:bg-slate-200">
               <Phone className="h-4 w-4" />
             </span>
             <span className="text-left leading-tight">
-              <span className="block text-[11px] font-medium uppercase tracking-wide text-muted">
+              <span className="block text-xs font-medium uppercase tracking-wide text-muted">
                 Call or text now
               </span>
-              <span className="block text-sm font-bold">{site.phoneDisplay}</span>
+              <span className="block text-base font-bold">{site.phoneDisplay}</span>
             </span>
           </a>
           {!isAdmin && (
@@ -114,7 +112,7 @@ export default function Header() {
                 <Link
                   key={n.href}
                   href={n.href}
-                  className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-brand-50"
+                  className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-slate-100"
                 >
                   {n.label}
                 </Link>

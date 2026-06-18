@@ -345,9 +345,9 @@ export default function OfferFlow() {
       </p>
       <label
         htmlFor="photos"
-        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-brand hover:bg-brand-50"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-300 hover:bg-slate-100"
       >
-        <span className="grid h-12 w-12 place-items-center rounded-full bg-brand text-white">
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-navy text-white">
           <Camera className="h-6 w-6" />
         </span>
         <span className="mt-3 font-semibold text-navy">Add photos of your car</span>
@@ -388,7 +388,7 @@ export default function OfferFlow() {
   const callLine = (
     <p className="text-sm text-muted">
       Prefer to talk? Call{" "}
-      <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand hover:underline">{site.phoneDisplay}</a>
+      <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand-700 hover:underline">{site.phoneDisplay}</a>
     </p>
   );
 
@@ -410,7 +410,7 @@ export default function OfferFlow() {
               <form onSubmit={goToOffer}>
                 <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
                   <div className="flex items-center gap-4">
-                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-100 text-navy">
                       <Car className="h-6 w-6" />
                     </span>
                     <div>
@@ -426,7 +426,7 @@ export default function OfferFlow() {
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-brand hover:text-brand"
+                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-brand hover:text-brand-700"
                   >
                     Edit
                   </button>
@@ -470,7 +470,7 @@ export default function OfferFlow() {
               aria-pressed={inputMode === "vin"}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
             >
-              <Car className="h-4 w-4" /> Enter VIN <span className="text-brand">(faster)</span>
+              <Car className="h-4 w-4" /> Enter VIN <span className="text-muted">(faster)</span>
             </button>
             </div>
           </div>
@@ -625,10 +625,10 @@ export default function OfferFlow() {
               </div>
 
               <div className="flex flex-col">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-sm font-bold text-brand">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-navy">
                   <Check className="h-4 w-4" /> Estimate ready
                 </span>
-                <div className="mt-3 font-display text-4xl font-extrabold text-brand sm:text-5xl">
+                <div className="mt-3 font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">
                   <CountUp value={estimate.low} format={cad} /> –{" "}
                   <CountUp value={estimate.high} format={cad} />
                 </div>
@@ -643,7 +643,7 @@ export default function OfferFlow() {
                   offer? We can call, text, or email you after confirming a few details.
                 </p>
                 <p className="mt-3 flex items-start gap-2 text-sm text-muted">
-                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" />
                   No obligation. This range is free — a real buyer confirms your firm offer with you.
                 </p>
 
@@ -653,7 +653,7 @@ export default function OfferFlow() {
                 <a
                   href={telHref}
                   onClick={() => track("phone_click", { location: "offer_step2" })}
-                  className="btn mt-3 border-2 border-brand bg-white py-3.5 text-brand hover:-translate-y-0.5 hover:bg-brand-50"
+                  className="btn mt-3 border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
                 >
                   <Phone className="h-5 w-5" /> Call Now Instead
                 </a>
@@ -661,13 +661,13 @@ export default function OfferFlow() {
                 <div className="mt-7 rounded-2xl bg-slate-50 p-5">
                   <p className="font-semibold text-navy">What happens next?</p>
                   <ul className="mt-3 space-y-3 text-sm text-muted">
-                    <li className="flex gap-3"><Phone className="h-5 w-5 shrink-0 text-brand" /> We call or text you a firm offer (email if you prefer).</li>
-                    <li className="flex gap-3"><Calendar className="h-5 w-5 shrink-0 text-brand" /> We book a time &amp; place and inspect the car.</li>
-                    <li className="flex gap-3"><Dollar className="h-5 w-5 shrink-0 text-brand" /> Everything checks out — you get paid on the spot.</li>
+                    <li className="flex gap-3"><Phone className="h-5 w-5 shrink-0 text-navy" /> We call or text you a firm offer (email if you prefer).</li>
+                    <li className="flex gap-3"><Calendar className="h-5 w-5 shrink-0 text-navy" /> We book a time &amp; place and inspect the car.</li>
+                    <li className="flex gap-3"><Dollar className="h-5 w-5 shrink-0 text-navy" /> Everything checks out — you get paid on the spot.</li>
                   </ul>
                 </div>
 
-                <button onClick={() => { setEditing(true); setStep(1); }} className="mt-4 text-sm font-medium text-muted hover:text-brand">
+                <button onClick={() => { setEditing(true); setStep(1); }} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
                   ← Edit vehicle details
                 </button>
               </div>
@@ -681,7 +681,7 @@ export default function OfferFlow() {
         <div className="mx-auto mt-8 max-w-xl animate-fade-up">
           <div className="card p-6 sm:p-9">
             <div className="text-center">
-              <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-navy text-white">
                 <Send className="h-7 w-7" />
               </span>
               <h1 className="mt-4 font-display text-2xl font-bold text-navy">
@@ -702,7 +702,7 @@ export default function OfferFlow() {
               )}
             </div>
 
-            <div className="mt-6 rounded-xl bg-brand-50 px-4 py-3 text-center text-sm text-navy">
+            <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-navy">
               Your <span className="font-semibold">firm offer comes in writing</span> — the
               price we agree on is what you&apos;re paid, with no surprise deductions at your door.
             </div>
@@ -724,8 +724,8 @@ export default function OfferFlow() {
                       aria-pressed={contactMethod === m}
                       className={`rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize transition ${
                         contactMethod === m
-                          ? "border-brand bg-brand text-white"
-                          : "border-slate-200 bg-white text-navy hover:border-brand"
+                          ? "border-brand-600 bg-brand-600 text-white"
+                          : "border-slate-200 bg-white text-navy hover:border-brand-600"
                       }`}
                     >
                       {m}
@@ -767,7 +767,7 @@ export default function OfferFlow() {
               </button>
               <p className="text-center text-sm text-muted">
                 We use your details once — to send your offer. We never sell them.{" "}
-                <Link href="/privacy" className="font-medium text-brand hover:underline">
+                <Link href="/privacy" className="font-medium text-brand-700 hover:underline">
                   See our privacy policy
                 </Link>
                 .
@@ -775,15 +775,15 @@ export default function OfferFlow() {
               <a
                 href={telHref}
                 onClick={() => track("phone_click", { location: "offer_step3" })}
-                className="btn w-full border-2 border-brand bg-white py-3.5 text-brand hover:-translate-y-0.5 hover:bg-brand-50"
+                className="btn w-full border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
               >
                 <Phone className="h-5 w-5" /> Call Now Instead
               </a>
 
               <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
-                <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
-                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> No obligation — the estimate is free.</li>
-                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> A real person reviews your vehicle.</li>
+                <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
+                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> No obligation — the estimate is free.</li>
+                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> A real person reviews your vehicle.</li>
               </ul>
               {(site.amvicNumber || site.insured) && (
                 <p className="text-center text-xs font-medium text-navy">
@@ -792,7 +792,7 @@ export default function OfferFlow() {
               )}
             </form>
           </div>
-          <button onClick={() => setStep(2)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand">
+          <button onClick={() => setStep(2)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand-700">
             ← Back
           </button>
         </div>
@@ -801,7 +801,7 @@ export default function OfferFlow() {
       {/* -------------------- STEP 4: success -------------------- */}
       {step === 4 && (
         <div className="mx-auto mt-10 max-w-xl animate-fade-up text-center">
-          <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-brand-50 text-brand">
+          <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-slate-100 text-navy">
             <Check className="h-10 w-10" />
           </span>
           <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">
@@ -840,7 +840,7 @@ function Stepper({ step }: { step: Step }) {
             <div className="flex items-center gap-2">
               <span
                 className={`grid h-9 w-9 place-items-center rounded-full text-sm font-bold transition ${
-                  active ? "bg-brand text-white" : "bg-slate-200 text-slate-500"
+                  active ? "bg-brand-600 text-white" : "bg-slate-200 text-slate-500"
                 }`}
               >
                 {step > n ? <Check className="h-4 w-4" /> : n}
@@ -850,7 +850,7 @@ function Stepper({ step }: { step: Step }) {
               </span>
             </div>
             {i < labels.length - 1 && (
-              <span className={`mx-3 h-0.5 flex-1 rounded ${step > n ? "bg-brand" : "bg-slate-200"}`} />
+              <span className={`mx-3 h-0.5 flex-1 rounded ${step > n ? "bg-brand-600" : "bg-slate-200"}`} />
             )}
           </li>
         );
@@ -872,7 +872,7 @@ function ConfirmCard({
   const details = [decoded.bodyType, decoded.drivetrain, decoded.transmission].filter(Boolean).join(" · ");
   return (
     <div className="card mx-auto mt-8 max-w-xl animate-fade-up p-6 text-center sm:p-9">
-      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand">
+      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-navy">
         <Car className="h-7 w-7" />
       </span>
       <h1 className="mt-4 font-display text-2xl font-bold text-navy">Is this your vehicle?</h1>
@@ -883,7 +883,7 @@ function ConfirmCard({
         <button onClick={onConfirm} className="btn-primary">
           Yes, that&apos;s my car <ArrowRight className="h-4 w-4" />
         </button>
-        <button onClick={onReject} className="btn border-2 border-slate-200 bg-white text-navy hover:border-brand">
+        <button onClick={onReject} className="btn border-2 border-slate-200 bg-white text-navy hover:border-navy">
           No, enter details manually
         </button>
       </div>
@@ -902,9 +902,9 @@ function UniqueOffer({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl shadow-card">
-      <div className="bg-gradient-to-r from-brand to-brand-600 px-6 py-8 text-center text-white">
+      <div className="bg-brand-600 px-6 py-8 text-center text-white">
         <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
-          We&apos;ll put together a <span className="text-accent">custom offer</span>
+          We&apos;ll put together a <span className="text-white underline decoration-white/40">custom offer</span>
         </h1>
         <p className="mt-2 text-white/90">
           There aren&apos;t enough recent Canadian listings for your {vehicle.year}{" "}
@@ -925,7 +925,7 @@ function UniqueOffer({
           </button>
           <PhoneButton variant="ghost" location="unique_offer" />
         </div>
-        <button onClick={onBack} className="mt-4 text-sm font-medium text-muted hover:text-brand">
+        <button onClick={onBack} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
           ← Edit vehicle details
         </button>
       </div>

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track } from "@/lib/analytics";
-import { ArrowRight, Car, Lock, Check } from "./icons";
+import { site } from "@/lib/site-config";
+import { ArrowRight, Car, Lock, GoogleG, Star } from "./icons";
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 
@@ -83,15 +84,16 @@ export default function ValueWidget() {
   }
 
   return (
+    <>
     <form
       onSubmit={submit}
       className="card w-full overflow-hidden border border-slate-100 p-6 sm:p-8"
     >
       <div className="text-center">
-        <h2 className="font-display text-2xl font-bold text-navy">
+        <h2 className="font-display text-[28px] font-bold text-navy sm:text-3xl">
           See What Your Car Is Worth
         </h2>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-base text-navy">
           Takes about a minute. See your estimated range, then talk to our team when you&apos;re ready.
         </p>
       </div>
@@ -103,7 +105,7 @@ export default function ValueWidget() {
             type="button"
             onClick={() => setInputMode("manual")}
             aria-pressed={inputMode === "manual"}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
+            className={`rounded-lg px-4 py-2 text-base font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
           >
             Enter details
           </button>
@@ -111,9 +113,9 @@ export default function ValueWidget() {
             type="button"
             onClick={() => setInputMode("vin")}
             aria-pressed={inputMode === "vin"}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-base font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
           >
-            <Car className="h-4 w-4" /> Enter VIN <span className="text-brand">(faster)</span>
+            <Car className="h-4 w-4" /> Enter VIN <span className="text-muted">(faster)</span>
           </button>
         </div>
       </div>
@@ -133,7 +135,7 @@ export default function ValueWidget() {
               autoCorrect="off"
               spellCheck={false}
             />
-            <p className="mt-1.5 text-xs text-muted">On your registration, insurance card, or driver-side door jamb.</p>
+            <p className="mt-1.5 text-sm text-muted">On your registration, insurance card, or driver-side door jamb.</p>
           </div>
           <div>
             <label className="label" htmlFor="vw-km">Mileage (km)</label>
@@ -150,10 +152,13 @@ export default function ValueWidget() {
           </div>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          {/* Year — always shown. Each later field reveals once the previous is
+              filled, so the visitor only ever sees one new box at a time. Every
+              field spans the full form width, stacked one on top of the next. */}
           <div>
             <label className="label" htmlFor="vw-year">Year</label>
-            <select id="vw-year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setTrim(""); }}>
+            <select id="vw-year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setMake(""); setModel(""); setTrim(""); }}>
               <option value="">Year</option>
               {YEARS.map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -161,60 +166,65 @@ export default function ValueWidget() {
             </select>
           </div>
 
-          <div>
-            <label className="label" htmlFor="vw-make">Make</label>
-            <select
-              id="vw-make"
-              className="field"
-              value={make}
-              onChange={(e) => {
-                setMake(e.target.value);
-                setModel("");
-                setTrim("");
-              }}
-            >
-              <option value="">Make</option>
-              {MAKES.map((m) => (
-                <option key={m.name} value={m.name}>{m.name}</option>
-              ))}
-            </select>
-          </div>
+          {year && (
+            <div className="animate-fade-up">
+              <label className="label" htmlFor="vw-make">Make</label>
+              <select
+                id="vw-make"
+                className="field"
+                value={make}
+                onChange={(e) => {
+                  setMake(e.target.value);
+                  setModel("");
+                  setTrim("");
+                }}
+              >
+                <option value="">Make</option>
+                {MAKES.map((m) => (
+                  <option key={m.name} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {make && (
+            <div className="animate-fade-up">
+              <label className="label" htmlFor="vw-model">Model</label>
+              <select
+                id="vw-model"
+                className="field"
+                value={model}
+                onChange={(e) => { setModel(e.target.value); setTrim(""); }}
+              >
+                <option value="">Model</option>
+                {models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {model && (
+            <div className="animate-fade-up">
+              <label className="label" htmlFor="vw-trim">Trim</label>
+              <select
+                id="vw-trim"
+                className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                value={trim}
+                disabled={trimsLoading}
+                onChange={(e) => setTrim(e.target.value)}
+              >
+                <option value="">
+                  {trimsLoading ? "Loading trims…" : "Not sure"}
+                </option>
+                {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
+                  <option key={t.item} value={t.item}>{t.item}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
-            <label className="label" htmlFor="vw-model">Model</label>
-            <select
-              id="vw-model"
-              className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-              value={model}
-              disabled={!make}
-              onChange={(e) => { setModel(e.target.value); setTrim(""); }}
-            >
-              <option value="">{make ? "Model" : "Select make first"}</option>
-              {models.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="label" htmlFor="vw-trim">Trim</label>
-            <select
-              id="vw-trim"
-              className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-              value={trim}
-              disabled={!model || trimsLoading}
-              onChange={(e) => setTrim(e.target.value)}
-            >
-              <option value="">
-                {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Not sure"}
-              </option>
-              {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
-                <option key={t.item} value={t.item}>{t.item}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="sm:col-span-2">
             <label className="label" htmlFor="vw-km">Mileage (km)</label>
             <input
               id="vw-km"
@@ -230,8 +240,8 @@ export default function ValueWidget() {
         </div>
       )}
 
-      {inputMode === "manual" && (
-        <p className="mt-3 text-center text-xs text-muted">
+      {inputMode === "manual" && year && (
+        <p className="mt-3 text-center text-sm text-muted">
           Don&apos;t see your make? Choose{" "}
           <span className="font-semibold text-navy">&ldquo;Other / Not listed&rdquo;</span> — we still buy it.
         </p>
@@ -242,26 +252,35 @@ export default function ValueWidget() {
         <ArrowRight className="h-5 w-5" />
       </button>
       {showError && ((inputMode === "vin" && !vinReady) || (inputMode === "manual" && !ready)) && (
-        <p className="mt-2 text-center text-xs font-medium text-red-600">
+        <p role="alert" aria-live="polite" className="mt-2 text-center text-sm font-medium text-red-600">
           {inputMode === "vin"
             ? "Add your 17-character VIN and mileage to see your estimate."
             : "Just add your year, make, model, and mileage to see your estimate."}
         </p>
       )}
 
-      {/* Concrete, verifiable trust — not invented claims. Side-by-side on desktop. */}
-      <ul className="mt-5 grid gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm text-muted sm:grid-cols-2">
-        <li className="flex items-start gap-2">
-          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Paid by bank draft before we take the keys
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> A real person answers — 24/7
-        </li>
-      </ul>
-
-      <p className="mt-4 flex items-center justify-center gap-2 text-center text-sm text-muted">
+      <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
         <Lock className="h-4 w-4" /> We never sell your information.
       </p>
     </form>
+
+      {(site.reviewsUrl as string) && (
+        <a
+          href={site.reviewsUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="See us on Google Reviews"
+          className="mt-5 flex items-center justify-center gap-2 py-2"
+        >
+          <GoogleG className="h-5 w-5" />
+          <span className="flex text-amber-400" role="img" aria-label="Five stars">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Star key={i} className="h-4 w-4" />
+            ))}
+          </span>
+          <span className="text-sm font-semibold text-muted">Google Reviews</span>
+        </a>
+      )}
+    </>
   );
 }

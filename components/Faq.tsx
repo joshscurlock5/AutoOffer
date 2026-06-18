@@ -1,6 +1,7 @@
-import { Section, SectionHeading } from "./Section";
+import { Section } from "./Section";
 import { ChevronDown } from "./icons";
 import { site } from "@/lib/site-config";
+import ContactPopup from "./ContactPopup";
 
 const faqs = [
   {
@@ -36,31 +37,27 @@ const faqs = [
 export default function Faq() {
   return (
     <Section className="bg-cream">
-      <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-        <SectionHeading
-          eyebrow="FAQ"
-          title="Questions? We've got answers"
-          subtitle="Still not sure about something? Call us any time — a real person will pick up."
-        />
-        <div className="space-y-3">
-          {faqs.map((f) => (
-            <details
-              key={f.q}
-              className="card group overflow-hidden p-0 [&_summary::-webkit-details-marker]:hidden"
-            >
-              <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 font-semibold text-navy">
-                {f.q}
-                <ChevronDown className="h-5 w-5 shrink-0 text-brand transition duration-300 group-open:rotate-180" />
-              </summary>
-              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-open:grid-rows-[1fr]">
-                <div className="overflow-hidden">
-                  <p className="px-5 pb-5 text-muted">{f.a}</p>
-                </div>
+      <h2 className="h-section">FAQ</h2>
+      <div className="mt-6 space-y-3">
+        {faqs.map((f) => (
+          <details
+            key={f.q}
+            className="card group overflow-hidden p-0 [&_summary::-webkit-details-marker]:hidden"
+          >
+            <summary className="flex cursor-pointer items-center justify-between gap-4 p-6 text-base font-semibold text-navy sm:text-lg">
+              {f.q}
+              <ChevronDown className="h-5 w-5 shrink-0 text-navy transition duration-300 group-open:rotate-180" />
+            </summary>
+            <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-open:grid-rows-[1fr]">
+              <div className="overflow-hidden">
+                <p className="max-w-[70ch] px-6 pb-6 text-muted">{f.a}</p>
               </div>
-            </details>
-          ))}
-        </div>
+            </div>
+          </details>
+        ))}
       </div>
+
+      <ContactPopup />
     </Section>
   );
 }

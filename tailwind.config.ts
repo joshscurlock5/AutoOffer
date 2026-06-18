@@ -10,12 +10,12 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Dark surfaces & headings — a lighter, friendly navy-blue (less heavy).
+        // Headings & dark surfaces — near-black & neutral (NOT blue). Brand stays blue.
         navy: {
-          DEFAULT: "#1E4A7E",
-          700: "#285A93",
-          800: "#1E4A7E",
-          900: "#16365C",
+          DEFAULT: "#16181D",
+          700: "#2A2D34",
+          800: "#16181D",
+          900: "#0E0F13",
         },
         // Primary — a light, bright high-trust blue (modern fintech sky-blue).
         brand: {
@@ -33,17 +33,17 @@ const config: Config = {
           600: "#1E7AD8",
           700: "#1763C4",
         },
-        // Cool light neutral for alternating section backgrounds (trust reads cool).
-        cream: "#F1F5FB",
-        ink: "#0E1B2E",
-        muted: "#475569",
+        // Section background — set to pure white for a clean, Clutch-like look.
+        cream: "#FFFFFF",
+        ink: "#16181D",
+        muted: "#4B5563",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
         display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       maxWidth: {
-        content: "1200px",
+        content: "1390px",
       },
       borderRadius: {
         xl: "14px",

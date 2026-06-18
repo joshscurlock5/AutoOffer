@@ -33,7 +33,7 @@ export default function CookieNotice() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-20 z-30 px-3 lg:bottom-3">
+    <div className="fixed inset-x-0 bottom-20 z-30 px-3 lg:bottom-24">
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 text-sm text-muted shadow-lift backdrop-blur sm:flex-row">
         <p className="flex-1 text-center sm:text-left">
           We use cookies and Google Analytics to understand how the site is used.{" "}

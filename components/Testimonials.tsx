@@ -1,79 +1,37 @@
-import Link from "next/link";
 import { Section } from "./Section";
-import Reveal from "./Reveal";
-import { site } from "@/lib/site-config";
-import { Check, Shield, ArrowRight, Star } from "./icons";
+import { Check } from "./icons";
+import ReviewsCarousel from "./ReviewsCarousel";
 
-// NOTE: This replaces fabricated testimonials. When you have real Google/Facebook
-// reviews, drop them into the right-hand card (set `site.reviewsUrl`), or embed a
-// reviews widget. Never ship invented quotes.
+// Real, owner-confirmed trust points (no fabricated reviews/ratings).
 const promises = [
-  "The number we agree on is the number you're paid — no surprise deductions.",
-  "A real local person answers the phone — never a call centre.",
-  "No obligation, ever — the estimate is free and you can walk away any time.",
+  "The number we agree on is what you're paid — no surprise deductions.",
+  "Paid by bank draft, before we take the keys.",
+  "No obligation, ever — the estimate is free.",
 ];
 
 export default function Promise() {
   return (
     <Section className="bg-white">
-      <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
-        <div>
-          <p className="eyebrow">Our Promise</p>
-          <h2 className="h-section mt-2">No games. Just a fair deal.</h2>
-          <p className="mt-4 text-lg text-muted">
-            Selling to a stranger shouldn&apos;t feel risky — here&apos;s what you can
-            count on, every time.
-          </p>
-          <ul className="mt-7 space-y-4">
-            {promises.map((p, i) => (
-              <Reveal key={p} delay={i * 70}>
-                <li className="flex items-start gap-3">
-                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-white">
-                    <Check className="h-4 w-4" />
-                  </span>
-                  <span className="text-navy">{p}</span>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+        <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-slate-200">
+          {/* Left — the headline stat */}
+          <div className="p-8 sm:p-10">
+            <p className="font-display text-5xl font-extrabold tracking-tight text-navy sm:text-6xl">
+              2,000+
+            </p>
+            <p className="mt-2 text-lg font-medium text-muted">cars sold to DriveOffer</p>
+            <ul className="mt-7 space-y-3.5 border-t border-slate-100 pt-6 text-lg text-muted">
+              {promises.map((p) => (
+                <li key={p} className="flex items-start gap-2.5">
+                  <Check className="mt-1 h-5 w-5 shrink-0 text-navy" /> {p}
                 </li>
-              </Reveal>
-            ))}
-          </ul>
-        </div>
-
-        <Reveal>
-          <div className="card relative overflow-hidden p-8 sm:p-10">
-            <div className="relative">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
-                <Shield className="h-7 w-7" />
-              </span>
-              <h3 className="mt-6 font-display text-2xl font-bold text-navy">
-                The {site.name} guarantee
-              </h3>
-              <p className="mt-3 text-muted">
-                If the car matches what you told us, we pay our offer in full on the
-                spot. If anything&apos;s different, you&apos;re free to walk away.
-              </p>
-
-              <div className="mt-7 flex items-center gap-3 rounded-2xl bg-brand-50 p-4">
-                <span className="flex text-brand" role="img" aria-label="Five stars">
-                  {[0, 1, 2, 3, 4].map((i) => <Star key={i} className="h-4 w-4" />)}
-                </span>
-                <div className="text-sm text-muted">
-                  Sold with us?{" "}
-                  <Link href={site.reviewsUrl || "#"} target="_blank" rel="noreferrer" className="font-semibold text-navy underline-offset-2 hover:underline">
-                    Leave a review
-                  </Link>{" "}
-                  — we&apos;re building ours from real customers.
-                </div>
-              </div>
-
-              <Link
-                href="/get-offer"
-                className="mt-7 inline-flex items-center gap-2 font-semibold text-brand hover:gap-3"
-              >
-                Get your fair offer <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+              ))}
+            </ul>
           </div>
-        </Reveal>
+
+          {/* Right — rotating Google reviews */}
+          <ReviewsCarousel />
+        </div>
       </div>
     </Section>
   );

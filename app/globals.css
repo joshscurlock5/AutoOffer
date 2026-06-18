@@ -7,7 +7,7 @@ html {
 }
 
 body {
-  @apply bg-white font-sans text-ink antialiased;
+  @apply bg-white font-sans text-ink antialiased text-[17px] leading-relaxed;
 }
 
 ::selection {
@@ -55,7 +55,7 @@ body {
   }
 
   .container-x {
-    @apply mx-auto w-full max-w-content px-5;
+    @apply mx-auto w-full max-w-content px-5 lg:px-8;
   }
 
   /* Buttons — one authored easing/timing, with a real lift on hover. */
@@ -63,10 +63,10 @@ body {
     @apply inline-flex select-none items-center justify-center gap-2 rounded-full text-base font-semibold leading-none transition-[transform,background-color,box-shadow,color] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2;
   }
   .btn-primary {
-    @apply btn bg-brand px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-lift active:translate-y-0;
+    @apply btn bg-brand-600 px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lift active:translate-y-0;
   }
   .btn-gold {
-    @apply btn bg-accent px-6 py-3.5 text-navy shadow-soft hover:-translate-y-0.5 hover:bg-accent-600 hover:shadow-lift active:translate-y-0;
+    @apply btn bg-navy px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-navy-700 hover:shadow-lift active:translate-y-0;
   }
   .btn-dark {
     @apply btn bg-navy px-6 py-3.5 text-white hover:-translate-y-0.5 hover:bg-navy-700 active:translate-y-0;
@@ -75,7 +75,7 @@ body {
     @apply btn-gold;
   }
   .btn-ghost {
-    @apply btn border border-slate-200 bg-white px-6 py-3.5 text-ink hover:-translate-y-0.5 hover:border-brand hover:text-brand active:translate-y-0;
+    @apply btn border border-slate-200 bg-white px-6 py-3.5 text-ink hover:-translate-y-0.5 hover:border-navy hover:text-navy active:translate-y-0;
   }
 
   /* Icon-only control: gives focus ring + decent hit area without .btn padding. */
@@ -92,12 +92,12 @@ body {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .label {
-    @apply mb-1.5 block text-sm font-medium text-navy;
+    @apply mb-1.5 block text-[0.9375rem] font-medium text-navy;
   }
 
   /* Card vocabulary — three distinct surfaces, not one repeated tile. */
   .card {
-    @apply rounded-2xl bg-white shadow-card;
+    @apply rounded-2xl border border-slate-200 bg-white shadow-card;
   }
   .card-outline {
     @apply rounded-2xl border border-slate-200 bg-white;
@@ -108,7 +108,7 @@ body {
 
   /* Type helpers */
   .eyebrow {
-    @apply text-sm font-semibold uppercase tracking-[0.14em] text-brand;
+    @apply text-[0.9375rem] font-semibold uppercase tracking-[0.14em] text-muted;
   }
   .h-section {
     @apply font-display text-3xl font-bold leading-tight tracking-tight text-navy sm:text-[2.6rem];

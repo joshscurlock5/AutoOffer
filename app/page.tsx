@@ -1,44 +1,14 @@
-import Link from "next/link";
 import ValueWidget from "@/components/ValueWidget";
 import HowItWorks from "@/components/HowItWorks";
+import Compare from "@/components/Compare";
+import GetPaid from "@/components/GetPaid";
 import ReferralBanner from "@/components/ReferralBanner";
 import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
-import PhoneButton from "@/components/PhoneButton";
 import TelLink from "@/components/TelLink";
-import Reveal from "@/components/Reveal";
-import { Section, SectionHeading } from "@/components/Section";
+import StickyCTA from "@/components/StickyCTA";
 import { site } from "@/lib/site-config";
-import {
-  Check, Shield, Car, Bolt, Banknote, ArrowRight, Phone, Dollar,
-} from "@/components/icons";
-
-const smallBenefits = [
-  {
-    icon: Bolt,
-    tone: "brand",
-    title: "Your estimate in minutes",
-    body: "See an honest range right away — we confirm your firm number by phone.",
-  },
-  {
-    icon: Car,
-    tone: "brand",
-    title: "We come to you",
-    body: "Free inspection at your home or work, anywhere we serve.",
-  },
-  {
-    icon: Banknote,
-    tone: "gold",
-    title: "Paid on the spot",
-    body: "By bank draft — handed to you before we load the car.",
-  },
-  {
-    icon: Shield,
-    tone: "brand",
-    title: "We handle the paperwork",
-    body: "Financed or leased? We deal with your lender and clear the lien.",
-  },
-];
+import { Check, Phone } from "@/components/icons";
 
 export default function HomePage() {
   return (
@@ -49,14 +19,14 @@ export default function HomePage() {
         <div className="container-x relative py-10 lg:py-14">
           {/* Mobile-only header — sits ABOVE the form so the headline reads first */}
           <div className="mb-6 animate-fade-up lg:hidden">
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
-              <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-navy text-white">
                 <Check className="h-3 w-3" />
               </span>
               Free estimate · we come to you
             </span>
             <h1 className="mt-4 font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-5xl">
-              Sell your car the <span className="text-brand">easy way.</span>
+              Sell your car the <span className="text-navy">easy way.</span>
             </h1>
           </div>
 
@@ -64,36 +34,31 @@ export default function HomePage() {
             {/* LEFT — supporting copy (below the form on mobile, full column on desktop) */}
             <div className="order-2 animate-fade-up lg:order-1">
               {/* badge + headline repeat here for desktop only (mobile shows them above) */}
-              <span className="hidden items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft lg:inline-flex">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-brand text-white">
+              <span className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft lg:inline-flex">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-navy text-white">
                   <Check className="h-3 w-3" />
                 </span>
                 Free estimate · we come to you
               </span>
 
               <h1 className="mt-5 hidden font-display text-[2rem] font-extrabold leading-[1.05] tracking-tight text-navy sm:text-6xl lg:block">
-                Sell your car<br className="hidden sm:block" /> the <span className="text-brand">easy way.</span>
+                Sell your car<br className="hidden sm:block" /> the <span className="text-navy">easy way.</span>
               </h1>
 
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-                Get a fair offer in minutes — then we come to you and pay on the spot.
-              </p>
-
-              <p className="mt-4 max-w-xl text-base text-muted">
-                A local Edmonton business — your written firm offer is the price you&apos;re
-                paid, with no surprise deductions.
+                A firm offer with no surprises — we come to you and pay on the spot.
               </p>
 
               <div className="mt-7 border-t border-slate-200 pt-6">
                 <TelLink location="hero" className="group flex items-start gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand transition group-hover:bg-brand group-hover:text-white">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-navy transition group-hover:bg-slate-200">
                     <Phone className="h-5 w-5" />
                   </span>
                   <span className="leading-snug">
                     <span className="block font-semibold text-navy">
-                      Prefer to talk? Call or text <span className="text-brand">{site.phoneDisplay}</span>
+                      Prefer to talk? Call or text <span className="text-navy">{site.phoneDisplay}</span>
                     </span>
-                    <span className="block text-sm text-muted">We&apos;re available 24/7.</span>
+                    <span className="block text-base text-muted">We&apos;re available 24/7.</span>
                   </span>
                 </TelLink>
               </div>
@@ -107,85 +72,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ---------------- BENEFITS (asymmetric) ---------------- */}
-      <Section className="bg-white">
-        <SectionHeading
-          eyebrow={`Why ${site.name}`}
-          title="A better way to sell, start to finish"
-          subtitle="No listings, no tire-kickers, no lowball trade-ins — just a fair number."
-        />
-        <div className="mt-10 grid gap-5 lg:grid-cols-3 lg:grid-rows-2">
-          {/* spotlight */}
-          <Reveal className="lg:col-span-1 lg:row-span-2">
-            <div className="flex h-full flex-col rounded-2xl border border-brand-100 bg-brand-50 p-8 shadow-soft">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white">
-                <Dollar className="h-7 w-7" />
-              </span>
-              <h3 className="mt-6 font-display text-2xl font-bold text-navy">More money in your pocket</h3>
-              <p className="mt-3 text-muted">
-                We skip dealership overhead, so your offer reflects what the car&apos;s
-                actually worth — often more than a trade-in.
-              </p>
-              <p className="mt-3 text-muted">
-                Dealers bake their resale margin and lot costs into a trade-in price. We
-                buy to resell ourselves — so there&apos;s no middleman markup subtracted
-                from your number.
-              </p>
-              <div className="mt-auto pt-8">
-                <Link href="/get-offer" className="inline-flex items-center gap-2 font-semibold text-brand hover:gap-3">
-                  See what yours is worth <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-          </Reveal>
-
-          {smallBenefits.map((b, i) => {
-            const Icon = b.icon;
-            const gold = b.tone === "gold";
-            return (
-              <Reveal key={b.title} delay={80 * (i + 1)}>
-                <div className="card h-full p-7 transition duration-300 hover:-translate-y-1 hover:shadow-lift">
-                  <span
-                    className={`grid h-12 w-12 place-items-center rounded-xl ${
-                      gold ? "bg-accent/15 text-accent-700" : "bg-brand-50 text-brand"
-                    }`}
-                  >
-                    <Icon className="h-6 w-6" />
-                  </span>
-                  <h3 className="mt-4 text-lg font-bold text-navy">{b.title}</h3>
-                  <p className="mt-2 text-muted">{b.body}</p>
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </Section>
-
       <HowItWorks />
+
+      <Compare />
+
+      <GetPaid />
+
       <ReferralBanner />
       <Promise />
       <Faq />
 
-      {/* ---------------- FINAL CTA (distinct finale) ---------------- */}
-      <section className="relative overflow-hidden bg-brand">
-        <div className="container-x relative flex flex-col items-start gap-8 py-12 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-xl">
-            <h2 className="font-display text-3xl font-extrabold leading-tight text-white sm:text-4xl">
-              Find out what your car is worth — today.
-            </h2>
-            <p className="mt-3 text-lg text-white/90">
-              It takes about two minutes and it&apos;s completely free. No obligation,
-              no pressure — just a fair offer.
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Link href="/get-offer" className="btn bg-white px-6 py-3.5 text-lg text-brand shadow-soft hover:-translate-y-0.5 hover:bg-brand-50 active:translate-y-0">
-              Get My Estimate <ArrowRight className="h-5 w-5" />
-            </Link>
-            <PhoneButton variant="ghost" label="Call Now" location="final_cta" className="border-white/50 bg-transparent text-white hover:bg-white/10 hover:text-white" />
-          </div>
-        </div>
-      </section>
+      <StickyCTA />
     </>
   );
 }
