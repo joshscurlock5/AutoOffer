@@ -1,5 +1,5 @@
 import { Section } from "./Section";
-import { Check } from "./icons";
+import { Check, Banknote } from "./icons";
 import { site } from "@/lib/site-config";
 
 const steps = [
@@ -38,19 +38,21 @@ export default function GetPaid() {
             adds height; the steps box stretches to match it. */}
         <div className="mx-auto flex w-full max-w-md items-center rounded-3xl bg-slate-100 p-5 shadow-lift sm:p-6 lg:ml-auto">
           <div className="w-full rounded-2xl bg-white p-7 shadow-card sm:p-9">
-            <span className="grid h-11 w-11 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-              <Check className="h-6 w-6" />
-            </span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+                <Check className="h-6 w-6" />
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
+                Example
+              </span>
+            </div>
             <p className="mt-5 font-display text-2xl font-bold text-navy">You just got paid!</p>
             <div className="mt-6 border-t border-slate-100 pt-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Amount</p>
-                  <p className="mt-1 font-display text-4xl font-extrabold text-navy">$28,450</p>
-                </div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/rbc-logo.png" alt="RBC Royal Bank" className="h-11 w-auto shrink-0" />
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Amount</p>
+              <p className="mt-1 font-display text-4xl font-extrabold text-navy">$28,450</p>
+              <span className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-700">
+                <Banknote className="h-4 w-4" /> Paid by bank draft
+              </span>
               <div className="mt-6">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">From</p>
                 <p className="mt-1 font-semibold text-navy">{site.name}</p>
