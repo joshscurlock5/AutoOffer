@@ -58,7 +58,7 @@ export default function Promise() {
                 </span>
                 <div className="text-sm text-muted">
                   Sold with us?{" "}
-                  <Link href={site.reviewsUrl || "#"} className="font-semibold text-navy underline-offset-2 hover:underline">
+                  <Link href={site.reviewsUrl || "#"} target="_blank" rel="noreferrer" className="font-semibold text-navy underline-offset-2 hover:underline">
                     Leave a review
                   </Link>{" "}
                   — we&apos;re building ours from real customers.

@@ -42,7 +42,7 @@ export const site = {
   },
 
   // ---- REVIEWS (link to your Google/Facebook reviews; "" hides prompts) ----
-  reviewsUrl: "", //                                         PLACEHOLDER
+  reviewsUrl: "https://g.page/r/CVt_QnCYRto-EBM/review", //  Google "write a review" link
 
   // ---- LICENSING / TRUST --------------------------------------------------
   // Leave any of these blank ("") and the trust badge for it stays hidden,

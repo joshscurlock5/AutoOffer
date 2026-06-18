@@ -99,6 +99,9 @@ export default function Footer() {
             <li><Link href="/about" className="hover:text-white">About Us</Link></li>
             <li><Link href="/referral" className="hover:text-white">Refer &amp; Earn $100</Link></li>
             <li><Link href="/contact" className="hover:text-white">Contact Us</Link></li>
+            {(site.reviewsUrl as string) && (
+              <li><a href={site.reviewsUrl} target="_blank" rel="noreferrer" className="hover:text-white">Leave a Google Review</a></li>
+            )}
             <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
           </ul>
         </div>
