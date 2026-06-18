@@ -74,7 +74,7 @@ export default function ReferralPage() {
                 <li>The ${site.referralReward} reward is paid after your referred friend completes their sale with {site.name}.</li>
                 <li>Your friend must be a new customer who hasn&apos;t already requested an offer.</li>
                 <li>No limit on the number of friends you can refer.</li>
-                <li>Rewards are paid by e-transfer or cheque, typically within 7 days of the completed sale.</li>
+                <li>Rewards are paid by cheque or bank draft, typically within 7 days of the completed sale.</li>
               </ul>
             </div>
           </div>

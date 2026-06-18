@@ -30,7 +30,7 @@ const smallBenefits = [
     icon: Banknote,
     tone: "gold",
     title: "Paid on the spot",
-    body: "Interac e-transfer or bank draft before we load the car.",
+    body: "By bank draft — handed to you before we load the car.",
   },
   {
     icon: Shield,

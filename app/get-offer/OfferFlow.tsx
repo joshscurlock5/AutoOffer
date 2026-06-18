@@ -558,14 +558,14 @@ export default function OfferFlow() {
                     onChange={(e) => setTrim(e.target.value)}
                   >
                     <option value="">
-                      {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Any / not sure"}
+                      {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Not sure"}
                     </option>
                     {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
                       <option key={t.item} value={t.item}>{t.item}</option>
                     ))}
                   </select>
                   {model && !trimsLoading && trims.length === 0 && (
-                    <p className="mt-1.5 text-xs text-muted">We&apos;ll price across all trims for this model.</p>
+                    <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
                   )}
                 </div>
                 <div className="sm:col-span-2">

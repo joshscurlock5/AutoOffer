@@ -14,7 +14,7 @@ const points = [
   {
     icon: Dollar,
     title: "Paid same visit",
-    sub: "Get paid the same day by e-transfer or bank draft.",
+    sub: "Get paid the same day by bank draft.",
   },
 ];
 

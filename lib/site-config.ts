@@ -18,7 +18,7 @@ export const site = {
   email: "offers@driveoffer.ca", //                          PLACEHOLDER
 
   address: {
-    line1: "16075 66 St NW",
+    line1: "8923 137 Ave NW",
     city: "Edmonton",
     province: "AB",
     postal: "", //  add your postal code here if you'd like it shown
@@ -31,9 +31,9 @@ export const site = {
   // No API key needed. Replace the address in q= with your real one
   // (spaces become +).
   mapEmbedSrc:
-    "https://www.google.com/maps?q=16075+66+St+NW,+Edmonton,+AB,+Canada&z=15&output=embed",
+    "https://www.google.com/maps?q=8923+137+Ave+NW,+Edmonton,+AB,+Canada&z=15&output=embed",
   mapLink:
-    "https://www.google.com/maps/search/?api=1&query=16075+66+St+NW%2C+Edmonton%2C+AB%2C+Canada",
+    "https://www.google.com/maps/search/?api=1&query=8923+137+Ave+NW%2C+Edmonton%2C+AB%2C+Canada",
 
   // ---- SOCIAL (use # to hide a link) --------------------------------------
   social: {

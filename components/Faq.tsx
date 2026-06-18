@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: "How and when do I get paid?",
-    a: "The same day, by Interac e-transfer or bank draft — sent before we take the keys. No cash, no waiting on a cheque to clear.",
+    a: "The same day, by bank draft — handed to you before we take the keys. A bank draft is guaranteed funds, so there's nothing to wait on (no cash, no cheque to clear).",
   },
   {
     q: "Do I have to bring my car anywhere?",

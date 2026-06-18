@@ -73,6 +73,10 @@ export async function getEstimate(v: {
   // Unknown/odd vehicle → human-priced "unique" flow (same as the heuristic).
   if (unsure) return { ...UNIQUE };
 
+  // No exact trim ("Not sure") → human custom-offer flow. We don't price across
+  // all trims (would be inaccurate) and we don't spend a MarketCheck call on it.
+  if (!v.trim || !String(v.trim).trim()) return { ...UNIQUE };
+
   if (marketCheckEnabled()) {
     let market: OfferEstimate | null = null;
     try {
