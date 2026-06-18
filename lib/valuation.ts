@@ -17,8 +17,8 @@ import type { OfferEstimate } from "./types";
 //  Valuation orchestrator.
 //  Tries REAL Canadian market data (MarketCheck) first, then falls back to the
 //  local estimate model in lib/offer.ts (only when no API key is configured).
-//  The displayed range is DriveOffer's BUY range: retail asking minus tunable
-//  offsets (default $4,500 low / $2,000 high under retail), nudged for mileage.
+//  The displayed range is DriveOffer's BUY range: a percentage of the dealer
+//  asking anchor (default 72%–78% of it ≈ 22–28% under), nudged for mileage.
 //  When a trim is supplied, pricing is scoped to that trim (with a fall back to
 //  all-trims for the model when the trim has too few comps).
 // ---------------------------------------------------------------------------
@@ -29,8 +29,11 @@ const COST_PER_KM = Number(process.env.MARKETCHECK_COST_PER_KM || 0.07);
 const FLOOR = 900;
 
 const MIN_COMPS = Number(process.env.MARKETCHECK_MIN_COMPS || 10);
-const LOW_OFFSET = Number(process.env.MARKETCHECK_OFFER_LOW_OFFSET || 4500);
-const HIGH_OFFSET = Number(process.env.MARKETCHECK_OFFER_HIGH_OFFSET || 2000);
+// BUY range as a percentage of the dealer-asking anchor (asking is retail/marked
+// up, so a real buy price sits well below it). 0.78 = 22% under, 0.72 = 28% under.
+const OFFER_HIGH_PCT = Number(process.env.MARKETCHECK_OFFER_HIGH_PCT || 0.78);
+const OFFER_LOW_PCT = Number(process.env.MARKETCHECK_OFFER_LOW_PCT || 0.72);
+const MIN_RETAIL = Number(process.env.MARKETCHECK_MIN_RETAIL || 3000);
 const CACHE_DAYS = Number(process.env.MARKETCHECK_CACHE_DAYS || 14);
 const TRIM_CACHE_DAYS = Number(process.env.MARKETCHECK_TRIM_CACHE_DAYS || 30);
 // Short negative-cache so a MarketCheck outage doesn't re-charge the budget on
@@ -146,13 +149,13 @@ async function marketOffer(
   // push our BUY range above the market median (would over-offer cherry cars).
   retail = Math.min(retail, stats.p50 * RETAIL_CAP_MULT);
 
-  // Flat dollar offsets don't make sense below ~$3k — let the local model handle
-  // very cheap cars instead.
-  if (retail < FLOOR + HIGH_OFFSET) return null;
+  // Very cheap cars → human custom-offer flow (percentages get noisy down low).
+  if (retail < MIN_RETAIL) return null;
 
-  // Round BEFORE the inversion guard so a thin band can't collapse to $X–$X.
-  const low = roundTo(Math.max(retail - LOW_OFFSET, FLOOR), 50);
-  let high = roundTo(retail - HIGH_OFFSET, 50);
+  // BUY range = a percentage of the asking anchor — scales correctly across price
+  // tiers (unlike a flat dollar cut). Round BEFORE the inversion guard.
+  const low = roundTo(Math.max(retail * OFFER_LOW_PCT, FLOOR), 50);
+  let high = roundTo(retail * OFFER_HIGH_PCT, 50);
   if (high <= low) high = low + 500;
 
   return {
