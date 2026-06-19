@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track } from "@/lib/analytics";
-import { site } from "@/lib/site-config";
-import { ArrowRight, Car, Lock, GoogleG, Star } from "./icons";
+import { site, telHref } from "@/lib/site-config";
+import { ArrowRight, Car, Lock, Phone } from "./icons";
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 
@@ -84,7 +84,6 @@ export default function ValueWidget() {
   }
 
   return (
-    <>
     <form
       onSubmit={submit}
       className="card w-full overflow-hidden border border-slate-100 p-6 sm:p-8"
@@ -93,9 +92,6 @@ export default function ValueWidget() {
         <h2 className="font-display text-[28px] font-bold text-navy sm:text-3xl">
           See What Your Car Is Worth
         </h2>
-        <p className="mt-2 text-base text-navy">
-          Takes about a minute. See your estimated range, then talk to our team when you&apos;re ready.
-        </p>
       </div>
 
       {/* Mode toggle */}
@@ -251,6 +247,13 @@ export default function ValueWidget() {
         Get My Estimate
         <ArrowRight className="h-5 w-5" />
       </button>
+      <a
+        href={telHref}
+        onClick={() => track("phone_click", { location: "form_call" })}
+        className="btn-ghost mt-3 w-full text-lg"
+      >
+        <Phone className="h-5 w-5" /> Call or text {site.phoneDisplay}
+      </a>
       {showError && ((inputMode === "vin" && !vinReady) || (inputMode === "manual" && !ready)) && (
         <p role="alert" aria-live="polite" className="mt-2 text-center text-sm font-medium text-red-600">
           {inputMode === "vin"
@@ -263,24 +266,5 @@ export default function ValueWidget() {
         <Lock className="h-4 w-4" /> We never sell your information.
       </p>
     </form>
-
-      {(site.reviewsUrl as string) && (
-        <a
-          href={site.reviewsUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="See us on Google Reviews"
-          className="mt-5 flex items-center justify-center gap-2 py-2"
-        >
-          <GoogleG className="h-5 w-5" />
-          <span className="flex text-amber-400" role="img" aria-label="Five stars">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Star key={i} className="h-4 w-4" />
-            ))}
-          </span>
-          <span className="text-sm font-semibold text-muted">Google Reviews</span>
-        </a>
-      )}
-    </>
   );
 }

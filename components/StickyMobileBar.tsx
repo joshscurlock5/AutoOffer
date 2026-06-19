@@ -18,8 +18,8 @@ export default function StickyMobileBar() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const how = document.getElementById("how");
-    if (!how) {
+    const form = document.getElementById("estimate");
+    if (!form) {
       setShow(true);
       return;
     }
@@ -27,7 +27,7 @@ export default function StickyMobileBar() {
       ([e]) => setShow(!e.isIntersecting && e.boundingClientRect.top < 0),
       { threshold: 0 }
     );
-    io.observe(how);
+    io.observe(form);
     return () => io.disconnect();
   }, [pathname]);
 

@@ -56,7 +56,6 @@ export default function GetPaid() {
               <div className="mt-6">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">From</p>
                 <p className="mt-1 font-semibold text-navy">{site.name}</p>
-                <p className="text-sm text-muted">{site.email}</p>
               </div>
             </div>
           </div>

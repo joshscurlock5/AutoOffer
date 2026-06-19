@@ -15,13 +15,13 @@ export default function StickyCTA() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const how = document.getElementById("how");
-    if (!how) return;
+    const form = document.getElementById("estimate");
+    if (!form) return;
     const io = new IntersectionObserver(
       ([e]) => setShow(!e.isIntersecting && e.boundingClientRect.top < 0),
       { threshold: 0 }
     );
-    io.observe(how);
+    io.observe(form);
     return () => io.disconnect();
   }, []);
 

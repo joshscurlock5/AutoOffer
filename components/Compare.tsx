@@ -68,7 +68,7 @@ function Column({
 export default function Compare() {
   return (
     <Section className="bg-white">
-      <h2 className="h-section text-center xl:whitespace-nowrap">
+      <h2 className="h-section">
         Why sell your car online to DriveOffer?
       </h2>
       <div className="mt-12 grid items-start gap-6 md:grid-cols-3">
