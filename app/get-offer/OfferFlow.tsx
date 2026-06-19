@@ -14,7 +14,7 @@ import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import {
   ArrowRight, Phone, Check, Camera, Trash, Calendar, Dollar,
-  Send, Shield, Car,
+  Send, Shield, Car, Lock,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4;
@@ -72,6 +72,7 @@ export default function OfferFlow() {
   const calcTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [step1Error, setStep1Error] = useState(false);
 
   // Funnel instrumentation guards (per-mount; reset on a fresh /get-offer load).
   const flowStarted = useRef(false);
@@ -129,7 +130,6 @@ export default function OfferFlow() {
 
   const models = make ? modelsFor(make) : [];
   const step1Valid = Boolean(year && make && model && kmv);
-  const vinValid = VIN_RE.test(vin.trim().toUpperCase()) && Boolean(kmv);
   // Manual + arrived complete + not actively editing -> show the summary card.
   const showSummary = inputMode === "manual" && cameFromWidget && !editing;
   const source = () => (sp.get("make") ? "widget" : "direct");
@@ -179,7 +179,15 @@ export default function OfferFlow() {
   // MANUAL path -> real estimate.
   async function goToOffer(e: React.FormEvent) {
     e.preventDefault();
-    if (!step1Valid) return;
+    if (!step1Valid) {
+      // Keep the button live: on an incomplete submit, jump to the first gap.
+      setStep1Error(true);
+      const firstMissing = !year ? "year" : !make ? "make" : !model ? "model" : "km";
+      const el = document.getElementById(firstMissing);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus();
+      return;
+    }
     const yr = Number(year);
     const kmNum = Number(kmv);
     setError("");
@@ -204,10 +212,16 @@ export default function OfferFlow() {
     const v = vin.trim().toUpperCase();
     if (!VIN_RE.test(v)) {
       setVinError("Please enter a valid 17-character VIN (no spaces).");
+      const el = document.getElementById("vin");
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus();
       return;
     }
     if (!kmv) {
       setVinError("Please add your mileage (km).");
+      const el = document.getElementById("vkm");
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus();
       return;
     }
     setVinError("");
@@ -504,71 +518,87 @@ export default function OfferFlow() {
 
               {photoBlock}
 
-              {vinError && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{vinError}</p>}
-
-              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-                {callLine}
-                <button type="submit" disabled={decoding || !vinValid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
-                  {decoding ? "Looking up your VIN…" : <>See My Estimate <ArrowRight className="h-4 w-4" /></>}
-                </button>
-              </div>
+              <button type="submit" disabled={decoding} className="btn-primary mt-8 w-full text-lg disabled:opacity-60">
+                {decoding ? "Looking up your VIN…" : <>See My Estimate <ArrowRight className="h-5 w-5" /></>}
+              </button>
+              <a
+                href={telHref}
+                onClick={() => track("phone_click", { location: "offer_step1_vin_call" })}
+                className="btn-ghost mt-3 w-full text-lg"
+              >
+                <Phone className="h-5 w-5" /> Call or text {site.phoneDisplay}
+              </a>
+              {vinError && (
+                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{vinError}</p>
+              )}
             </form>
           ) : (
             <form onSubmit={goToOffer}>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {/* Single-column, progressive: Year + Mileage shown; Make/Model/Trim
+                  reveal one after another as the prior field is filled. */}
+              <div className="mt-6 grid grid-cols-1 gap-4">
                 <div>
                   <label className="label" htmlFor="year">Year</label>
-                  <select id="year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setTrim(""); }}>
+                  <select id="year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setMake(""); setModel(""); setTrim(""); }}>
                     <option value="">Select year</option>
                     {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
+
+                {year && (
+                  <div className="animate-fade-up">
+                    <label className="label" htmlFor="make">Make</label>
+                    <select
+                      id="make"
+                      className="field"
+                      value={make}
+                      onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}
+                    >
+                      <option value="">Select make</option>
+                      {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {make && (
+                  <div className="animate-fade-up">
+                    <label className="label" htmlFor="model">Model</label>
+                    <select
+                      id="model"
+                      className="field"
+                      value={model}
+                      onChange={(e) => { setModel(e.target.value); setTrim(""); }}
+                    >
+                      <option value="">Select model</option>
+                      {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {model && (
+                  <div className="animate-fade-up">
+                    <label className="label" htmlFor="trim">Trim</label>
+                    <select
+                      id="trim"
+                      className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      value={trim}
+                      disabled={trimsLoading}
+                      onChange={(e) => setTrim(e.target.value)}
+                    >
+                      <option value="">
+                        {trimsLoading ? "Loading trims…" : "Not sure"}
+                      </option>
+                      {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
+                        <option key={t.item} value={t.item}>{t.item}</option>
+                      ))}
+                    </select>
+                    {!trimsLoading && trims.length === 0 && (
+                      <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <label className="label" htmlFor="make">Make</label>
-                  <select
-                    id="make"
-                    className="field"
-                    value={make}
-                    onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}
-                  >
-                    <option value="">Select make</option>
-                    {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="model">Model</label>
-                  <select
-                    id="model"
-                    className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                    value={model}
-                    disabled={!make}
-                    onChange={(e) => { setModel(e.target.value); setTrim(""); }}
-                  >
-                    <option value="">{make ? "Select model" : "Select make first"}</option>
-                    {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="trim">Trim</label>
-                  <select
-                    id="trim"
-                    className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                    value={trim}
-                    disabled={!model || trimsLoading}
-                    onChange={(e) => setTrim(e.target.value)}
-                  >
-                    <option value="">
-                      {!model ? "Select model first" : trimsLoading ? "Loading trims…" : "Not sure"}
-                    </option>
-                    {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
-                      <option key={t.item} value={t.item}>{t.item}</option>
-                    ))}
-                  </select>
-                  {model && !trimsLoading && trims.length === 0 && (
-                    <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
-                  )}
-                </div>
-                <div className="sm:col-span-2">
                   <label className="label" htmlFor="km">Mileage (km)</label>
                   <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
                   <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
@@ -577,14 +607,27 @@ export default function OfferFlow() {
 
               {photoBlock}
 
-              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-                {callLine}
-                <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
-                  See My Estimate <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
+              <button type="submit" className="btn-primary mt-8 w-full text-lg">
+                See My Estimate <ArrowRight className="h-5 w-5" />
+              </button>
+              <a
+                href={telHref}
+                onClick={() => track("phone_click", { location: "offer_step1_call" })}
+                className="btn-ghost mt-3 w-full text-lg"
+              >
+                <Phone className="h-5 w-5" /> Call or text {site.phoneDisplay}
+              </a>
+              {step1Error && !step1Valid && (
+                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">
+                  Just add your year, make, model, and mileage to see your estimate.
+                </p>
+              )}
             </form>
           )}
+
+          <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
+            <Lock className="h-4 w-4" /> We never sell your information.
+          </p>
             </>
           )}
         </div>

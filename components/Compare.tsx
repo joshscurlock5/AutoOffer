@@ -26,18 +26,20 @@ function Column({
   title,
   items,
   highlight = false,
+  className = "",
 }: {
   title: string;
   items: readonly string[];
   highlight?: boolean;
+  className?: string;
 }) {
   return (
     <div
-      className={
+      className={`${
         highlight
           ? "relative overflow-hidden rounded-2xl border-2 border-brand bg-white shadow-lift md:-mt-4"
           : "overflow-hidden rounded-2xl border border-slate-200 bg-white"
-      }
+      } ${className}`}
     >
       <div className="border-b border-slate-200 px-7 py-7">
         <h3 className="font-display text-xl font-bold text-navy">
@@ -72,9 +74,9 @@ export default function Compare() {
         Why sell your car online to DriveOffer?
       </h2>
       <div className="mt-12 grid items-start gap-6 md:grid-cols-3">
-        <Column title="Dealership trade-in" items={dealership} />
+        <Column title="Dealership trade-in" items={dealership} className="hidden md:block" />
         <Column title="DriveOffer" items={us} highlight />
-        <Column title="Private sale" items={privateSale} />
+        <Column title="Private sale" items={privateSale} className="hidden md:block" />
       </div>
     </Section>
   );
