@@ -5,6 +5,7 @@ export {
   Mail,
   MapPin,
   Check,
+  Home,
   ChevronDown,
   ChevronLeft,
   ChevronRight,

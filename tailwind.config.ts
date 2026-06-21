@@ -9,6 +9,12 @@ const config: Config = {
       screens: { "2xl": "1200px" },
     },
     extend: {
+      // Custom high breakpoint: sections that use a wide multi-column desktop
+      // layout switch to their phone view here (~85% of the 1390px max content)
+      // instead of compressing down through the tablet range.
+      screens: {
+        wide: "1245px",
+      },
       colors: {
         // Headings & dark surfaces — near-black & neutral (NOT blue). Brand stays blue.
         navy: {
@@ -40,10 +46,16 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
-        display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Headings use Inter too (same as body) for a clean, professional look.
+        display: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
+        // Logo lockups now use the site font (Inter), same as everything else.
+        logo: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
       },
       maxWidth: {
         content: "1390px",
+        // Width of the stacked "phone view" content column (below the `wide`
+        // breakpoint). Every section shares it so their left/right edges line up.
+        col: "697px",
       },
       borderRadius: {
         xl: "14px",

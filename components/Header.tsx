@@ -49,7 +49,7 @@ export default function Header() {
     >
       <div className="container-x flex h-[72px] items-center justify-between gap-4">
         <Link href="/" className="flex items-center" aria-label={site.name}>
-          <span className="font-display text-xl font-extrabold tracking-tight text-navy">
+          <span className="font-logo text-xl font-extrabold tracking-tight text-navy">
             Drive<span className="text-brand-700">Offer</span>
           </span>
         </Link>

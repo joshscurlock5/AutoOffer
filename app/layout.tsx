@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
-import { Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -13,13 +13,8 @@ import ChatWidget from "@/components/ChatWidget";
 import { site } from "@/lib/site-config";
 import { GA_ID } from "@/lib/analytics";
 
-// Self-hosted via next/font (no render-blocking request to fonts.googleapis.com).
-const display = Bricolage_Grotesque({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-display",
-});
-const body = Hanken_Grotesk({
+// Self-hosted via next/font. Inter is the whole site's typeface — logos included.
+const sans = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
@@ -46,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
+    <html lang="en" className={sans.variable}>
       <body className="flex min-h-screen flex-col pb-20 lg:pb-0">
         {GA_ID && (
           <>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Section, SectionHeading } from "@/components/Section";
 import PhoneButton from "@/components/PhoneButton";
 import { site } from "@/lib/site-config";
-import { Shield, Dollar, Clock, Check, Car, MapleLeaf, ArrowRight } from "@/components/icons";
+import { Shield, Dollar, Clock, Check, Car, ArrowRight } from "@/components/icons";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -11,17 +11,16 @@ export const metadata: Metadata = {
 };
 
 const values = [
-  { icon: Dollar, title: "Fair, transparent pricing", body: "We back every offer with live market data and explain exactly how we got there. No lowballing, no hidden fees." },
-  { icon: Clock, title: "Respect for your time", body: "From first call to payment in as little as a day. We come to you and handle all the paperwork." },
-  { icon: Shield, title: "Safety first", body: "No strangers in your driveway, no risky cash meetups. Just a professional, secure transaction." },
-  { icon: Car, title: "Any car, any condition", body: "New, old, financed, leased or barely running — we make an honest offer on every vehicle." },
+  { icon: Dollar, title: "Fair, transparent pricing", body: "Every offer is backed by live market data — no lowballing, no hidden fees." },
+  { icon: Clock, title: "Respect for your time", body: "Offer to payment in as little as a day, and we come to you." },
+  { icon: Shield, title: "Safety first", body: "No strangers in your driveway, no cash meetups — just a secure sale." },
+  { icon: Car, title: "Any car, any condition", body: "New, old, financed, leased or barely running — we'll make an offer." },
 ];
 
 // Honest, defensible claims — not invented counts. Swap in real numbers later.
 const stats = [
   { value: "Free", label: "Offers, every time" },
   { value: "Same day", label: "Most offers turned around" },
-  { value: "$0", label: "Fees or commissions" },
   { value: "To you", label: "We come to your door" },
 ];
 
@@ -31,26 +30,22 @@ export default function AboutPage() {
       <section className="relative overflow-hidden bg-cream">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
         <div className="container-x relative py-12 text-center sm:py-16">
-          <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-4 py-1.5 text-sm font-semibold text-navy shadow-soft">
-            <MapleLeaf className="h-4 w-4 text-accent" /> Canadian-owned &amp; operated
-          </span>
-          <h1 className="mx-auto mt-5 max-w-3xl font-display text-4xl font-extrabold leading-tight tracking-tight text-navy sm:text-5xl">
+          <h1 className="mx-auto max-w-3xl font-display text-4xl font-extrabold leading-tight tracking-tight text-navy sm:text-5xl">
             We make selling your car simple, fast and fair
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">
-            {site.name} exists for one reason: selling a car shouldn&apos;t be
-            stressful. No endless listings, no no-shows, no haggling at a dealership —
-            just a fair offer and a friendly team that comes to you.
+            Selling your car should be simple. {site.name} gives you a fair offer,
+            comes to you, and handles the hard part.
           </p>
         </div>
       </section>
 
       {/* Stats */}
       <section className="border-y border-slate-100 bg-white">
-        <div className="container-x grid grid-cols-2 gap-y-8 py-10 md:grid-cols-4">
+        <div className="container-x grid grid-cols-3 gap-x-4 gap-y-8 py-10">
           {stats.map((s) => (
             <div key={s.label} className="text-center">
-              <div className="font-display text-3xl font-extrabold text-navy sm:text-4xl">{s.value}</div>
+              <div className="font-display text-2xl font-extrabold text-navy sm:text-4xl">{s.value}</div>
               <div className="mt-1 text-sm text-muted">{s.label}</div>
             </div>
           ))}
@@ -67,16 +62,11 @@ export default function AboutPage() {
             <div className="mt-5 space-y-4 text-muted">
               <p>
                 Selling a car the usual way is a hassle — endless listings, no-shows,
-                lowball messages, and then a haircut at the dealership trade-in counter.
+                and a haircut at the dealership trade-in counter.
               </p>
               <p>
-                We started {site.name} to make it the easy part of your week instead: a
-                fair, upfront number, a friendly team that comes to you, and payment the
-                same day. No pressure, no games.
-              </p>
-              <p>
-                We buy cars from drivers across the country and treat every seller the
-                way we&apos;d want to be treated — straight answers and a fair deal.
+                We started {site.name} to make it easy instead: a fair, upfront number,
+                a team that comes to you, and payment the same day. No pressure, no games.
               </p>
             </div>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
@@ -93,7 +83,6 @@ export default function AboutPage() {
                 "We come to you, anywhere in Canada",
                 "We buy financed & leased cars too",
                 "Payment on the spot — we handle the paperwork",
-                "Real people, real phone support",
               ].map((p) => (
                 <li key={p} className="flex items-start gap-3">
                   <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-white">

@@ -14,6 +14,10 @@ body {
   background-color: rgba(59, 130, 246, 0.18);
 }
 
+/* Hide scrollbar for swipe carousels (content still scrolls/swipes). */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
@@ -85,14 +89,14 @@ body {
 
   /* Forms */
   .field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-ink outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/20;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-4 text-[17px] text-ink outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/20;
   }
   select.field {
     @apply appearance-none bg-[length:18px] bg-[right_0.9rem_center] bg-no-repeat pr-10;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .label {
-    @apply mb-1.5 block text-[0.9375rem] font-medium text-navy;
+    @apply mb-1.5 block text-base font-medium text-navy;
   }
 
   /* Card vocabulary — three distinct surfaces, not one repeated tile. */

@@ -17,7 +17,7 @@ import {
   Send, Shield, Car, Lock,
 } from "@/components/icons";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 type InputMode = "manual" | "vin";
 const MAX_PHOTOS = 12;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -33,12 +33,10 @@ function formatPhone(v: string): string {
 
 export default function OfferFlow() {
   const sp = useSearchParams();
-  // Did we arrive from the home form with a complete vehicle? If so we show a
-  // summary card (with Edit) instead of re-asking for everything.
-  const cameFromWidget = Boolean(sp.get("year") && sp.get("make") && sp.get("model") && sp.get("km"));
-  const [step, setStep] = useState<Step>(1);
+  // Arrived from the home form with a vehicle? Skip straight to the details step.
+  const cameWithVehicle = Boolean(sp.get("year") && sp.get("make") && sp.get("model"));
+  const [step, setStep] = useState<Step>(cameWithVehicle ? 2 : 1);
   const [inputMode, setInputMode] = useState<InputMode>(() => (sp.get("mode") === "vin" ? "vin" : "manual"));
-  const [editing, setEditing] = useState(false);
 
   // vehicle (prefilled from the home-form query string)
   const [year, setYear] = useState(() => sp.get("year") || "");
@@ -54,9 +52,8 @@ export default function OfferFlow() {
   const [vinError, setVinError] = useState("");
   const [decoding, setDecoding] = useState(false);
   const [decoded, setDecoded] = useState<DecodedVehicle | null>(null);
-  const [pendingEstimate, setPendingEstimate] = useState<OfferEstimate | null>(null);
 
-  // trims (manual mode) — loaded for the chosen year/make/model
+  // trims — loaded for the chosen year/make/model
   const [trims, setTrims] = useState<{ item: string; count: number }[]>([]);
   const [trimsLoading, setTrimsLoading] = useState(false);
 
@@ -79,11 +76,9 @@ export default function OfferFlow() {
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
 
-  // (Prefill comes from the query string via the useState initializers above.)
-
-  // Load the real trims for the chosen year/make/model (manual entry only).
+  // Load the real trims for the chosen year/make/model.
   useEffect(() => {
-    if (inputMode !== "manual" || !year || !make || !model || (cameFromWidget && !editing)) {
+    if (!year || !make || !model) {
       setTrims([]);
       return;
     }
@@ -103,11 +98,9 @@ export default function OfferFlow() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputMode, year, make, model, cameFromWidget, editing]);
+  }, [year, make, model]);
 
-  // Funnel start — fires for EVERY way into /get-offer (homepage widget OR a
-  // direct entry via header/sticky/exit/footer), so step-1 bounce is visible.
+  // Funnel start — fires for EVERY way into /get-offer.
   useEffect(() => {
     if (flowStarted.current) return;
     flowStarted.current = true;
@@ -115,8 +108,7 @@ export default function OfferFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Revoke object URLs only on unmount (a [previews] dependency would revoke
-  // URLs that are still being displayed).
+  // Revoke object URLs only on unmount.
   const previewsRef = useRef<string[]>([]);
   useEffect(() => {
     previewsRef.current = previews;
@@ -129,9 +121,7 @@ export default function OfferFlow() {
   }, []);
 
   const models = make ? modelsFor(make) : [];
-  const step1Valid = Boolean(year && make && model && kmv);
-  // Manual + arrived complete + not actively editing -> show the summary card.
-  const showSummary = inputMode === "manual" && cameFromWidget && !editing;
+  const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
 
   function addPhotos(list: FileList | null) {
@@ -176,52 +166,52 @@ export default function OfferFlow() {
     estimateViews.current += 1;
   }
 
-  // MANUAL path -> real estimate.
-  async function goToOffer(e: React.FormEvent) {
+  // STEP 1 (manual) -> details step.
+  function goToDetails(e: React.FormEvent) {
     e.preventDefault();
-    if (!step1Valid) {
-      // Keep the button live: on an incomplete submit, jump to the first gap.
+    if (!vehicleValid) {
       setStep1Error(true);
-      const firstMissing = !year ? "year" : !make ? "make" : !model ? "model" : "km";
-      const el = document.getElementById(firstMissing);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.focus();
+      const firstMissing = !year ? "year" : !make ? "make" : "model";
+      document.getElementById(firstMissing)?.focus();
       return;
     }
-    const yr = Number(year);
-    const kmNum = Number(kmv);
-    setError("");
-    track("step1_submitted", { make, model, year: yr, source: source() });
+    track("step1_submitted", { make, model, year: Number(year), source: source() });
     setStep(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // STEP 2 -> value step (calculate the estimate now that we have mileage).
+  async function goToValue(e: React.FormEvent) {
+    e.preventDefault();
+    if (!kmv) {
+      setError("Please add your mileage to see your value.");
+      document.getElementById("km")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("km")?.focus();
+      return;
+    }
+    setError("");
+    const yr = Number(year);
+    track("details_submitted", { make, model, year: yr, hasPhotos: photos.length > 0 });
+    setStep(3);
     setCalculating(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
-      const est = await fetchEstimate(year, make, model, kmNum);
+      const est = await fetchEstimate(year, make, model, Number(kmv));
       revealEstimate(est, { make, model, year: yr });
     } catch {
-      // Network hiccup — route to the human "custom offer" flow, never a guess.
       revealEstimate(UNIQUE, { make, model, year: yr });
     } finally {
       setCalculating(false);
     }
   }
 
-  // VIN path -> decode (+ estimate) then confirm.
-  async function decodeAndEstimate(e: React.FormEvent) {
+  // VIN path -> decode then confirm.
+  async function decodeVin(e: React.FormEvent) {
     e.preventDefault();
     const v = vin.trim().toUpperCase();
     if (!VIN_RE.test(v)) {
       setVinError("Please enter a valid 17-character VIN (no spaces).");
-      const el = document.getElementById("vin");
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.focus();
-      return;
-    }
-    if (!kmv) {
-      setVinError("Please add your mileage (km).");
-      const el = document.getElementById("vkm");
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.focus();
+      document.getElementById("vin")?.focus();
       return;
     }
     setVinError("");
@@ -231,15 +221,14 @@ export default function OfferFlow() {
       const res = await fetch("/api/decode-vin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vin: v, mileageKm: Number(kmv) }),
+        body: JSON.stringify({ vin: v }),
       });
       const data = await res.json();
       if (!data.ok || !data.vehicle) {
-        setVinError("We couldn't read that VIN. Double-check it, or switch to “Enter details” above.");
+        setVinError("We couldn't read that VIN. Double-check it, or switch to “Make & Model” above.");
         return;
       }
       setDecoded(data.vehicle as DecodedVehicle);
-      setPendingEstimate((data.estimate as OfferEstimate) || null);
     } catch {
       setVinError("Something went wrong. Please try again, or enter your details manually.");
     } finally {
@@ -260,17 +249,8 @@ export default function OfferFlow() {
       year: decoded.year || 0,
       source: "vin",
     });
-    const est = pendingEstimate || UNIQUE;
     setDecoded(null);
     setStep(2);
-    setCalculating(true);
-    if (calcTimer.current) clearTimeout(calcTimer.current);
-    calcTimer.current = setTimeout(() => setCalculating(false), 500);
-    revealEstimate(est, {
-      make: decoded.make || "",
-      model: decoded.model || "",
-      year: decoded.year || 0,
-    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -278,8 +258,13 @@ export default function OfferFlow() {
     if (decoded?.year) setYear(String(decoded.year));
     track("vin_rejected", {});
     setDecoded(null);
-    setPendingEstimate(null);
     setInputMode("manual");
+  }
+
+  function editVehicle() {
+    setInputMode("manual");
+    setStep(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submitLead(e: React.FormEvent) {
@@ -312,13 +297,11 @@ export default function OfferFlow() {
       fd.append("phone", phone);
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
-      // The estimate the customer was shown — stored only if the server can't re-price.
       if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
       photos.forEach((f) => fd.append("photos", f));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
-      // GA4 recommended lead event — value/currency let it import as an Ads conversion.
       track("generate_lead", {
         currency: "CAD",
         value: estimate?.mid ?? 0,
@@ -328,13 +311,11 @@ export default function OfferFlow() {
         contactMethod,
         unique: !!estimate?.unique,
       });
-      setStep(4);
+      setStep(5);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       track("lead_error", { contactMethod });
-      setError(
-        "Something went wrong submitting your request. Please try again or call us.",
-      );
+      setError("Something went wrong submitting your request. Please try again or call us.");
     } finally {
       setSubmitting(false);
     }
@@ -344,7 +325,7 @@ export default function OfferFlow() {
   function advanceToContact() {
     track("contact_started", { unique: !!estimate?.unique, reentry: contactStarts.current > 0 });
     contactStarts.current += 1;
-    setStep(3);
+    setStep(4);
   }
 
   const isUnique = estimate?.unique;
@@ -399,100 +380,48 @@ export default function OfferFlow() {
     </div>
   );
 
-  const callLine = (
-    <p className="text-sm text-muted">
-      Prefer to talk? Call{" "}
-      <a href={telHref} onClick={() => track("phone_click", { location: "offer_step1" })} className="font-bold text-brand-700 hover:underline">{site.phoneDisplay}</a>
-    </p>
-  );
-
   return (
     <div className="container-x max-w-4xl py-10 sm:py-14">
-      {step < 4 && <Stepper step={step} />}
+      {step < 5 && <Stepper step={step} />}
 
-      {/* -------------------- STEP 1: vehicle details -------------------- */}
+      {/* -------------------- STEP 1: vehicle (year / make / model) -------------------- */}
       {step === 1 && !decoded && (
-        <div className="card mt-8 animate-fade-up p-6 sm:p-9">
-          {showSummary ? (
-            <>
-              <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
-                You&apos;re almost there
-              </h1>
-              <p className="mt-2 text-center text-muted">
-                Here&apos;s your vehicle. Add a few photos if you&apos;d like — then see your estimate.
-              </p>
-              <form onSubmit={goToOffer}>
-                <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex items-center gap-4">
-                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-100 text-navy">
-                      <Car className="h-6 w-6" />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
-                      <p className="font-display text-lg font-bold text-navy sm:text-xl">
-                        {year} {make} {model}
-                      </p>
-                      <p className="mt-0.5 text-sm text-muted">
-                        {trim ? `${trim} · ` : ""}{fmtKm(Number(kmv))}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(true)}
-                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-brand hover:text-brand-700"
-                  >
-                    Edit
-                  </button>
-                </div>
+        <div className="mx-auto mt-8 max-w-xl animate-fade-up">
+          <div className="card p-6 sm:p-9">
+            <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
+              Tell us about your vehicle
+            </h1>
+            <p className="mt-2 text-center text-muted">
+              {inputMode === "vin"
+                ? "Enter your VIN and we'll pull up your exact vehicle — fastest and most accurate."
+                : "Just your year, make and model to start — trim and mileage come next."}
+            </p>
 
-                {photoBlock}
-
-                <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-                  {callLine}
-                  <button type="submit" disabled={!step1Valid} className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">
-                    See My Estimate <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <>
-              <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
-                Tell us about your vehicle
-              </h1>
-          <p className="mt-2 text-center text-muted">
-            {inputMode === "vin"
-              ? "Enter your VIN and we'll pull up your exact vehicle — fastest and most accurate."
-              : "Just the basics — year, make, model and mileage. Everything else is optional."}
-          </p>
-
-          {/* Mode toggle */}
-          <div className="mt-5 flex justify-center">
-            <div className="inline-flex rounded-xl bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setInputMode("manual")}
-              aria-pressed={inputMode === "manual"}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
-            >
-              Enter details
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputMode("vin")}
-              aria-pressed={inputMode === "vin"}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
-            >
-              <Car className="h-4 w-4" /> Enter VIN <span className="text-muted">(faster)</span>
-            </button>
+            {/* Mode toggle */}
+            <div className="mt-6">
+              <div className="flex rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setInputMode("manual")}
+                  aria-pressed={inputMode === "manual"}
+                  className={`flex-1 rounded-lg px-3 py-2.5 text-base font-semibold transition ${inputMode === "manual" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
+                >
+                  Make &amp; Model
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode("vin")}
+                  aria-pressed={inputMode === "vin"}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-base font-semibold transition ${inputMode === "vin" ? "bg-white text-navy shadow-soft" : "text-muted hover:text-navy"}`}
+                >
+                  <Car className="h-4 w-4" /> Enter VIN <span className="hidden text-muted sm:inline">(faster)</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {inputMode === "vin" ? (
-            <form onSubmit={decodeAndEstimate}>
-              <div className="mt-6 grid gap-4">
-                <div>
+            {inputMode === "vin" ? (
+              <form onSubmit={decodeVin}>
+                <div className="mt-6">
                   <label className="label" htmlFor="vin">VIN <span className="font-normal text-muted">(17 characters)</span></label>
                   <input
                     id="vin"
@@ -509,95 +438,100 @@ export default function OfferFlow() {
                     Find it on your registration, insurance card, or the driver-side dashboard / door jamb.
                   </p>
                 </div>
-                <div>
-                  <label className="label" htmlFor="vkm">Mileage (km)</label>
-                  <input id="vkm" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
-                  <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
-                </div>
-              </div>
 
-              {photoBlock}
-
-              <button type="submit" disabled={decoding} className="btn-primary mt-8 w-full text-lg disabled:opacity-60">
-                {decoding ? "Looking up your VIN…" : <>See My Estimate <ArrowRight className="h-5 w-5" /></>}
-              </button>
-              <a
-                href={telHref}
-                onClick={() => track("phone_click", { location: "offer_step1_vin_call" })}
-                className="btn-ghost mt-3 w-full text-lg"
-              >
-                <Phone className="h-5 w-5" /> Call or text {site.phoneDisplay}
-              </a>
-              {vinError && (
-                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{vinError}</p>
-              )}
-            </form>
-          ) : (
-            <form onSubmit={goToOffer}>
-              {/* Single-column, progressive: Year + Mileage shown; Make/Model/Trim
-                  reveal one after another as the prior field is filled. */}
-              <div className="mt-6 grid grid-cols-1 gap-4">
-                <div>
-                  <label className="label" htmlFor="year">Year</label>
-                  <select id="year" className="field" value={year} onChange={(e) => { setYear(e.target.value); setMake(""); setModel(""); setTrim(""); }}>
-                    <option value="">Select year</option>
-                    {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-
-                {year && (
-                  <div className="animate-fade-up">
+                <button type="submit" disabled={decoding} className="btn-primary mt-8 w-full py-4 text-lg disabled:opacity-60">
+                  {decoding ? "Looking up your VIN…" : <>Continue <ArrowRight className="h-5 w-5" /></>}
+                </button>
+                {vinError && (
+                  <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{vinError}</p>
+                )}
+              </form>
+            ) : (
+              <form onSubmit={goToDetails}>
+                <div className="mt-6 grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="label" htmlFor="year">Year</label>
+                    <select id="year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+                      <option value="">Select year</option>
+                      {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className="label" htmlFor="make">Make</label>
-                    <select
-                      id="make"
-                      className="field"
-                      value={make}
-                      onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}
-                    >
+                    <select id="make" className="field" value={make} onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}>
                       <option value="">Select make</option>
                       {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
                   </div>
-                )}
-
-                {make && (
-                  <div className="animate-fade-up">
+                  <div>
                     <label className="label" htmlFor="model">Model</label>
                     <select
                       id="model"
-                      className="field"
+                      className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                       value={model}
+                      disabled={!make}
                       onChange={(e) => { setModel(e.target.value); setTrim(""); }}
                     >
-                      <option value="">Select model</option>
+                      <option value="">{make ? "Select model" : "Select a make first"}</option>
                       {models.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
-                )}
+                </div>
 
-                {model && (
-                  <div className="animate-fade-up">
-                    <label className="label" htmlFor="trim">Trim</label>
-                    <select
-                      id="trim"
-                      className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      value={trim}
-                      disabled={trimsLoading}
-                      onChange={(e) => setTrim(e.target.value)}
-                    >
-                      <option value="">
-                        {trimsLoading ? "Loading trims…" : "Not sure"}
-                      </option>
-                      {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
-                        <option key={t.item} value={t.item}>{t.item}</option>
-                      ))}
-                    </select>
-                    {!trimsLoading && trims.length === 0 && (
-                      <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
-                    )}
-                  </div>
+                <button type="submit" className="btn-primary mt-8 w-full py-4 text-lg">
+                  Continue <ArrowRight className="h-5 w-5" />
+                </button>
+                {step1Error && !vehicleValid && (
+                  <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">
+                    Just pick your year, make, and model to continue.
+                  </p>
                 )}
+              </form>
+            )}
 
+            <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
+              <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- STEP 1b: confirm decoded VIN -------------------- */}
+      {step === 1 && decoded && (
+        <ConfirmCard decoded={decoded} onConfirm={confirmDecoded} onReject={rejectDecoded} />
+      )}
+
+      {/* -------------------- STEP 2: details (trim / mileage / photos) -------------------- */}
+      {step === 2 && (
+        <div className="mx-auto mt-8 max-w-2xl animate-fade-up">
+          <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
+          <div className="card mt-6 p-6 sm:p-9">
+            <h1 className="font-display text-2xl font-bold text-navy sm:text-3xl">
+              Add a few details
+            </h1>
+            <p className="mt-2 text-muted">
+              Trim, mileage and a few photos help us put together your firm offer.
+            </p>
+            <form onSubmit={goToValue}>
+              <div className="mt-6 grid grid-cols-1 gap-4">
+                <div>
+                  <label className="label" htmlFor="trim">Trim</label>
+                  <select
+                    id="trim"
+                    className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    value={trim}
+                    disabled={trimsLoading}
+                    onChange={(e) => setTrim(e.target.value)}
+                  >
+                    <option value="">{trimsLoading ? "Loading trims…" : "Not sure"}</option>
+                    {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
+                      <option key={t.item} value={t.item}>{t.item}</option>
+                    ))}
+                  </select>
+                  {!trimsLoading && trims.length === 0 && (
+                    <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
+                  )}
+                </div>
                 <div>
                   <label className="label" htmlFor="km">Mileage (km)</label>
                   <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
@@ -607,52 +541,30 @@ export default function OfferFlow() {
 
               {photoBlock}
 
-              <button type="submit" className="btn-primary mt-8 w-full text-lg">
-                See My Estimate <ArrowRight className="h-5 w-5" />
+              <button type="submit" className="btn-primary mt-8 w-full py-4 text-lg">
+                See My Value <ArrowRight className="h-5 w-5" />
               </button>
-              <a
-                href={telHref}
-                onClick={() => track("phone_click", { location: "offer_step1_call" })}
-                className="btn-ghost mt-3 w-full text-lg"
-              >
-                <Phone className="h-5 w-5" /> Call or text {site.phoneDisplay}
-              </a>
-              {step1Error && !step1Valid && (
-                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">
-                  Just add your year, make, model, and mileage to see your estimate.
-                </p>
+              {error && (
+                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{error}</p>
               )}
             </form>
-          )}
-
-          <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
-            <Lock className="h-4 w-4" /> We never sell your information.
-          </p>
-            </>
-          )}
+          </div>
         </div>
       )}
 
-      {/* -------------------- STEP 1b: confirm decoded VIN -------------------- */}
-      {step === 1 && decoded && (
-        <ConfirmCard decoded={decoded} onConfirm={confirmDecoded} onReject={rejectDecoded} />
-      )}
-
-      {/* -------------------- STEP 2: offer -------------------- */}
-      {step === 2 && (
+      {/* -------------------- STEP 3: value / estimate -------------------- */}
+      {step === 3 && (
         <div className="mt-8 animate-fade-up">
           {calculating ? (
             <div className="animate-fade-up">
               <div className="mb-6 flex items-center justify-center gap-3 text-navy">
                 <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
-                <span className="font-semibold">
-                  Calculating your estimate…
-                </span>
+                <span className="font-semibold">Calculating your value…</span>
               </div>
               <OfferSkeleton />
             </div>
           ) : !estimate ? null : isUnique ? (
-            <UniqueOffer onContinue={advanceToContact} onBack={() => { setEditing(true); setStep(1); }} vehicle={{ year, make, model, trim }} />
+            <UniqueOffer onContinue={advanceToContact} onBack={editVehicle} vehicle={{ year, make, model, trim }} />
           ) : (
             <div className="grid gap-8 lg:grid-cols-2">
               <div className="card p-6 sm:p-8">
@@ -660,7 +572,7 @@ export default function OfferFlow() {
                   {year} {make} {model} {trim}
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-bold text-navy">
-                  Your estimated range
+                  Your estimated value
                 </h1>
                 <div className="mt-5">
                   <OfferGauge low={estimate.low} high={estimate.high} />
@@ -669,7 +581,7 @@ export default function OfferFlow() {
 
               <div className="flex flex-col">
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-navy">
-                  <Check className="h-4 w-4" /> Estimate ready
+                  <Check className="h-4 w-4" /> Value ready
                 </span>
                 <div className="mt-3 font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">
                   <CountUp value={estimate.low} format={cad} /> –{" "}
@@ -695,7 +607,7 @@ export default function OfferFlow() {
                 </button>
                 <a
                   href={telHref}
-                  onClick={() => track("phone_click", { location: "offer_step2" })}
+                  onClick={() => track("phone_click", { location: "offer_value" })}
                   className="btn mt-3 border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
                 >
                   <Phone className="h-5 w-5" /> Call Now Instead
@@ -710,7 +622,7 @@ export default function OfferFlow() {
                   </ul>
                 </div>
 
-                <button onClick={() => { setEditing(true); setStep(1); }} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
+                <button onClick={editVehicle} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
                   ← Edit vehicle details
                 </button>
               </div>
@@ -719,10 +631,11 @@ export default function OfferFlow() {
         </div>
       )}
 
-      {/* -------------------- STEP 3: contact -------------------- */}
-      {step === 3 && (
+      {/* -------------------- STEP 4: contact -------------------- */}
+      {step === 4 && (
         <div className="mx-auto mt-8 max-w-xl animate-fade-up">
-          <div className="card p-6 sm:p-9">
+          <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
+          <div className="card mt-6 p-6 sm:p-9">
             <div className="text-center">
               <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-navy text-white">
                 <Send className="h-7 w-7" />
@@ -732,7 +645,7 @@ export default function OfferFlow() {
               </h1>
               {estimate && !estimate.unique ? (
                 <p className="mt-2 text-muted">
-                  Your estimated range is{" "}
+                  Your estimated value is{" "}
                   <span className="font-semibold text-navy">{cad(estimate.low)} – {cad(estimate.high)}</span>.
                   We&apos;ll confirm a firm offer for your {year} {make} {model} after a
                   few quick details.
@@ -804,7 +717,7 @@ export default function OfferFlow() {
 
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
-              <button type="submit" disabled={submitting} className="btn-primary w-full text-lg disabled:opacity-60">
+              <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
                 {submitting ? "Sending…" : "Get My Firm Offer"}
                 {!submitting && <ArrowRight className="h-5 w-5" />}
               </button>
@@ -817,7 +730,7 @@ export default function OfferFlow() {
               </p>
               <a
                 href={telHref}
-                onClick={() => track("phone_click", { location: "offer_step3" })}
+                onClick={() => track("phone_click", { location: "offer_contact" })}
                 className="btn w-full border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
               >
                 <Phone className="h-5 w-5" /> Call Now Instead
@@ -835,14 +748,14 @@ export default function OfferFlow() {
               )}
             </form>
           </div>
-          <button onClick={() => setStep(2)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand-700">
+          <button onClick={() => setStep(3)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand-700">
             ← Back
           </button>
         </div>
       )}
 
-      {/* -------------------- STEP 4: success -------------------- */}
-      {step === 4 && (
+      {/* -------------------- STEP 5: success -------------------- */}
+      {step === 5 && (
         <div className="mx-auto mt-10 max-w-xl animate-fade-up text-center">
           <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-slate-100 text-navy">
             <Check className="h-10 w-10" />
@@ -872,9 +785,9 @@ export default function OfferFlow() {
 }
 
 function Stepper({ step }: { step: Step }) {
-  const labels = ["Your car", "Your estimate", "Your details"];
+  const labels = ["Vehicle", "Details", "Value", "Contact"];
   return (
-    <ol className="mx-auto flex max-w-xl items-center">
+    <ol className="mx-auto flex max-w-2xl items-center">
       {labels.map((label, i) => {
         const n = (i + 1) as Step;
         const active = step >= n;
@@ -899,6 +812,42 @@ function Stepper({ step }: { step: Step }) {
         );
       })}
     </ol>
+  );
+}
+
+function VehicleSummary({
+  year, make, model, trim, kmv, onEdit,
+}: {
+  year: string;
+  make: string;
+  model: string;
+  trim: string;
+  kmv: string;
+  onEdit: () => void;
+}) {
+  const sub = [trim, kmv ? fmtKm(Number(kmv)) : ""].filter(Boolean).join(" · ");
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <div className="flex items-center gap-4">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-100 text-navy">
+          <Car className="h-6 w-6" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
+          <p className="font-display text-lg font-bold text-navy sm:text-xl">
+            {year} {make} {model}
+          </p>
+          {sub && <p className="mt-0.5 text-sm text-muted">{sub}</p>}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-brand hover:text-brand-700"
+      >
+        Edit
+      </button>
+    </div>
   );
 }
 

@@ -1,5 +1,3 @@
-import { Section } from "./Section";
-
 const steps = [
   {
     icon: "/icons/step-tell-us.png",
@@ -20,19 +18,23 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <Section id="how" className="bg-cream">
-      <h2 className="h-section">How it works</h2>
+    <section id="how" className="bg-cream py-8 sm:py-12">
+      <div className="container-x">
+        <div className="mx-auto max-w-col wide:max-w-none">
+          <h2 className="h-section">How it works</h2>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
-        {steps.map((s) => (
-          <div key={s.title} className="card h-full px-7 py-9 sm:px-8 sm:py-11">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={s.icon} alt="" aria-hidden="true" className="h-16 w-16" />
-            <h3 className="mt-5 text-xl font-bold text-navy">{s.title}</h3>
-            <p className="mt-2 text-muted">{s.body}</p>
+          <div className="mt-6 grid gap-6 wide:grid-cols-3">
+            {steps.map((s) => (
+              <div key={s.title} className="card h-full px-7 pb-9 pt-6 sm:px-8 sm:pb-11 sm:pt-7">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`${s.icon}?v=2`} alt="" aria-hidden="true" className="h-16 w-16" />
+                <h3 className="mt-7 text-xl font-bold text-navy">{s.title}</h3>
+                <p className="mt-4 text-muted">{s.body}</p>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
-    </Section>
+    </section>
   );
 }

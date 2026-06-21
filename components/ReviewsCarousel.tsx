@@ -1,13 +1,9 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { site } from "@/lib/site-config";
-import { GoogleG, Star } from "./icons";
+import { Star } from "./icons";
+import Carousel from "./Carousel";
 
 /* ───────────────────────────────────────────────────────────────────────────
-   TODO — REPLACE WITH REAL GOOGLE DATA BEFORE PUBLISHING.
-   These are placeholder reviews. Swap REVIEWS for your hand-picked real ones,
-   and set GOOGLE_RATING / GOOGLE_REVIEW_COUNT to your actual Google numbers.
+   TODO — REPLACE WITH REAL GOOGLE REVIEWS BEFORE RUNNING ADS.
+   These are placeholder reviews. Swap REVIEWS for your hand-picked real ones.
    ─────────────────────────────────────────────────────────────────────────── */
 const REVIEWS = [
   {
@@ -47,92 +43,42 @@ const REVIEWS = [
   },
 ];
 
-const GOOGLE_RATING = "5.0"; // TODO: your real Google rating
-const GOOGLE_REVIEW_COUNT = REVIEWS.length; // TODO: your real total review count
-
-function Stars({ n, className = "h-4 w-4" }: { n: number; className?: string }) {
+function Stars({ n }: { n: number }) {
   return (
     <span className="flex text-amber-400" role="img" aria-label={`${n} out of 5 stars`}>
       {Array.from({ length: 5 }).map((_, i) => (
-        <Star key={i} className={`${className} ${i < n ? "" : "text-slate-200"}`} />
+        <Star key={i} className={`h-5 w-5 ${i < n ? "" : "text-slate-200"}`} />
       ))}
     </span>
   );
 }
 
+/**
+ * Swipeable review carousel — one card at a time on mobile, exactly three on
+ * desktop, looping endlessly (three identical copies feed the Carousel's loop).
+ */
 export default function ReviewsCarousel() {
-  const [i, setI] = useState(0);
-  const count = REVIEWS.length;
-
-  useEffect(() => {
-    const id = setInterval(() => setI((p) => (p + 1) % count), 5000);
-    return () => clearInterval(id);
-  }, [count]);
-
-  const r = REVIEWS[i];
-
+  const loopReviews = [...REVIEWS, ...REVIEWS, ...REVIEWS];
   return (
-    <div className="relative flex h-full flex-col p-8 sm:p-10">
-      {/* Google Reviews link — corner */}
-      {(site.reviewsUrl as string) && (
-        <a
-          href={site.reviewsUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Read our reviews on Google"
-          className="absolute right-6 top-6 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-muted shadow-sm transition hover:border-brand hover:text-navy"
+    <Carousel loop trackClassName="gap-5 pb-1">
+      {loopReviews.map((r, idx) => (
+        <article
+          key={`${r.name}-${idx}`}
+          className="flex w-full shrink-0 snap-start flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:p-7 wide:w-[calc((100%_-_2.5rem)/3)]"
         >
-          <GoogleG className="h-4 w-4" /> Google Reviews
-        </a>
-      )}
-
-      {/* Rating summary */}
-      <div className="pr-28">
-        <div className="flex items-end gap-2">
-          <span className="font-display text-4xl font-extrabold leading-none text-navy">
-            {GOOGLE_RATING}
-          </span>
-          <span className="pb-0.5 text-sm text-muted">/ 5.0</span>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Stars n={5} className="h-5 w-5" />
-          <span className="text-sm text-muted">{GOOGLE_REVIEW_COUNT} Google reviews</span>
-        </div>
-      </div>
-
-      {/* Rotating review */}
-      <div className="mt-7 flex-1 border-t border-slate-100 pt-6">
-        <div key={i} className="animate-fade-up">
-          <Stars n={r.rating} className="h-5 w-5" />
-          <p className="mt-3 min-h-[6.5rem] text-lg leading-relaxed text-navy">&ldquo;{r.text}&rdquo;</p>
-          <p className="mt-3 text-base font-semibold text-navy">
+          <Stars n={r.rating} />
+          <p className="mt-4 min-h-[6rem] text-lg leading-relaxed text-navy">
+            &ldquo;{r.text}&rdquo;
+          </p>
+          <p className="mt-4 text-base font-semibold text-navy">
             {r.name}
             <span className="font-normal text-muted">
               {" "}
               · {r.location} · {r.when}
             </span>
           </p>
-        </div>
-      </div>
-
-      {/* Dots */}
-      <div className="mt-6 flex items-center gap-1">
-        {REVIEWS.map((_, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => setI(idx)}
-            aria-label={`Show review ${idx + 1}`}
-            className="group grid h-11 place-items-center px-1.5"
-          >
-            <span
-              className={`block h-2 rounded-full transition-all ${
-                idx === i ? "w-6 bg-brand" : "w-2 bg-slate-300 group-hover:bg-slate-400"
-              }`}
-            />
-          </button>
-        ))}
-      </div>
-    </div>
+        </article>
+      ))}
+    </Carousel>
   );
 }
