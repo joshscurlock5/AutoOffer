@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addLead, savePhotos } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
+import { notifyNewLead } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -115,6 +116,9 @@ export async function POST(req: NextRequest) {
     };
 
     await addLead(lead);
+    // Best-effort owner SMS alert (Twilio). Awaited so Amplify's Lambda doesn't
+    // freeze the send; never throws, so the saved lead is unaffected.
+    await notifyNewLead(lead);
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("POST /api/leads failed", err);
