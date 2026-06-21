@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     };
 
     await addLead(lead);
-    // Best-effort owner SMS alert (Twilio). Awaited so Amplify's Lambda doesn't
+    // Best-effort owner alert (Telegram). Awaited so Amplify's Lambda doesn't
     // freeze the send; never throws, so the saved lead is unaffected.
     await notifyNewLead(lead);
     return NextResponse.json({ ok: true, id });
