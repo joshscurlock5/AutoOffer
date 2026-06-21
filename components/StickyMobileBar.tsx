@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { telHref } from "@/lib/site-config";
@@ -16,6 +16,8 @@ import { ArrowRight, Phone } from "./icons";
 export default function StickyMobileBar() {
   const pathname = usePathname();
   const [show, setShow] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const hideBar = pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer");
 
   useEffect(() => {
     const form = document.getElementById("estimate");
@@ -31,7 +33,29 @@ export default function StickyMobileBar() {
     return () => io.disconnect();
   }, [pathname]);
 
-  if (pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer")) {
+  // Publish the bar's live height so the floating chat button can sit above it
+  // while it's up and drop back to the corner when it's down. Cleared whenever
+  // the bar isn't rendered/visible so the chat button falls back to the corner.
+  useEffect(() => {
+    const root = document.documentElement;
+    const clear = () => root.style.removeProperty("--mobile-cta-bar");
+    if (hideBar || !show) {
+      clear();
+      return clear;
+    }
+    const el = barRef.current;
+    if (!el) return clear;
+    const apply = () => root.style.setProperty("--mobile-cta-bar", `${el.offsetHeight}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      clear();
+    };
+  }, [show, hideBar]);
+
+  if (hideBar) {
     return null;
   }
 
@@ -41,6 +65,7 @@ export default function StickyMobileBar() {
 
   return (
     <div
+      ref={barRef}
       aria-hidden={!show}
       className={`fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_-8px_24px_-12px_rgba(16,42,76,0.25)] backdrop-blur transition-transform duration-300 lg:hidden ${
         show ? "translate-y-0" : "translate-y-full"

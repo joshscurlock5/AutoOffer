@@ -4,9 +4,13 @@ import { useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "./icons";
 
 /**
- * Horizontal carousel with a smooth glide (no hard scroll-snap). Touch users
- * flick with native momentum; mouse users click-drag. After either gesture it
- * eases to the nearest item — the same smooth motion as the arrow buttons.
+ * Horizontal carousel. In the phone/swipe layout (below the `wide` breakpoint)
+ * it uses native CSS scroll-snap — `snap-x snap-mandatory` on the track plus
+ * `snap-always` on each card — so a flick advances exactly ONE card and lands on
+ * it with the browser's own smooth animation (TikTok-style; never flies past).
+ * At `wide`+ snap is off (`wide:snap-none`) for the desktop grid / 3-up view.
+ * Mouse users click-drag (snap is suspended mid-drag, then `settle()` eases to
+ * the nearest card on release); the arrow buttons nudge by one card.
  *
  * `loop`: the caller renders THREE identical copies of the items; the carousel
  * keeps the scroll within the middle copy and jumps by one copy-width at the
@@ -114,6 +118,7 @@ export default function Carousel({
     if (!el) return;
     drag.current = { active: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
     el.style.cursor = "grabbing";
+    el.style.scrollSnapType = "none"; // free drag; re-snaps on release (settle)
     try { el.setPointerCapture(e.pointerId); } catch {}
   };
 
@@ -132,6 +137,7 @@ export default function Carousel({
     if (!el) return;
     drag.current.active = false;
     el.style.cursor = "";
+    el.style.scrollSnapType = ""; // restore stylesheet-driven snap
     try { el.releasePointerCapture(e.pointerId); } catch {}
     settle();
   };
@@ -224,7 +230,7 @@ export default function Carousel({
         onPointerCancel={endDrag}
         onPointerLeave={endDrag}
         onClickCapture={onClickCapture}
-        className={`no-scrollbar flex cursor-grab select-none overflow-x-auto ${trackClassName}`}
+        className={`no-scrollbar flex cursor-grab select-none snap-x snap-mandatory overflow-x-auto wide:snap-none ${trackClassName}`}
       >
         {children}
       </div>

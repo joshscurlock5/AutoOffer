@@ -47,7 +47,7 @@ async function main() {
   ok("home value widget present", /See What Your Car Is Worth/.test(home));
   ok(
     "home shows two CTAs (estimate + call)",
-    /Get My Estimate/.test(home) && /Call Now/.test(home),
+    /Get My Estimate/.test(home) && /Call or text/.test(home),
   );
 
   const admin = await (await fetch(BASE + "/admin")).text();

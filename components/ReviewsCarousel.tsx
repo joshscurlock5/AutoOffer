@@ -64,7 +64,7 @@ export default function ReviewsCarousel() {
       {loopReviews.map((r, idx) => (
         <article
           key={`${r.name}-${idx}`}
-          className="flex w-full shrink-0 snap-start flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:p-7 wide:w-[calc((100%_-_2.5rem)/3)]"
+          className="flex w-full shrink-0 snap-start snap-always flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:p-7 wide:w-[calc((100%_-_2.5rem)/3)]"
         >
           <Stars n={r.rating} />
           <p className="mt-4 min-h-[6rem] text-lg leading-relaxed text-navy">

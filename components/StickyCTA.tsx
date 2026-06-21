@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { site, telHref } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
@@ -13,6 +13,7 @@ import { ArrowRight, Phone } from "./icons";
  */
 export default function StickyCTA() {
   const [show, setShow] = useState(false);
+  const pillRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const form = document.getElementById("estimate");
@@ -25,6 +26,28 @@ export default function StickyCTA() {
     return () => io.disconnect();
   }, []);
 
+  // Publish the pill's centerline (distance from the viewport bottom) so the
+  // floating chat button can line up with it on desktop. Uses offsetHeight (not a
+  // rect) so it's correct even mid entrance-transition. Cleared when not shown.
+  useEffect(() => {
+    const root = document.documentElement;
+    const clear = () => root.style.removeProperty("--cta-pill-center");
+    const el = pillRef.current;
+    if (!show || !el || el.offsetParent === null) {
+      clear();
+      return clear;
+    }
+    const apply = () =>
+      root.style.setProperty("--cta-pill-center", `calc(1.5rem + ${el.offsetHeight / 2}px)`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      clear();
+    };
+  }, [show]);
+
   return (
     <div
       aria-hidden={!show}
@@ -32,7 +55,7 @@ export default function StickyCTA() {
         show ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
       }`}
     >
-      <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white py-2 pl-7 pr-2 shadow-lift">
+      <div ref={pillRef} className="flex items-center gap-3 rounded-full border border-slate-200 bg-white py-2 pl-7 pr-2 shadow-lift">
         <p className="text-base font-semibold text-navy">
           DriveOffer will buy your car right now
         </p>

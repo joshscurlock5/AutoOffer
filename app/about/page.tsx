@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Section, SectionHeading } from "@/components/Section";
 import PhoneButton from "@/components/PhoneButton";
 import { site } from "@/lib/site-config";
-import { Shield, Dollar, Clock, Check, Car, ArrowRight } from "@/components/icons";
+import { Shield, Dollar, Check, Car, ArrowRight } from "@/components/icons";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -12,7 +12,6 @@ export const metadata: Metadata = {
 
 const values = [
   { icon: Dollar, title: "Fair, transparent pricing", body: "Every offer is backed by live market data — no lowballing, no hidden fees." },
-  { icon: Clock, title: "Respect for your time", body: "Offer to payment in as little as a day, and we come to you." },
   { icon: Shield, title: "Safety first", body: "No strangers in your driveway, no cash meetups — just a secure sale." },
   { icon: Car, title: "Any car, any condition", body: "New, old, financed, leased or barely running — we'll make an offer." },
 ];
@@ -99,7 +98,7 @@ export default function AboutPage() {
       {/* Values */}
       <Section className="bg-slate-50">
         <SectionHeading center eyebrow="What We Stand For" title="Our values" subtitle="Everything we do comes back to making this the easiest, most honest way to sell a car." />
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {values.map((v) => {
             const Icon = v.icon;
             return (

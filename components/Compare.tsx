@@ -94,9 +94,9 @@ export default function Compare() {
           trackClassName="items-start gap-6 wide:grid wide:grid-cols-3 wide:overflow-visible wide:cursor-default"
           controlsClassName="wide:hidden"
         >
-          <Column title="Dealership trade-in" items={dealership} className="w-full shrink-0 snap-start wide:w-auto" />
-          <Column title="DriveOffer" items={us} highlight className="order-first w-full shrink-0 snap-start wide:order-none wide:w-auto" />
-          <Column title="Private sale" items={privateSale} className="w-full shrink-0 snap-start wide:w-auto" />
+          <Column title="Dealership trade-in" items={dealership} className="w-full shrink-0 snap-start snap-always wide:w-auto" />
+          <Column title="DriveOffer" items={us} highlight className="order-first w-full shrink-0 snap-start snap-always wide:order-none wide:w-auto" />
+          <Column title="Private sale" items={privateSale} className="w-full shrink-0 snap-start snap-always wide:w-auto" />
         </Carousel>
       </div>
     </Section>

@@ -8,13 +8,12 @@ import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
 import { site, telHref } from "@/lib/site-config";
-import OfferGauge from "@/components/OfferGauge";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import {
-  ArrowRight, Phone, Check, Camera, Trash, Calendar, Dollar,
-  Send, Shield, Car, Lock,
+  ArrowRight, Phone, Check, Camera, Trash,
+  Shield, Car, Lock,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -164,6 +163,10 @@ export default function OfferFlow() {
       reentry: estimateViews.current > 0,
     });
     estimateViews.current += 1;
+    // Both paths (priced range + unique custom-offer) now show the contact form
+    // inline on this same step, so the contact funnel begins right here.
+    track("contact_started", { unique: !!est.unique, reentry: contactStarts.current > 0 });
+    contactStarts.current += 1;
   }
 
   // STEP 1 (manual) -> details step.
@@ -321,13 +324,6 @@ export default function OfferFlow() {
     }
   }
 
-  // Advance to the contact step from EITHER the priced or unique branch.
-  function advanceToContact() {
-    track("contact_started", { unique: !!estimate?.unique, reentry: contactStarts.current > 0 });
-    contactStarts.current += 1;
-    setStep(4);
-  }
-
   const isUnique = estimate?.unique;
 
   const photoBlock = (
@@ -380,9 +376,104 @@ export default function OfferFlow() {
     </div>
   );
 
+  // The shared contact form — rendered inline on both the priced and the unique
+  // step. `notice` is the small grey banner above the form (differs per path).
+  const renderContactForm = (notice: React.ReactNode) => (
+    <>
+      <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-navy">
+        {notice}
+      </div>
+
+      <form onSubmit={submitLead} className="mt-5 space-y-4">
+        <div>
+          <label className="label" htmlFor="name">First name</label>
+          <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" />
+        </div>
+
+        <div>
+          <span className="label">How should we reach you?</span>
+          <div className="grid grid-cols-3 gap-2">
+            {(["call", "text", "email"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setContactMethod(m)}
+                aria-pressed={contactMethod === m}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize transition ${
+                  contactMethod === m
+                    ? "border-brand-600 bg-brand-600 text-white"
+                    : "border-slate-200 bg-white text-navy hover:border-brand-600"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {contactMethod === "email" ? (
+          <div>
+            <label className="label" htmlFor="email">Email</label>
+            <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="label" htmlFor="cphone">
+                Mobile {contactMethod === "text" ? "number (for text)" : "phone"}
+              </label>
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+            </div>
+            <div>
+              <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
+              <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
+                <option>Anytime</option>
+                <option>Morning</option>
+                <option>Afternoon</option>
+                <option>Evening</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+
+        <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
+          {submitting ? "Sending…" : "Get My Firm Offer"}
+          {!submitting && <ArrowRight className="h-5 w-5" />}
+        </button>
+        <a
+          href={telHref}
+          onClick={() => track("phone_click", { location: "offer_contact" })}
+          className="btn w-full border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
+        >
+          <Phone className="h-5 w-5" /> Call Now Instead
+        </a>
+        <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
+          <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+        </p>
+
+        <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
+          <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
+          <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> No obligation — the estimate is free.</li>
+          <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> A real person reviews your vehicle.</li>
+        </ul>
+        {(site.amvicNumber || site.insured) && (
+          <p className="text-center text-xs font-medium text-navy">
+            {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </form>
+    </>
+  );
+
+  // Always 3 steps now — both the priced and the unique (custom-offer) paths
+  // collect contact details inline on the same final step.
+  const stepperLabels = ["Vehicle", "Details", "Your offer"];
+
   return (
     <div className="container-x max-w-4xl py-10 sm:py-14">
-      {step < 5 && <Stepper step={step} />}
+      {step < 5 && <Stepper step={step} labels={stepperLabels} />}
 
       {/* -------------------- STEP 1: vehicle (year / make / model) -------------------- */}
       {step === 1 && !decoded && (
@@ -564,193 +655,62 @@ export default function OfferFlow() {
               <OfferSkeleton />
             </div>
           ) : !estimate ? null : isUnique ? (
-            <UniqueOffer onContinue={advanceToContact} onBack={editVehicle} vehicle={{ year, make, model, trim }} />
-          ) : (
-            <div className="grid gap-8 lg:grid-cols-2">
-              <div className="card p-6 sm:p-8">
-                <p className="text-sm font-semibold uppercase tracking-wide text-muted">
-                  {year} {make} {model} {trim}
-                </p>
-                <h1 className="mt-1 font-display text-2xl font-bold text-navy">
-                  Your estimated value
+            <div className="mx-auto max-w-xl animate-fade-up">
+              <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
+              <div className="card mt-6 p-6 sm:p-9">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
+                  <Shield className="h-4 w-4" /> Custom offer
+                </span>
+                <h1 className="mt-3 font-display text-2xl font-bold text-navy">
+                  Your vehicle is unique
                 </h1>
-                <div className="mt-5">
-                  <OfferGauge low={estimate.low} high={estimate.high} />
+                {renderContactForm("Please fill in your information and a specialist will contact you shortly")}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto max-w-xl animate-fade-up">
+              {/* Estimated range + vehicle side by side (replaces the gauge). */}
+              <div className="card p-6 sm:p-7">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-navy">
+                      <Check className="h-4 w-4" /> Value ready
+                    </span>
+                    <div className="mt-2 font-display text-3xl font-extrabold text-emerald-700 sm:text-4xl">
+                      <CountUp value={estimate.low} format={cad} /> –{" "}
+                      <CountUp value={estimate.high} format={cad} />
+                    </div>
+                    {estimate.source === "market" && estimate.comps ? (
+                      <p className="mt-1 text-xs font-medium text-muted">
+                        Based on {estimate.comps.toLocaleString()} recent Canadian listings.
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="hidden w-px self-stretch bg-slate-200 sm:block" />
+                  <div className="sm:text-right">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
+                    <p className="font-display text-lg font-bold text-navy">
+                      {year} {make} {model}{trim ? ` ${trim}` : ""}
+                    </p>
+                    {kmv && <p className="mt-0.5 text-sm text-muted">{fmtKm(Number(kmv))}</p>}
+                    <button onClick={editVehicle} className="mt-2 text-sm font-medium text-muted hover:text-brand-700">
+                      ← Edit vehicle details
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-col">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-navy">
-                  <Check className="h-4 w-4" /> Value ready
-                </span>
-                <div className="mt-3 font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">
-                  <CountUp value={estimate.low} format={cad} /> –{" "}
-                  <CountUp value={estimate.high} format={cad} />
-                </div>
-                {estimate.source === "market" && estimate.comps ? (
-                  <p className="mt-2 text-xs font-medium text-muted">
-                    Based on {estimate.comps.toLocaleString()} recent Canadian listings.
-                  </p>
-                ) : null}
-                <p className="mt-3 text-muted">
-                  This is an <span className="font-semibold text-navy">estimated range</span> for
-                  your {year} {make} {model} with {fmtKm(Number(kmv))}. Want your firm
-                  offer? We can call, text, or email you after confirming a few details.
-                </p>
-                <p className="mt-3 flex items-start gap-2 text-sm text-muted">
-                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" />
-                  No obligation. This range is free — a real buyer confirms your firm offer with you.
-                </p>
-
-                <button onClick={advanceToContact} className="btn-primary mt-6 text-lg">
-                  Get My Firm Offer <ArrowRight className="h-5 w-5" />
-                </button>
-                <a
-                  href={telHref}
-                  onClick={() => track("phone_click", { location: "offer_value" })}
-                  className="btn mt-3 border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
-                >
-                  <Phone className="h-5 w-5" /> Call Now Instead
-                </a>
-
-                <div className="mt-7 rounded-2xl bg-slate-50 p-5">
-                  <p className="font-semibold text-navy">What happens next?</p>
-                  <ul className="mt-3 space-y-3 text-sm text-muted">
-                    <li className="flex gap-3"><Phone className="h-5 w-5 shrink-0 text-navy" /> We call or text you a firm offer (email if you prefer).</li>
-                    <li className="flex gap-3"><Calendar className="h-5 w-5 shrink-0 text-navy" /> We book a time &amp; place and inspect the car.</li>
-                    <li className="flex gap-3"><Dollar className="h-5 w-5 shrink-0 text-navy" /> Everything checks out — you get paid on the spot.</li>
-                  </ul>
-                </div>
-
-                <button onClick={editVehicle} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
-                  ← Edit vehicle details
-                </button>
+              {/* Contact — merged into this step so a priced car is a single screen. */}
+              <div className="card mt-6 p-6 sm:p-9">
+                <h2 className="font-display text-xl font-bold text-navy sm:text-2xl">
+                  Where should we send your firm offer?
+                </h2>
+                {renderContactForm(
+                  <>We&apos;ll confirm a firm offer for your {make} {model} after a few quick details.</>
+                )}
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* -------------------- STEP 4: contact -------------------- */}
-      {step === 4 && (
-        <div className="mx-auto mt-8 max-w-xl animate-fade-up">
-          <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
-          <div className="card mt-6 p-6 sm:p-9">
-            <div className="text-center">
-              <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-navy text-white">
-                <Send className="h-7 w-7" />
-              </span>
-              <h1 className="mt-4 font-display text-2xl font-bold text-navy">
-                Where should we send your firm offer?
-              </h1>
-              {estimate && !estimate.unique ? (
-                <p className="mt-2 text-muted">
-                  Your estimated value is{" "}
-                  <span className="font-semibold text-navy">{cad(estimate.low)} – {cad(estimate.high)}</span>.
-                  We&apos;ll confirm a firm offer for your {year} {make} {model} after a
-                  few quick details.
-                </p>
-              ) : (
-                <p className="mt-2 text-muted">
-                  A specialist will put together a custom offer for your{" "}
-                  <span className="font-semibold text-navy">{year} {make} {model}</span>.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-navy">
-              Your <span className="font-semibold">firm offer comes in writing</span> — the
-              price we agree on is what you&apos;re paid, with no surprise deductions at your door.
-            </div>
-
-            <form onSubmit={submitLead} className="mt-5 space-y-4">
-              <div>
-                <label className="label" htmlFor="name">First name</label>
-                <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" autoFocus />
-              </div>
-
-              <div>
-                <span className="label">How should we reach you?</span>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["call", "text", "email"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setContactMethod(m)}
-                      aria-pressed={contactMethod === m}
-                      className={`rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize transition ${
-                        contactMethod === m
-                          ? "border-brand-600 bg-brand-600 text-white"
-                          : "border-slate-200 bg-white text-navy hover:border-brand-600"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {contactMethod === "email" ? (
-                <div>
-                  <label className="label" htmlFor="email">Email</label>
-                  <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="label" htmlFor="cphone">
-                      Mobile {contactMethod === "text" ? "number (for text)" : "phone"}
-                    </label>
-                    <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
-                    <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
-                      <option>Anytime</option>
-                      <option>Morning</option>
-                      <option>Afternoon</option>
-                      <option>Evening</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
-
-              <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
-                {submitting ? "Sending…" : "Get My Firm Offer"}
-                {!submitting && <ArrowRight className="h-5 w-5" />}
-              </button>
-              <p className="text-center text-sm text-muted">
-                We use your details once — to send your offer. We never sell them.{" "}
-                <Link href="/privacy" className="font-medium text-brand-700 hover:underline">
-                  See our privacy policy
-                </Link>
-                .
-              </p>
-              <a
-                href={telHref}
-                onClick={() => track("phone_click", { location: "offer_contact" })}
-                className="btn w-full border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
-              >
-                <Phone className="h-5 w-5" /> Call Now Instead
-              </a>
-
-              <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
-                <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
-                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> No obligation — the estimate is free.</li>
-                <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> A real person reviews your vehicle.</li>
-              </ul>
-              {(site.amvicNumber || site.insured) && (
-                <p className="text-center text-xs font-medium text-navy">
-                  {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
-                </p>
-              )}
-            </form>
-          </div>
-          <button onClick={() => setStep(3)} className="mx-auto mt-4 block text-sm font-medium text-muted hover:text-brand-700">
-            ← Back
-          </button>
         </div>
       )}
 
@@ -784,8 +744,7 @@ export default function OfferFlow() {
   );
 }
 
-function Stepper({ step }: { step: Step }) {
-  const labels = ["Vehicle", "Details", "Value", "Contact"];
+function Stepper({ step, labels }: { step: Step; labels: string[] }) {
   return (
     <ol className="mx-auto flex max-w-2xl items-center">
       {labels.map((label, i) => {
@@ -877,48 +836,6 @@ function ConfirmCard({
         </button>
         <button onClick={onReject} className="btn border-2 border-slate-200 bg-white text-navy hover:border-navy">
           No, enter details manually
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function UniqueOffer({
-  vehicle,
-  onContinue,
-  onBack,
-}: {
-  vehicle: { year: string; make: string; model: string; trim: string };
-  onContinue: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="overflow-hidden rounded-2xl shadow-card">
-      <div className="bg-brand-600 px-6 py-8 text-center text-white">
-        <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
-          We&apos;ll put together a <span className="text-white underline decoration-white/40">custom offer</span>
-        </h1>
-        <p className="mt-2 text-white/90">
-          There aren&apos;t enough recent Canadian listings for your {vehicle.year}{" "}
-          {vehicle.make} {vehicle.model}
-          {vehicle.trim ? ` ${vehicle.trim}` : ""} to price it instantly. Rather than
-          guess, one of our buyers will work out a custom offer for you — just leave your
-          details and we&apos;ll reach out shortly.
-        </p>
-      </div>
-      <div className="bg-white p-6 text-center sm:p-8">
-        <p className="text-muted">
-          No guesswork — a real person reviews your vehicle. Still fast, free, and with no
-          obligation.
-        </p>
-        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-          <button onClick={onContinue} className="btn-primary">
-            Continue <ArrowRight className="h-4 w-4" />
-          </button>
-          <PhoneButton variant="ghost" location="unique_offer" />
-        </div>
-        <button onClick={onBack} className="mt-4 text-sm font-medium text-muted hover:text-brand-700">
-          ← Edit vehicle details
         </button>
       </div>
     </div>

@@ -123,4 +123,45 @@ body {
     background-image: radial-gradient(rgba(16, 42, 76, 0.07) 1px, transparent 1px);
     background-size: 22px 22px;
   }
+
+  /* Floating chat launcher + panel. They anchor to the bottom-right corner and
+     lift above the mobile CTA bar when it's up: StickyMobileBar publishes its
+     live height to --mobile-cta-bar. When the bar is down the variable is unset,
+     so the button falls back to the safe-area inset and keeps the same corner
+     gap (top of the bar is treated as the floor when it's up). lg+ has no bar. */
+  .chat-fab {
+    bottom: calc(1.25rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
+    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease;
+  }
+  .chat-panel {
+    /* clears the launcher (3.5rem) plus a 0.75rem gap above it */
+    bottom: calc(1.25rem + 3.5rem + 0.75rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
+    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* Cookie notice (mobile/swipe widths): center it on the chat button's
+     centerline so the OK button and the chat bubble line up. bottom = the chat
+     button's center (its 1.25rem bottom + 1.75rem half-height + the CTA-bar var);
+     translateY(50%) then drops it by half its OWN height so its center lands on
+     that line regardless of the notice's height. lg+ reverts (transform:none +
+     the lg:bottom-* utilities take over to clear the centered desktop pill). */
+  .cookie-notice {
+    bottom: calc(3rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
+    transform: translateY(50%);
+    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @media (min-width: 1024px) {
+    /* lg+: line the chat button's center up with the desktop CTA pill's measured
+       center (--cta-pill-center, published by StickyCTA), minus half the button's
+       3.5rem height. Falls back to the bottom-right corner when the pill is down. */
+    .chat-fab {
+      bottom: calc(var(--cta-pill-center, 3rem) - 1.75rem);
+    }
+    .chat-panel {
+      bottom: 5.5rem;
+    }
+    .cookie-notice {
+      transform: none;
+    }
+  }
 }

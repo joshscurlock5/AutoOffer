@@ -123,14 +123,14 @@ export default function ChatWidget() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Close chat" : "Chat with us"}
-        className="fixed bottom-24 right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-lift transition hover:-translate-y-0.5 hover:bg-brand-700 lg:bottom-5 lg:right-5"
+        className="chat-fab fixed right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-lift hover:-translate-y-0.5 hover:bg-brand-700 lg:right-5"
       >
         {open ? <ChevronDown className="h-6 w-6" /> : <Chat className="h-6 w-6" />}
       </button>
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-[10.5rem] right-4 z-50 flex h-[32rem] max-h-[calc(100vh-12rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:bottom-[5.5rem] lg:right-5">
+        <div className="chat-panel fixed right-4 z-50 flex h-[32rem] max-h-[calc(100vh-12rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
           {/* -------------------- HOME -------------------- */}
           {view === "home" && (
             <>
