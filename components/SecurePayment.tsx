@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Section } from "./Section";
 import { ArrowRight } from "./icons";
 
-export default function SecurePayment() {
+export default function SecurePayment({ showCta = true }: { showCta?: boolean }) {
   return (
     <Section className="bg-cream">
       <div className="mx-auto max-w-col wide:max-w-none">
@@ -23,9 +23,11 @@ export default function SecurePayment() {
                 Get paid at your appointment — quickly and securely. We&apos;ll confirm
                 your offer, inspect the vehicle, and pay you on the spot.
               </p>
-              <Link href="/get-offer" className="btn-primary mt-7 px-8 py-4 text-lg">
-                Get Your Instant Offer <ArrowRight className="h-5 w-5" />
-              </Link>
+              {showCta && (
+                <Link href="/get-offer" className="btn-primary mt-7 px-8 py-4 text-lg">
+                  Get Your Instant Offer <ArrowRight className="h-5 w-5" />
+                </Link>
+              )}
             </div>
           </div>
         </div>

@@ -11,6 +11,8 @@ import { site, telHref } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
+import WhySell from "@/components/WhySell";
+import SecurePayment from "@/components/SecurePayment";
 import {
   ArrowRight, Phone, Check, Camera, Trash,
   Shield, Car, Lock,
@@ -21,6 +23,10 @@ type InputMode = "manual" | "vin";
 const MAX_PHOTOS = 12;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 const UNIQUE: OfferEstimate = { low: 0, high: 0, mid: 0, currency: "CAD", unique: true };
+// Sentinel for an explicit "Not sure" trim pick — kept distinct from the blank
+// placeholder so the <select> can show it, but normalized to "" before it's ever
+// sent (estimate / lead) or displayed.
+const TRIM_UNSURE = "__unsure__";
 
 /** Live-format a phone number to (XXX) XXX-XXXX as the user types. */
 function formatPhone(v: string): string {
@@ -144,7 +150,7 @@ export default function OfferFlow() {
     const res = await fetch("/api/estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year: y, make: mk, model: md, mileageKm: kmNum, trim }),
+      body: JSON.stringify({ year: y, make: mk, model: md, mileageKm: kmNum, trim: trim === TRIM_UNSURE ? "" : trim }),
     });
     if (!res.ok) throw new Error("estimate failed");
     const data = await res.json();
@@ -293,7 +299,7 @@ export default function OfferFlow() {
       fd.append("year", year);
       fd.append("make", make);
       fd.append("model", model);
-      fd.append("trim", trim);
+      fd.append("trim", trim === TRIM_UNSURE ? "" : trim);
       fd.append("mileageKm", kmv);
       fd.append("name", name);
       fd.append("email", email);
@@ -325,6 +331,8 @@ export default function OfferFlow() {
   }
 
   const isUnique = estimate?.unique;
+  // "Not sure" → no trim, for anything user-facing or stored.
+  const cleanTrim = trim === TRIM_UNSURE ? "" : trim;
 
   const photoBlock = (
     <div className="mt-6">
@@ -453,11 +461,6 @@ export default function OfferFlow() {
           <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
         </p>
 
-        <ul className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-muted">
-          <li className="flex gap-2"><Shield className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> We do <span className="font-semibold text-navy">not</span> sell your information.</li>
-          <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> No obligation — the estimate is free.</li>
-          <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-navy" /> A real person reviews your vehicle.</li>
-        </ul>
         {(site.amvicNumber || site.insured) && (
           <p className="text-center text-xs font-medium text-navy">
             {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
@@ -472,6 +475,7 @@ export default function OfferFlow() {
   const stepperLabels = ["Vehicle", "Details", "Your offer"];
 
   return (
+    <>
     <div className="container-x max-w-4xl py-10 sm:py-14">
       {step < 5 && <Stepper step={step} labels={stepperLabels} />}
 
@@ -595,7 +599,7 @@ export default function OfferFlow() {
       {/* -------------------- STEP 2: details (trim / mileage / photos) -------------------- */}
       {step === 2 && (
         <div className="mx-auto mt-8 max-w-2xl animate-fade-up">
-          <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
+          <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
           <div className="card mt-6 p-6 sm:p-9">
             <h1 className="font-display text-2xl font-bold text-navy sm:text-3xl">
               Add a few details
@@ -614,10 +618,11 @@ export default function OfferFlow() {
                     disabled={trimsLoading}
                     onChange={(e) => setTrim(e.target.value)}
                   >
-                    <option value="">{trimsLoading ? "Loading trims…" : "Not sure"}</option>
+                    <option value="">{trimsLoading ? "Loading trims…" : "Select trim"}</option>
                     {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
                       <option key={t.item} value={t.item}>{t.item}</option>
                     ))}
+                    <option value={TRIM_UNSURE}>Not sure</option>
                   </select>
                   {!trimsLoading && trims.length === 0 && (
                     <p className="mt-1.5 text-xs text-muted">No exact trim listed? Pick &ldquo;Not sure&rdquo; and we&apos;ll prepare a custom offer.</p>
@@ -656,7 +661,7 @@ export default function OfferFlow() {
             </div>
           ) : !estimate ? null : isUnique ? (
             <div className="mx-auto max-w-xl animate-fade-up">
-              <VehicleSummary year={year} make={make} model={model} trim={trim} kmv={kmv} onEdit={editVehicle} />
+              <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
               <div className="card mt-6 p-6 sm:p-9">
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
                   <Shield className="h-4 w-4" /> Custom offer
@@ -690,7 +695,7 @@ export default function OfferFlow() {
                   <div className="sm:text-right">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
                     <p className="font-display text-lg font-bold text-navy">
-                      {year} {make} {model}{trim ? ` ${trim}` : ""}
+                      {year} {make} {model}{cleanTrim ? ` ${cleanTrim}` : ""}
                     </p>
                     {kmv && <p className="mt-0.5 text-sm text-muted">{fmtKm(Number(kmv))}</p>}
                     <button onClick={editVehicle} className="mt-2 text-sm font-medium text-muted hover:text-brand-700">
@@ -741,6 +746,14 @@ export default function OfferFlow() {
         </div>
       )}
     </div>
+
+    {step === 3 && estimate && !calculating && (
+      <>
+        <WhySell />
+        <SecurePayment showCta={false} />
+      </>
+    )}
+    </>
   );
 }
 

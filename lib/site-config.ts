@@ -15,7 +15,7 @@ export const site = {
   // ---- CONTACT — PLACEHOLDERS (replace with your real details) -------------
   phoneDisplay: "(780) 952-4504", //                         PLACEHOLDER
   phoneE164: "+17809524504", //  used for tel: links —        PLACEHOLDER
-  email: "offers@driveoffer.ca", //                          PLACEHOLDER
+  email: "driveofferca@gmail.com", //                        real inbox
 
   address: {
     line1: "8923 137 Ave NW",

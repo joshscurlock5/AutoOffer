@@ -28,6 +28,8 @@ export {
   Banknote,
   Users,
   Handshake,
+  Landmark,
+  ArrowLeftRight,
   DollarSign as Dollar,
   Trash2 as Trash,
   Zap as Bolt,
