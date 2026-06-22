@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addLead, savePhotos } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
-import { notifyNewLead } from "@/lib/notify";
+import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
     let vehicle: VehicleInfo | undefined;
     let estimate: OfferEstimate | undefined;
     let photos: UploadedPhoto[] = [];
+    let photoBuffers: NotifyPhoto[] = [];
 
     if (kind === "vehicle") {
       const year = str(form.get("year"));
@@ -99,6 +100,15 @@ export async function POST(req: NextRequest) {
         .getAll("photos")
         .filter((f): f is File => f instanceof File && f.size > 0);
       photos = await savePhotos(id, files);
+      // Keep the raw bytes in memory to attach to the owner's Telegram alert as
+      // a photo gallery (read after savePhotos so it can never disrupt the S3 save).
+      photoBuffers = await Promise.all(
+        files.map(async (f) => ({
+          buffer: Buffer.from(await f.arrayBuffer()),
+          name: f.name || "photo.jpg",
+          type: f.type || "image/jpeg",
+        })),
+      );
     }
 
     const lead: Lead = {
@@ -116,9 +126,9 @@ export async function POST(req: NextRequest) {
     };
 
     await addLead(lead);
-    // Best-effort owner alert (Telegram). Awaited so Amplify's Lambda doesn't
-    // freeze the send; never throws, so the saved lead is unaffected.
-    await notifyNewLead(lead);
+    // Best-effort owner alert (Telegram), with a photo gallery if any. Awaited so
+    // Amplify's Lambda doesn't freeze the send; never throws, so the lead is safe.
+    await notifyNewLead(lead, photoBuffers);
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("POST /api/leads failed", err);
