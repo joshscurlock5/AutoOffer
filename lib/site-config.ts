@@ -10,7 +10,7 @@ export const site = {
   legalName: "DriveOffer Inc.",
   tagline: "Sell your car the easy way.",
   // Canonical site origin — used for SEO canonical URLs + JSON-LD. ⚠️ confirm real domain.
-  url: "https://driveoffer.ca",
+  url: "https://www.driveoffer.ca", // canonical host — the apex 404s static assets; the site serves on www
   description:
     "DriveOffer buys cars right across Canada. Get a fast, fair offer by phone or email, we inspect at a time and place that works for you, and you get paid — no haggling, no dealership runaround.",
 

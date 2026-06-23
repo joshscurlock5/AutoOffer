@@ -23,7 +23,7 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://driveoffer.ca"),
+  metadataBase: new URL("https://www.driveoffer.ca"),
   title: {
     default: `${site.name} — ${site.tagline}`,
     template: `%s | ${site.name}`,
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     description: site.description,
     type: "website",
     locale: "en_CA",
-    url: "https://driveoffer.ca",
+    url: "https://www.driveoffer.ca",
     siteName: site.name,
     // Explicit /public static image (reliably served on Amplify), NOT the
     // app/opengraph-image.png metadata route which 404s there.

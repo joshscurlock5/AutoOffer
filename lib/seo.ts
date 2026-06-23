@@ -10,7 +10,7 @@ import { GUIDE_AUTHOR, GUIDE_DEFAULT_PUBLISHED, type FlatArticle, type GuideFaq 
 export const SITE_URL = site.url;
 const ORG_ID = `${SITE_URL}/#organization`;
 const LOGO = `${SITE_URL}/icon.png`;
-const OG_IMAGE = `${SITE_URL}/opengraph-image.png`;
+const OG_IMAGE = `${SITE_URL}/og-image.jpg`;
 
 // Cities we actually serve (mirrors the footer list).
 const AREA_SERVED = [
