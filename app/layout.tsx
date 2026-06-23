@@ -34,11 +34,24 @@ export const metadata: Metadata = {
     description: site.description,
     type: "website",
     locale: "en_CA",
+    url: "https://driveoffer.ca",
+    siteName: site.name,
+    // Explicit /public static image (reliably served on Amplify), NOT the
+    // app/opengraph-image.png metadata route which 404s there.
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 800,
+        alt: `${site.name} — ${site.tagline}`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: `${site.name} — ${site.tagline}`,
     description: site.description,
+    images: ["/og-image.jpg"],
   },
 };
 
