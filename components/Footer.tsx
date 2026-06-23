@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { site, fullAddress, mailHref } from "@/lib/site-config";
+import { site, fullAddress, mailHref, amvicLicence } from "@/lib/site-config";
 import TelLink from "./TelLink";
 import { Phone, Mail, MapPin, Clock, Facebook, Instagram, MapleLeaf } from "./icons";
 
@@ -21,6 +21,7 @@ const cities = [
 const quickLinks = [
   { label: "Home", href: "/" },
   { label: "How It Works", href: "/#how" },
+  { label: "Car Selling Guide", href: "/car-selling-guide" },
   { label: "Get an Offer", href: "/get-offer" },
   { label: "Refer & Earn $100", href: "/referral" },
   { label: "About Us", href: "/about" },
@@ -171,16 +172,16 @@ export default function Footer() {
               Proudly buying cars across Canada
               <MapleLeaf className="h-4 w-4 text-navy" />
             </span>
-            {site.amvicNumber ? (
+            {amvicLicence ? (
               <>
                 <span aria-hidden className="text-slate-300">•</span>
-                <span>{site.amvicNumber}</span>
+                <span>{amvicLicence}</span>
               </>
             ) : null}
             {site.insured ? (
               <>
                 <span aria-hidden className="text-slate-300">•</span>
-                <span>Bonded &amp; insured</span>
+                <span>{site.insuranceText}</span>
               </>
             ) : null}
           </p>

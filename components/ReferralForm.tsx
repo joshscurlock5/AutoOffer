@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
-import { Check, ArrowRight, Gift } from "./icons";
+import { Check, ArrowRight } from "./icons";
 
 export default function ReferralForm() {
   const [f, setF] = useState({
@@ -85,7 +85,8 @@ export default function ReferralForm() {
   return (
     <form onSubmit={submit} className="card p-6 sm:p-8">
       <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent text-navy"><Gift className="h-6 w-6" /></span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/referral-refer.png?v=2" alt="" aria-hidden="true" className="h-11 w-11" />
         <h3 className="font-display text-2xl font-bold text-navy">Refer a friend</h3>
       </div>
 

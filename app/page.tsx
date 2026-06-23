@@ -32,15 +32,16 @@ export default function HomePage() {
                     target="_blank"
                     rel="noreferrer"
                     aria-label="See us on Google Reviews"
-                    className="hidden items-center gap-2 wide:inline-flex"
+                    className="hidden items-center gap-2.5 wide:inline-flex"
                   >
-                    <GoogleG className="h-6 w-6" />
-                    <span className="flex text-amber-400" role="img" aria-label="Five stars">
+                    <GoogleG className="h-7 w-7" />
+                    <span className="flex text-amber-400" role="img" aria-label="5.0 out of 5 stars">
                       {[0, 1, 2, 3, 4].map((i) => (
-                        <Star key={i} className="h-5 w-5" />
+                        <Star key={i} className="h-6 w-6" />
                       ))}
                     </span>
-                    <span className="text-base font-semibold text-muted">Google Reviews</span>
+                    <span className="font-display text-2xl font-extrabold text-navy">5.0</span>
+                    <span className="text-lg text-muted">stars</span>
                   </a>
                 )}
               </div>

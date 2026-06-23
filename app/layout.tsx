@@ -10,7 +10,9 @@ import ExitIntent from "@/components/ExitIntent";
 import Analytics from "@/components/Analytics";
 import CookieNotice from "@/components/CookieNotice";
 import ChatWidget from "@/components/ChatWidget";
+import JsonLd from "@/components/JsonLd";
 import { site } from "@/lib/site-config";
+import { organizationSchema } from "@/lib/seo";
 import { GA_ID } from "@/lib/analytics";
 
 // Self-hosted via next/font. Inter is the whole site's typeface — logos included.
@@ -61,6 +63,7 @@ export default function RootLayout({
             </Suspense>
           </>
         )}
+        <JsonLd data={organizationSchema()} />
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />

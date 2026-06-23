@@ -9,6 +9,8 @@ export const site = {
   name: "DriveOffer",
   legalName: "DriveOffer Inc.",
   tagline: "Sell your car the easy way.",
+  // Canonical site origin — used for SEO canonical URLs + JSON-LD. ⚠️ confirm real domain.
+  url: "https://driveoffer.ca",
   description:
     "DriveOffer buys cars right across Canada. Get a fast, fair offer by phone or email, we inspect at a time and place that works for you, and you get paid — no haggling, no dealership runaround.",
 
@@ -42,14 +44,19 @@ export const site = {
   },
 
   // ---- REVIEWS (link to your Google/Facebook reviews; "" hides prompts) ----
-  reviewsUrl: "https://g.page/r/CVt_QnCYRto-EBM/review", //  Google "write a review" link
+  reviewsUrl: "https://g.page/r/CVt_QnCYRto-EBM", //  Google Business Profile (view reviews); add "/review" to deep-link the write-a-review dialog
 
-  // ---- LICENSING / TRUST --------------------------------------------------
-  // Leave any of these blank ("") and the trust badge for it stays hidden,
-  // so nothing fake is ever shown. Fill them in once you have them.
-  amvicNumber: "", //  e.g. "AMVIC #123456"                  PLACEHOLDER
-  businessNumber: "", //  e.g. "AB Corp. #2021234567"        PLACEHOLDER
-  insured: false, //  show a "Bonded & insured" trust line — OFF until the bond/insurance is real & verified
+  // ---- OWNER / LICENSING / TRUST ------------------------------------------
+  // Leave any string blank ("") and its trust badge stays hidden.
+  owner: "Samir Osman", //                                   real owner / founder
+  amvicNumber: "B2036941", //                                AMVIC licence number
+  amvicClass: "Wholesaler", //                               AMVIC licence class
+  businessNumber: "", //  GST / AB corp # — used on invoices, not required on the site
+  bonded: false, //  ⚠️ NOT bonded — never display "bonded" anywhere
+  insured: true, //  carries commercial dealer-plate insurance
+  insuranceText: "$3M dealer-plate insurance", //  the business's OWN coverage (NOT customer coverage)
+  yearsExperience: 5, //                                     years wholesaling
+  carsBought: 5000, //  vehicles purchased — single source of truth for the "cars" stat
 
   // ---- REFERRAL PROGRAM ---------------------------------------------------
   referralReward: 100, // dollars paid when a referred friend sells
@@ -78,3 +85,8 @@ export const fullAddress = [
 // Convenience: the href for a click-to-call link.
 export const telHref = `tel:${site.phoneE164}`;
 export const mailHref = `mailto:${site.email}`;
+
+// "AMVIC Licensed Wholesaler #B2036941" — empty until the licence number is set.
+export const amvicLicence = site.amvicNumber
+  ? `AMVIC Licensed ${site.amvicClass} #${site.amvicNumber}`
+  : "";

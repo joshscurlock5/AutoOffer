@@ -3,7 +3,7 @@ import ReferralForm from "@/components/ReferralForm";
 import { Section, SectionHeading } from "@/components/Section";
 import PhoneButton from "@/components/PhoneButton";
 import { site } from "@/lib/site-config";
-import { Gift, Car, Dollar } from "@/components/icons";
+import { Check, Phone, ChevronDown } from "@/components/icons";
 
 export const metadata: Metadata = {
   title: `Refer & Earn $${site.referralReward}`,
@@ -12,74 +12,140 @@ export const metadata: Metadata = {
 
 export default function ReferralPage() {
   const steps = [
-    { icon: Gift, title: "Refer a friend", body: "Fill out the form below or share your code. Tell anyone looking to sell their car about DriveOffer." },
-    { icon: Car, title: "They sell their car", body: "Your friend gets a fast, fair offer and sells their vehicle to us — just like you would." },
-    { icon: Dollar, title: `You get $${site.referralReward}`, body: `Once their sale is complete, we send you $${site.referralReward}. Refer as many friends as you like.` },
+    { icon: "/icons/referral-refer.png", title: "Refer a friend", body: "Fill out the form above or share your code. Tell anyone looking to sell their car about DriveOffer." },
+    { icon: "/icons/referral-sell.png", title: "They sell their car", body: "Your friend gets a fast, fair offer and sells their vehicle to us — just like you would." },
+    { icon: "/icons/referral-reward.png", title: `You get $${site.referralReward}`, body: `Once their sale is complete, we send you $${site.referralReward}. Refer as many friends as you like.` },
+  ];
+
+  const finePrint = [
+    `The $${site.referralReward} reward is paid after your referred friend completes their sale with ${site.name}.`,
+    "Your friend must be a new customer who hasn't already requested an offer.",
+    "No limit on the number of friends you can refer.",
+    "Rewards are paid by cheque or bank draft, typically within 7 days of the completed sale.",
+  ];
+
+  const faqs = [
+    {
+      q: "When do I get paid?",
+      a: `Once your referred friend completes their sale with ${site.name}, we send your $${site.referralReward} reward — typically within 7 days, by cheque or bank draft.`,
+    },
+    {
+      q: "How much do I get?",
+      a: `You earn $${site.referralReward} for every friend who successfully sells their car to us. There's no cap, so refer as many people as you like.`,
+    },
+    {
+      q: "Is there a referral limit?",
+      a: "Nope — there's no limit on the number of friends you can refer, and you get paid for each one that completes a sale.",
+    },
+    {
+      q: "How do I refer someone?",
+      a: "Fill out the form above with your details (and your friend's, if you have them), or call us and mention your friend. We'll take care of the rest.",
+    },
+    {
+      q: "Who can I refer?",
+      a: "Anyone looking to sell their car who hasn't already requested an offer from us — friends, family, coworkers and neighbours all count.",
+    },
   ];
 
   return (
     <>
-      <section className="relative overflow-hidden bg-navy text-white">
-        <div className="bg-grid pointer-events-none absolute inset-0 opacity-[0.12]" />
-        <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rotate-12 rounded-[2rem] border-8 border-accent/25" />
-        <div className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 -rotate-6 rounded-[2rem] border-8 border-white/10" />
-        <div className="container-x relative py-12 text-center sm:py-16">
-          <span className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-sm font-bold text-navy">
-            <Gift className="h-4 w-4" /> Referral Program
-          </span>
-          <h1 className="mx-auto mt-5 max-w-3xl font-display text-4xl font-extrabold leading-tight sm:text-5xl">
-            Refer a friend, get <span className="text-accent">${site.referralReward}</span>
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-slate-300">
-            Love how easy it was to sell with {site.name}? Spread the word. Every
-            friend who sells their car earns you a ${site.referralReward} cash
-            thank-you — with no limit on how many you can refer.
-          </p>
-        </div>
-      </section>
-
-      {/* How it works */}
+      {/* 1. Image (left) + form (right) — now the top of the page. items-stretch
+          forces both columns to the SAME height so their edges line up exactly. */}
       <Section className="bg-white">
-        <SectionHeading center eyebrow="How It Works" title={`Earn $${site.referralReward} in 3 simple steps`} />
-        <div className="relative mt-10 grid gap-6 md:grid-cols-3">
-          <div className="absolute left-0 right-0 top-9 hidden h-px bg-gradient-to-r from-transparent via-brand-100 to-transparent md:block" />
-          {steps.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div key={s.title} className="card relative p-7 text-center">
-                <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-brand text-white shadow-soft">
-                  <Icon className="h-7 w-7" />
-                </div>
-                <h3 className="mt-5 font-display text-xl font-bold text-navy">{s.title}</h3>
-                <p className="mt-3 text-muted">{s.body}</p>
-              </div>
-            );
-          })}
-        </div>
-      </Section>
+        <div className="grid items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
+          {/* LEFT — image card. The form drives the row height; this card stretches
+              to match it, and object-cover keeps the photo filling it at any size. */}
+          <div className="relative flex min-h-[560px] flex-col justify-end overflow-hidden rounded-2xl bg-navy text-white shadow-card">
+            {/* hero photo */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/referral-hero.jpg" alt="A happy customer referring a friend from their couch" className="absolute inset-0 h-full w-full object-cover" />
+            {/* legibility gradient so the text reads over the photo */}
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-navy-900/90 via-navy-900/25 to-transparent" />
 
-      {/* Form + terms */}
-      <Section className="bg-slate-50">
-        <div className="grid items-start gap-10 lg:grid-cols-2">
-          <div>
-            <SectionHeading eyebrow="Get Started" title="Send us your referral" subtitle="Give us your details so we know who to thank, and your friend's info if you have it. We'll take care of the rest." />
-            <div className="mt-6 rounded-2xl bg-white p-6 shadow-card">
-              <p className="font-semibold text-navy">Prefer to refer by phone?</p>
-              <p className="mt-1 text-sm text-muted">Call us and mention your friend — we&apos;ll set everything up.</p>
-              <div className="mt-4"><PhoneButton variant="primary" /></div>
-            </div>
-            <div className="mt-6 text-sm text-muted">
-              <p className="font-semibold text-navy">The fine print</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>The ${site.referralReward} reward is paid after your referred friend completes their sale with {site.name}.</li>
-                <li>Your friend must be a new customer who hasn&apos;t already requested an offer.</li>
-                <li>No limit on the number of friends you can refer.</li>
-                <li>Rewards are paid by cheque or bank draft, typically within 7 days of the completed sale.</li>
-              </ul>
+            {/* bottom content block (pushed down by justify-end) */}
+            <div className="relative p-5 sm:p-7">
+              <h1 className="font-display text-4xl font-extrabold leading-[1.05] sm:text-5xl">
+                Refer a friend.<br />Earn <span className="text-[#22C55E]">${site.referralReward}</span>.
+              </h1>
+              <p className="mt-3 max-w-md text-lg text-slate-200">
+                It&apos;s fast, easy, and rewards you both.
+              </p>
+
+              {/* prefer-to-refer-by-phone card */}
+              <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-white p-4 text-navy shadow-card sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                    <Phone className="h-5 w-5" />
+                  </span>
+                  <p className="font-semibold leading-snug">Prefer to refer by phone?</p>
+                </div>
+                <PhoneButton variant="primary" className="shrink-0 self-start sm:self-auto" location="referral_hero" />
+              </div>
             </div>
           </div>
 
+          {/* RIGHT — the form */}
           <ReferralForm />
+        </div>
+
+      </Section>
+
+      {/* 2. How it works — now below the form */}
+      <Section className="bg-slate-50">
+        <SectionHeading title={`Earn $${site.referralReward} in 3 simple steps`} />
+        <div className="mx-auto mt-10 max-w-col wide:max-w-none">
+          <div className="relative grid gap-6 wide:grid-cols-3">
+            <div className="absolute left-0 right-0 top-9 hidden h-px bg-gradient-to-r from-transparent via-brand-100 to-transparent wide:block" />
+            {steps.map((s) => (
+              <div key={s.title} className="card relative p-7 text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`${s.icon}?v=2`} alt="" aria-hidden="true" className="mx-auto h-16 w-16" />
+                <h3 className="mt-5 font-display text-xl font-bold text-navy">{s.title}</h3>
+                <p className="mt-3 text-muted">{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* 3. Common questions (FAQ accordions) */}
+      <Section className="bg-white">
+        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
+          <SectionHeading
+            title="Common questions"
+            subtitle={`Everything you need to know about earning $${site.referralReward} for referring a friend to ${site.name}.`}
+          />
+          <div className="space-y-3">
+            {faqs.map((f) => (
+              <details
+                key={f.q}
+                className="card group overflow-hidden p-0 [&_summary::-webkit-details-marker]:hidden"
+              >
+                <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 text-base font-semibold text-navy sm:text-lg">
+                  {f.q}
+                  <ChevronDown className="h-5 w-5 shrink-0 text-brand-600 transition duration-300 group-open:rotate-180" />
+                </summary>
+                <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-open:grid-rows-[1fr]">
+                  <div className="overflow-hidden">
+                    <p className="max-w-[60ch] px-5 pb-5 text-muted">{f.a}</p>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* 4. The fine print */}
+      <Section className="bg-slate-50">
+        <p className="font-semibold text-navy">The fine print</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {finePrint.map((t) => (
+            <div key={t} className="flex items-start gap-2.5 text-sm text-muted">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+              <span>{t}</span>
+            </div>
+          ))}
         </div>
       </Section>
     </>

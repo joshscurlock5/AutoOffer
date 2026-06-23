@@ -7,7 +7,7 @@ import { Shield, Dollar, Check, Car, ArrowRight } from "@/components/icons";
 
 export const metadata: Metadata = {
   title: "About Us",
-  description: `${site.name} is Canada's easy, fair way to sell your car. Learn how we got started and why thousands of Canadians trust us with their vehicles.`,
+  description: `Meet Samir Osman, the AMVIC-licensed wholesaler (licence B2036941) behind ${site.name} — 5 years and 5,000+ cars bought directly from sellers across Edmonton and Alberta.`,
 };
 
 const values = [
@@ -55,17 +55,26 @@ export default function AboutPage() {
       <Section className="bg-white">
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
-            <SectionHeading eyebrow="Our Story" title="Why we started DriveOffer" />
-            {/* Owner: personalize this with your founding year, city, and a real
-                number of cars bought once you're ready — specifics build real trust. */}
+            <SectionHeading eyebrow="Our Story" title="Meet Samir Osman, the wholesaler behind DriveOffer" />
             <div className="mt-5 space-y-4 text-muted">
               <p>
-                Selling a car the usual way is a hassle — endless listings, no-shows,
-                and a haircut at the dealership trade-in counter.
+                {site.name} started with a simple idea: make selling a car in Edmonton
+                straightforward and honest. Founder Samir Osman is an AMVIC-licensed
+                wholesaler who buys vehicles directly from the public and moves them on to
+                dealers and auctions, so sellers skip the hassle of listings, tire-kickers,
+                and lowball offers.
               </p>
               <p>
-                We started {site.name} to make it easy instead: a fair, upfront number,
-                a team that comes to you, and payment the same day. No pressure, no games.
+                Over the past five years, Samir has personally purchased more than 5,000
+                cars. He comes to you anywhere in Edmonton and the surrounding Alberta
+                communities — Sherwood Park, St. Albert, Leduc and beyond — makes an offer,
+                and pays by bank draft.
+              </p>
+              <p>
+                Being licensed by AMVIC, the Alberta Motor Vehicle Industry Council, is what
+                sets {site.name} apart from unlicensed curbsiders. It means Samir operates
+                under Alberta&apos;s vehicle-industry regulations, giving you a legitimate,
+                accountable buyer when it&apos;s time to sell your car.
               </p>
             </div>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
@@ -75,13 +84,20 @@ export default function AboutPage() {
           </div>
 
           <div className="rounded-3xl border border-brand-100 bg-brand-50 p-8 shadow-soft ring-1 ring-brand-100">
-            <h3 className="font-display text-2xl font-bold text-navy">Why sellers choose us</h3>
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand text-white">
+                <Shield className="h-6 w-6" />
+              </span>
+              <h3 className="font-display text-2xl font-bold text-navy">Licensed &amp; accountable</h3>
+            </div>
             <ul className="mt-6 space-y-4">
               {[
-                "Free, no-obligation offers",
-                "We come to you, anywhere in Canada",
-                "We buy financed & leased cars too",
-                "Payment on the spot — we handle the paperwork",
+                "AMVIC-licensed wholesaler — licence #B2036941 (Wholesaler class)",
+                "Regulated by AMVIC, the Alberta Motor Vehicle Industry Council",
+                "5 years wholesaling vehicles in the Edmonton area",
+                "5,000+ cars purchased directly from the public",
+                "Carries $3,000,000/year in dealer-plate (garage) insurance on its own business operations",
+                "Serves Edmonton and surrounding Alberta; comes to you and pays by bank draft",
               ].map((p) => (
                 <li key={p} className="flex items-start gap-3">
                   <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-white">

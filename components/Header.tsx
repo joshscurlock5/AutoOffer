@@ -6,13 +6,20 @@ import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { Phone, Menu, X, ArrowRight } from "./icons";
+import { GuideMegaMenu, GuideMobileAccordion } from "./GuideMegaMenu";
 
-const NAV = [
+// Top-nav links flanking the Car Selling Guide mega menu (rendered between them).
+// "Sell My Car" leads with the action; About/Contact now live in the guide menu's
+// More Resources column and the footer.
+const NAV_LEFT = [
+  { href: "/", label: "Sell My Car" },
   { href: "/#how", label: "How It Works" },
-  { href: "/about", label: "About Us" },
-  { href: "/referral", label: "Refer & Earn $100" },
-  { href: "/contact", label: "Contact" },
 ];
+const NAV_RIGHT = [
+  { href: "/referral", label: "Refer & Earn $100" },
+];
+
+const navLinkClass = "text-[15px] font-medium text-navy/80 transition hover:text-brand";
 
 export default function Header() {
   const pathname = usePathname();
@@ -55,20 +62,22 @@ export default function Header() {
         </Link>
 
         {!isAdmin && (
-          <nav className="hidden items-center gap-7 lg:flex">
-            {NAV.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="text-[15px] font-medium text-navy/80 transition hover:text-brand"
-              >
+          <nav className="hidden items-center gap-7 xl:flex">
+            {NAV_LEFT.map((n) => (
+              <Link key={n.href} href={n.href} className={navLinkClass}>
+                {n.label}
+              </Link>
+            ))}
+            <GuideMegaMenu />
+            {NAV_RIGHT.map((n) => (
+              <Link key={n.href} href={n.href} className={navLinkClass}>
                 {n.label}
               </Link>
             ))}
           </nav>
         )}
 
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden items-center gap-3 xl:flex">
           <a
             href={telHref}
             onClick={() => track("phone_click", { location: "header_desktop" })}
@@ -95,7 +104,7 @@ export default function Header() {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="icon-btn h-11 w-11 border border-slate-200 text-navy lg:hidden"
+          className="icon-btn h-11 w-11 border border-slate-200 text-navy xl:hidden"
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
           aria-controls="mobile-nav"
@@ -105,18 +114,33 @@ export default function Header() {
       </div>
 
       {open && (
-        <div id="mobile-nav" role="navigation" aria-label="Mobile menu" className="border-t border-slate-200 bg-white lg:hidden">
+        <div id="mobile-nav" role="navigation" aria-label="Mobile menu" className="border-t border-slate-200 bg-white xl:hidden">
           <div className="container-x flex flex-col gap-1 py-4">
-            {!isAdmin &&
-              NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-slate-100"
-                >
-                  {n.label}
-                </Link>
-              ))}
+            {!isAdmin && (
+              <>
+                {NAV_LEFT.map((n) => (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setOpen(false)}
+                    className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-slate-100"
+                  >
+                    {n.label}
+                  </Link>
+                ))}
+                <GuideMobileAccordion onNavigate={() => setOpen(false)} />
+                {NAV_RIGHT.map((n) => (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setOpen(false)}
+                    className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-slate-100"
+                  >
+                    {n.label}
+                  </Link>
+                ))}
+              </>
+            )}
             <div className="mt-3 flex flex-col gap-2">
               <a href={telHref} onClick={() => track("phone_click", { location: "header_mobile" })} className="btn-dark w-full">
                 <Phone className="h-5 w-5" />

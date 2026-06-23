@@ -18,7 +18,7 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <section id="how" className="bg-cream py-8 sm:py-12">
+    <section id="how" className="scroll-mt-24 bg-cream py-8 sm:py-12">
       <div className="container-x">
         <div className="mx-auto max-w-col wide:max-w-none">
           <h2 className="h-section">How it works</h2>

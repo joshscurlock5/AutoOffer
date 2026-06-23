@@ -12,6 +12,18 @@ export function km(n: number): string {
   return new Intl.NumberFormat("en-CA").format(n) + " km";
 }
 
+// Deterministic "June 22, 2026" from an ISO yyyy-mm-dd (no Date() so SSG output
+// is stable across build environments/timezones). Used for guide article dates.
+export function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  return `${months[Number(m[2]) - 1]} ${Number(m[3])}, ${Number(m[1])}`;
+}
+
 export function formatDateTime(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;

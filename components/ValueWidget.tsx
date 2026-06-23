@@ -159,7 +159,7 @@ export default function ValueWidget() {
       {/* Mobile/small only: social proof inside the form (desktop shows it by the tagline). */}
       <div className="mt-5 flex items-center justify-between gap-x-3 border-t border-slate-100 pt-4 wide:hidden">
         <p className="text-sm text-muted">
-          <span className="text-2xl font-extrabold text-navy">2,000+</span> cars sold to DriveOffer
+          <span className="text-2xl font-extrabold text-navy">{site.carsBought.toLocaleString("en-CA")}+</span> cars sold to DriveOffer
         </p>
         {(site.reviewsUrl as string) && (
           <a

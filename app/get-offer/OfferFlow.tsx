@@ -7,12 +7,13 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
-import { site, telHref } from "@/lib/site-config";
+import { site, telHref, amvicLicence } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import WhySell from "@/components/WhySell";
 import SecurePayment from "@/components/SecurePayment";
+import CarBodyIllustration from "@/components/CarBodyIllustration";
 import {
   ArrowRight, Phone, Check, Camera, Trash,
   Shield, Car, Lock,
@@ -461,9 +462,9 @@ export default function OfferFlow() {
           <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
         </p>
 
-        {(site.amvicNumber || site.insured) && (
+        {(amvicLicence || site.insured) && (
           <p className="text-center text-xs font-medium text-navy">
-            {[site.amvicNumber, site.insured ? "Bonded & insured" : ""].filter(Boolean).join(" · ")}
+            {[amvicLicence, site.insured ? site.insuranceText : ""].filter(Boolean).join(" · ")}
           </p>
         )}
       </form>
@@ -693,6 +694,7 @@ export default function OfferFlow() {
                   </div>
                   <div className="hidden w-px self-stretch bg-slate-200 sm:block" />
                   <div className="sm:text-right">
+                    <CarBodyIllustration make={make} model={model} className="mb-1 h-auto w-40 sm:ml-auto" />
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
                     <p className="font-display text-lg font-bold text-navy">
                       {year} {make} {model}{cleanTrim ? ` ${cleanTrim}` : ""}
@@ -747,7 +749,9 @@ export default function OfferFlow() {
       )}
     </div>
 
-    {step === 3 && estimate && !calculating && (
+    {/* Trust sections shown beneath the form on every step (1–3), but not on the
+        success screen (step 5) which has its own call-to-action. */}
+    {step < 5 && (
       <>
         <WhySell />
         <SecurePayment showCta={false} />
@@ -801,8 +805,8 @@ function VehicleSummary({
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
       <div className="flex items-center gap-4">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-100 text-navy">
-          <Car className="h-6 w-6" />
+        <span className="grid h-16 w-28 shrink-0 place-items-center">
+          <CarBodyIllustration make={make} model={model} className="h-auto w-28" />
         </span>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
