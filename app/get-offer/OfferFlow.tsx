@@ -7,7 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
-import { site, telHref, amvicLicence } from "@/lib/site-config";
+import { site, telHref } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
@@ -16,7 +16,7 @@ import SecurePayment from "@/components/SecurePayment";
 import CarBodyIllustration from "@/components/CarBodyIllustration";
 import {
   ArrowRight, Phone, Check, Camera, Trash,
-  Shield, Car, Lock,
+  Car, Lock,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -393,7 +393,8 @@ export default function OfferFlow() {
         {notice}
       </div>
 
-      <form onSubmit={submitLead} className="mt-5 space-y-4">
+      <form onSubmit={submitLead} className="mt-5">
+        <div className="space-y-4">
         <div>
           <label className="label" htmlFor="name">First name</label>
           <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" />
@@ -444,7 +445,9 @@ export default function OfferFlow() {
             </div>
           </>
         )}
+        </div>
 
+        <div className="mt-6 space-y-4">
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
@@ -454,19 +457,14 @@ export default function OfferFlow() {
         <a
           href={telHref}
           onClick={() => track("phone_click", { location: "offer_contact" })}
-          className="btn w-full border-2 border-brand-600 bg-white py-3.5 text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
+          className="btn w-full border-2 border-brand-600 bg-white py-4 text-lg text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
         >
           <Phone className="h-5 w-5" /> Call Now Instead
         </a>
         <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
           <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
         </p>
-
-        {(amvicLicence || site.insured) && (
-          <p className="text-center text-xs font-medium text-navy">
-            {[amvicLicence, site.insured ? site.insuranceText : ""].filter(Boolean).join(" · ")}
-          </p>
-        )}
+        </div>
       </form>
     </>
   );
@@ -477,13 +475,13 @@ export default function OfferFlow() {
 
   return (
     <>
-    <div className="container-x max-w-4xl py-10 sm:py-14">
+    <div className="container-x py-10 sm:py-14">
       {step < 5 && <Stepper step={step} labels={stepperLabels} />}
 
       {/* -------------------- STEP 1: vehicle (year / make / model) -------------------- */}
       {step === 1 && !decoded && (
-        <div className="mx-auto mt-8 max-w-xl animate-fade-up">
-          <div className="card p-6 sm:p-9">
+        <div className="mt-8 animate-fade-up">
+          <div className="card p-6 sm:p-9 lg:p-10">
             <h1 className="text-center font-display text-2xl font-bold text-navy sm:text-3xl">
               Tell us about your vehicle
             </h1>
@@ -574,14 +572,16 @@ export default function OfferFlow() {
                   </div>
                 </div>
 
-                <button type="submit" className="btn-primary mt-8 w-full py-4 text-lg">
-                  Continue <ArrowRight className="h-5 w-5" />
-                </button>
-                {step1Error && !vehicleValid && (
-                  <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">
-                    Just pick your year, make, and model to continue.
-                  </p>
-                )}
+                <div className="mt-8">
+                  <button type="submit" className="btn-primary w-full py-4 text-lg">
+                    Continue <ArrowRight className="h-5 w-5" />
+                  </button>
+                  {step1Error && !vehicleValid && (
+                    <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">
+                      Just pick your year, make, and model to continue.
+                    </p>
+                  )}
+                </div>
               </form>
             )}
 
@@ -599,9 +599,9 @@ export default function OfferFlow() {
 
       {/* -------------------- STEP 2: details (trim / mileage / photos) -------------------- */}
       {step === 2 && (
-        <div className="mx-auto mt-8 max-w-2xl animate-fade-up">
+        <div className="mt-8 animate-fade-up">
           <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
-          <div className="card mt-6 p-6 sm:p-9">
+          <div className="card mt-6 p-6 sm:p-9 lg:p-10">
             <h1 className="font-display text-2xl font-bold text-navy sm:text-3xl">
               Add a few details
             </h1>
@@ -638,12 +638,14 @@ export default function OfferFlow() {
 
               {photoBlock}
 
-              <button type="submit" className="btn-primary mt-8 w-full py-4 text-lg">
-                See My Value <ArrowRight className="h-5 w-5" />
-              </button>
-              {error && (
-                <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{error}</p>
-              )}
+              <div className="mx-auto mt-8 max-w-md">
+                <button type="submit" className="btn-primary w-full py-4 text-lg">
+                  See My Value <ArrowRight className="h-5 w-5" />
+                </button>
+                {error && (
+                  <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{error}</p>
+                )}
+              </div>
             </form>
           </div>
         </div>
@@ -661,54 +663,50 @@ export default function OfferFlow() {
               <OfferSkeleton />
             </div>
           ) : !estimate ? null : isUnique ? (
-            <div className="mx-auto max-w-xl animate-fade-up">
+            <div className="animate-fade-up">
               <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
-              <div className="card mt-6 p-6 sm:p-9">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
-                  <Shield className="h-4 w-4" /> Custom offer
-                </span>
-                <h1 className="mt-3 font-display text-2xl font-bold text-navy">
+              <div className="card mt-6 p-6 sm:p-9 lg:p-10">
+                <h1 className="font-display text-2xl font-bold text-navy">
                   Your vehicle is unique
                 </h1>
                 {renderContactForm("Please fill in your information and a specialist will contact you shortly")}
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-xl animate-fade-up">
-              {/* Estimated range + vehicle side by side (replaces the gauge). */}
-              <div className="card p-6 sm:p-7">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-navy">
-                      <Check className="h-4 w-4" /> Value ready
-                    </span>
-                    <div className="mt-2 font-display text-3xl font-extrabold text-emerald-700 sm:text-4xl">
-                      <CountUp value={estimate.low} format={cad} /> –{" "}
-                      <CountUp value={estimate.high} format={cad} />
-                    </div>
-                    {estimate.source === "market" && estimate.comps ? (
-                      <p className="mt-1 text-xs font-medium text-muted">
-                        Based on {estimate.comps.toLocaleString()} recent Canadian listings.
-                      </p>
-                    ) : null}
+            <div className="animate-fade-up">
+              {/* Expanded (lg+): a single card — number | divider | vehicle (the original look).
+                  Stacked (below lg): number plain on the page, vehicle in its own boxed pill. */}
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-8 lg:shadow-card">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-muted">Your offer</p>
+                  <div className="mt-1 whitespace-nowrap font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">
+                    <CountUp value={estimate.low} format={cad} /> –{" "}
+                    <CountUp value={estimate.high} format={cad} />
                   </div>
-                  <div className="hidden w-px self-stretch bg-slate-200 sm:block" />
-                  <div className="sm:text-right">
-                    <CarBodyIllustration make={make} model={model} className="mb-1 h-auto w-40 sm:ml-auto" />
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
-                    <p className="font-display text-lg font-bold text-navy">
-                      {year} {make} {model}{cleanTrim ? ` ${cleanTrim}` : ""}
+                  {estimate.source === "market" && estimate.comps ? (
+                    <p className="mt-2 text-sm font-medium text-muted">
+                      Based on {estimate.comps.toLocaleString()} recent Canadian listings.
                     </p>
-                    {kmv && <p className="mt-0.5 text-sm text-muted">{fmtKm(Number(kmv))}</p>}
-                    <button onClick={editVehicle} className="mt-2 text-sm font-medium text-muted hover:text-brand-700">
-                      ← Edit vehicle details
-                    </button>
-                  </div>
+                  ) : null}
+                </div>
+
+                <div className="hidden w-px self-stretch bg-slate-200 lg:block" />
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft sm:p-6 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:text-right">
+                  <CarBodyIllustration make={make} model={model} className="mb-1 h-auto w-44 lg:ml-auto" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your vehicle</p>
+                  <p className="font-display text-lg font-bold text-navy">
+                    {year} {make} {model}{cleanTrim ? ` ${cleanTrim}` : ""}
+                  </p>
+                  {kmv && <p className="mt-0.5 text-sm text-muted">{fmtKm(Number(kmv))}</p>}
+                  <button onClick={editVehicle} className="mt-2 text-sm font-medium text-muted hover:text-brand-700">
+                    ← Edit vehicle details
+                  </button>
                 </div>
               </div>
 
               {/* Contact — merged into this step so a priced car is a single screen. */}
-              <div className="card mt-6 p-6 sm:p-9">
+              <div className="card mt-6 p-6 sm:p-9 lg:p-10">
                 <h2 className="font-display text-xl font-bold text-navy sm:text-2xl">
                   Where should we send your firm offer?
                 </h2>

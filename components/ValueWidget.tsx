@@ -53,14 +53,8 @@ export default function ValueWidget() {
       onSubmit={submit}
       className="card w-full overflow-hidden border border-slate-100 p-6 sm:p-8"
     >
-      <div className="text-center">
-        <h2 className="font-display text-[28px] font-bold text-navy sm:text-[2rem]">
-          See What Your Car Is Worth
-        </h2>
-      </div>
-
       {/* Mode toggle */}
-      <div className="mt-6">
+      <div>
         <div className="flex rounded-xl bg-slate-100 p-1">
           <button
             type="button"

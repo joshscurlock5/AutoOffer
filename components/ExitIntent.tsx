@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
-import { X, ArrowRight, Phone, Tag } from "./icons";
+import { X, ArrowRight, Phone, Sparkles } from "./icons";
 
 /**
  * Subtle exit-intent reminder. Shown once per browser session on deeper pages
@@ -66,7 +66,7 @@ export default function ExitIntent() {
 
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-7 shadow-lift">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white p-7 text-center shadow-lift">
         <button
           onClick={() => setOpen(false)}
           aria-label="Close"
@@ -74,16 +74,14 @@ export default function ExitIntent() {
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand">
-          <Tag className="h-4 w-4" /> Before you go
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand">
+          <Sparkles className="h-7 w-7" />
         </span>
-        <h2 className="mt-3 font-display text-2xl font-bold text-navy">
-          See what your car is worth — free
+        <p className="mt-4 text-sm font-medium text-muted">Before you go…</p>
+        <h2 className="mt-1 font-display text-2xl font-bold text-navy">
+          Get your free estimate in under 2 minutes.
         </h2>
-        <p className="mt-2 text-muted">
-          It takes about two minutes to get an instant estimate. No obligation, no
-          spam — and a real {site.name} buyer confirms your firm offer.
-        </p>
+        <p className="mt-2 text-muted">No spam. No obligation.</p>
         <Link
           href="/get-offer"
           onClick={() => {

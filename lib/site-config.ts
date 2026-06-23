@@ -56,7 +56,7 @@ export const site = {
   insured: true, //  carries commercial dealer-plate insurance
   insuranceText: "$3M dealer-plate insurance", //  the business's OWN coverage (NOT customer coverage)
   yearsExperience: 5, //                                     years wholesaling
-  carsBought: 5000, //  vehicles purchased — single source of truth for the "cars" stat
+  carsBought: 3000, //  vehicles purchased — single source of truth for the "cars" stat
 
   // ---- REFERRAL PROGRAM ---------------------------------------------------
   referralReward: 100, // dollars paid when a referred friend sells
