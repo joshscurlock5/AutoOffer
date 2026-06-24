@@ -4,6 +4,7 @@ import { addReferral } from "@/lib/store";
 import { notifyNewReferral } from "@/lib/notify";
 import type { Referral } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    }
+
+    // Bot check (Cloudflare Turnstile). No-op until keys are configured.
+    if (!(await verifyTurnstile(String(body.turnstileToken || ""), ip))) {
+      return NextResponse.json(
+        { error: "Verification failed. Please refresh the page and try again." },
+        { status: 403 },
+      );
     }
 
     const referrerName = String(body.referrerName || "").trim();

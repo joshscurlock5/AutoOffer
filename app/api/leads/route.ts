@@ -5,6 +5,7 @@ import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many submissions. Please try again in a bit." }, { status: 429 });
     }
     const form = await req.formData();
+
+    // Bot check (Cloudflare Turnstile). No-op until keys are configured; once set,
+    // it rejects missing/forged tokens BEFORE any S3 write or Telegram alert.
+    if (!(await verifyTurnstile(str(form.get("turnstileToken")), ip))) {
+      return NextResponse.json(
+        { error: "Verification failed. Please refresh the page and try again." },
+        { status: 403 },
+      );
+    }
 
     const kind = str(form.get("kind")) === "inquiry" ? "inquiry" : "vehicle";
     const name = str(form.get("name"));

@@ -14,6 +14,7 @@ import CountUp from "@/components/CountUp";
 import WhySell from "@/components/WhySell";
 import SecurePayment from "@/components/SecurePayment";
 import CarBodyIllustration from "@/components/CarBodyIllustration";
+import TurnstileBox, { turnstileEnabled } from "@/components/TurnstileBox";
 import {
   ArrowRight, Phone, Check, Camera, Trash,
   Car, Lock,
@@ -69,6 +70,7 @@ export default function OfferFlow() {
   const [phone, setPhone] = useState("");
   const [contactMethod, setContactMethod] = useState<"call" | "text" | "email">("call");
   const [bestTime, setBestTime] = useState("Anytime");
+  const [tsToken, setTsToken] = useState("");
 
   const [estimate, setEstimate] = useState<OfferEstimate | null>(null);
   const [calculating, setCalculating] = useState(false);
@@ -293,6 +295,10 @@ export default function OfferFlow() {
       setError(`You chose ${contactMethod} — please add a 10-digit phone number.`);
       return;
     }
+    if (turnstileEnabled && !tsToken) {
+      setError("Please complete the verification below, then submit.");
+      return;
+    }
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -308,6 +314,7 @@ export default function OfferFlow() {
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
       if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
+      if (tsToken) fd.append("turnstileToken", tsToken);
       photos.forEach((f) => fd.append("photos", f));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
@@ -448,6 +455,7 @@ export default function OfferFlow() {
         </div>
 
         <div className="mt-6 space-y-4">
+        <TurnstileBox onToken={setTsToken} />
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">

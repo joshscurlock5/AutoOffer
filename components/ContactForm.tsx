@@ -2,17 +2,26 @@
 
 import { useState } from "react";
 import { Check, ArrowRight, Shield } from "./icons";
+import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [tsToken, setTsToken] = useState("");
+  const [errMsg, setErrMsg] = useState("Please add your name, email and phone (or just call us).");
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email || !phone) {
+      setErrMsg("Please add your name, email and phone (or just call us).");
+      setState("error");
+      return;
+    }
+    if (turnstileEnabled && !tsToken) {
+      setErrMsg("Please complete the verification below, then send.");
       setState("error");
       return;
     }
@@ -24,6 +33,7 @@ export default function ContactForm() {
       fd.append("email", email);
       fd.append("phone", phone);
       fd.append("message", message);
+      if (tsToken) fd.append("turnstileToken", tsToken);
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       setState("done");
@@ -71,9 +81,11 @@ export default function ContactForm() {
           <textarea id="c-msg" rows={4} className="field resize-none" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell us about your vehicle or your question…" />
         </div>
 
+        <TurnstileBox onToken={setTsToken} />
+
         {state === "error" && (
           <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-            Please add your name, email and phone (or just call us).
+            {errMsg}
           </p>
         )}
 

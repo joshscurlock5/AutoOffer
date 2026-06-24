@@ -4,6 +4,7 @@ import { useState } from "react";
 import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { Check, ArrowRight } from "./icons";
+import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 
 export default function ReferralForm() {
   const [f, setF] = useState({
@@ -15,6 +16,8 @@ export default function ReferralForm() {
     friendEmail: "",
     message: "",
   });
+  const [tsToken, setTsToken] = useState("");
+  const [errMsg, setErrMsg] = useState("Please enter at least your name and email.");
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
 
   function set(k: keyof typeof f) {
@@ -25,6 +28,12 @@ export default function ReferralForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!f.referrerName || !f.referrerEmail) {
+      setErrMsg("Please enter at least your name and email.");
+      setState("error");
+      return;
+    }
+    if (turnstileEnabled && !tsToken) {
+      setErrMsg("Please complete the verification below, then submit.");
       setState("error");
       return;
     }
@@ -33,7 +42,7 @@ export default function ReferralForm() {
       const res = await fetch("/api/referrals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(f),
+        body: JSON.stringify({ ...f, turnstileToken: tsToken }),
       });
       if (!res.ok) throw new Error();
       setState("done");
@@ -104,9 +113,13 @@ export default function ReferralForm() {
         </div>
       </div>
 
+      <div className="mt-5">
+        <TurnstileBox onToken={setTsToken} />
+      </div>
+
       {state === "error" && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-          Please enter at least your name and email.
+          {errMsg}
         </p>
       )}
 
