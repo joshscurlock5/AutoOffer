@@ -52,7 +52,9 @@ export default function ChatWidget() {
   const [contact, setContact] = useState("");
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [phoneError, setPhoneError] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
   // Restore an existing conversation id (returning visitor).
   useEffect(() => {
@@ -95,10 +97,17 @@ export default function ChatWidget() {
 
   async function send(e?: React.FormEvent) {
     e?.preventDefault();
+    if (sending) return;
+    // Require a phone number before the first message. Rather than disabling the
+    // send button (which reads as "broken"), flag + focus the phone field.
+    if (!convId && !validPhone(contact)) {
+      setPhoneError(true);
+      phoneInputRef.current?.focus();
+      return;
+    }
+    setPhoneError(false);
     const text = input.trim();
-    if (!text || sending) return;
-    // Require a phone number before the first message of a new conversation.
-    if (!convId && !validPhone(contact)) return;
+    if (!text) return;
     setSending(true);
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -301,16 +310,28 @@ export default function ChatWidget() {
                 )}
                 <div className="space-y-2">
                   {!convId && (
-                    <input
-                      value={contact}
-                      onChange={(e) => setContact(e.target.value)}
-                      type="tel"
-                      inputMode="tel"
-                      placeholder="Your phone number (so we can reply)"
-                      maxLength={20}
-                      className="field w-full py-2.5"
-                      autoFocus
-                    />
+                    <div>
+                      <input
+                        ref={phoneInputRef}
+                        value={contact}
+                        onChange={(e) => {
+                          setContact(e.target.value);
+                          if (phoneError) setPhoneError(false);
+                        }}
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="Your phone number (so we can reply)"
+                        maxLength={20}
+                        aria-invalid={phoneError}
+                        className={`field w-full py-2.5 ${phoneError ? "border-red-400 ring-2 ring-red-200" : ""}`}
+                        autoFocus
+                      />
+                      {phoneError && (
+                        <p className="mt-1 px-1 text-xs font-medium text-red-600">
+                          Please add your phone number so we can get back to you.
+                        </p>
+                      )}
+                    </div>
                   )}
                   <div className="flex items-end gap-2">
                     <textarea
@@ -337,9 +358,8 @@ export default function ChatWidget() {
                     </button>
                     <button
                       type="submit"
-                      disabled={!input.trim() || sending || (!convId && !validPhone(contact))}
                       aria-label="Send"
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700"
                     >
                       <Send className="h-5 w-5" />
                     </button>
