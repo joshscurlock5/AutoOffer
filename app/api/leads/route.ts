@@ -7,6 +7,7 @@ import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/type
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead } from "@/lib/metaCapi";
+import { sendLeadConfirmation } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -175,6 +176,10 @@ export async function POST(req: NextRequest) {
     // Best-effort owner alert (Telegram), with a photo gallery if any. Awaited so
     // Amplify's Lambda doesn't freeze the send; never throws, so the lead is safe.
     await notifyNewLead(lead, photoBuffers);
+    // Instant confirmation email to the customer (best-effort; only fires when
+    // they gave an email — phone-only call/text leads have none). Never blocks
+    // or fails the lead.
+    await sendLeadConfirmation(lead);
     // Link this lead back to the price-lookup it came from (admin "API Calls"
     // conversion tracking). Strictly after the lead is saved + alerted, and
     // best-effort (markLookupConverted swallows its own errors), so it can never
