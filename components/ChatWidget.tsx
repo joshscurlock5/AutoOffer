@@ -169,7 +169,7 @@ export default function ChatWidget() {
 
       {/* Panel */}
       {open && (
-        <div className="chat-panel fixed right-4 z-50 flex h-[62rem] max-h-[calc(100vh-5rem)] w-[calc(100vw-2rem)] max-w-[35rem] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
+        <div className="chat-panel fixed right-4 z-50 flex h-[56rem] max-h-[calc(100vh-10rem)] w-[calc(100vw-2rem)] max-w-[35rem] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
           {/* -------------------- HOME -------------------- */}
           {view === "home" && (
             <>
