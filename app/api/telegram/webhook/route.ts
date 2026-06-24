@@ -52,13 +52,13 @@ export async function POST(req: NextRequest) {
       const s = await getBudgetStatus();
       const body = s.ok
         ? [
-            "📊 MarketCheck API usage",
+            "MarketCheck API usage",
             "",
             `Used: ${s.used} / ${s.cap}`,
             `Left: ${s.remaining}`,
             `Resets: ${s.resetLabel} (UTC)`,
           ].join("\n")
-        : "⚠️ Couldn't read the usage counter right now — try again shortly.";
+        : "Couldn't read the usage counter right now - try again shortly.";
       await reply(fromChat, body);
     }
 

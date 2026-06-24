@@ -130,12 +130,12 @@ export async function notifyNewChatMessage(opts: {
   if (!BOT_TOKEN || !CHAT_ID) return;
   const who = opts.name?.trim() ? opts.name.trim() : "Visitor";
   const text = [
-    "💬 New chat message",
+    "New chat message",
     "",
     `From: ${who}`,
     `"${opts.text.slice(0, 500)}"`,
     "",
-    "Reply in Messages → https://www.driveoffer.ca/admin",
+    "Reply in Messages: https://www.driveoffer.ca/admin",
   ].join("\n");
   try {
     await sendText(text);
