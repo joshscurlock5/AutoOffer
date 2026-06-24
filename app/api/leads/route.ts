@@ -6,6 +6,7 @@ import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { sendCapiLead } from "@/lib/metaCapi";
 
 export const runtime = "nodejs";
 
@@ -180,6 +181,27 @@ export async function POST(req: NextRequest) {
     // block or fail a lead.
     const lookupId = str(form.get("lookupId"));
     if (lookupId) await markLookupConverted(lookupId, id);
+    // Meta Conversions API "Lead" event (server-side; best-effort, after the lead
+    // is saved — can never affect it). Shares metaEventId with the browser Pixel
+    // event so Meta dedupes; PII is hashed inside sendCapiLead.
+    await sendCapiLead({
+      eventId: str(form.get("metaEventId")) || crypto.randomUUID(),
+      eventSourceUrl: req.headers.get("referer"),
+      user: {
+        email,
+        phone,
+        firstName: name,
+        clientIp: ip,
+        userAgent: req.headers.get("user-agent"),
+        fbp: req.cookies.get("_fbp")?.value,
+        fbc: req.cookies.get("_fbc")?.value,
+      },
+      customData: {
+        currency: "CAD",
+        value: estimate && !estimate.unique ? estimate.mid : 0,
+        ...(vehicle ? { content_name: `${vehicle.year} ${vehicle.make} ${vehicle.model}` } : {}),
+      },
+    });
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("POST /api/leads failed", err);

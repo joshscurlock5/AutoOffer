@@ -5,6 +5,7 @@ import { notifyNewReferral } from "@/lib/notify";
 import type { Referral } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { sendCapiLead } from "@/lib/metaCapi";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,21 @@ export async function POST(req: NextRequest) {
     await addReferral(ref);
     // Telegram alert (best-effort; awaited so the Lambda doesn't freeze first).
     await notifyNewReferral(ref);
+    // Meta Conversions API "Lead" event (best-effort; after the referral is saved).
+    await sendCapiLead({
+      eventId: String(body.metaEventId || "") || crypto.randomUUID(),
+      eventSourceUrl: req.headers.get("referer"),
+      user: {
+        email: referrerEmail,
+        phone: ref.referrer.phone,
+        firstName: referrerName,
+        clientIp: ip,
+        userAgent: req.headers.get("user-agent"),
+        fbp: req.cookies.get("_fbp")?.value,
+        fbc: req.cookies.get("_fbc")?.value,
+      },
+      customData: { currency: "CAD", value: 0, content_name: "Referral" },
+    });
     return NextResponse.json({ ok: true, code: ref.code });
   } catch (err) {
     console.error("POST /api/referrals failed", err);

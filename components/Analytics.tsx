@@ -15,14 +15,20 @@ export default function Analytics() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+    if (typeof window === "undefined") return;
     const qs = searchParams?.toString();
     const path = qs ? `${pathname}?${qs}` : pathname;
-    window.gtag("event", "page_view", {
-      page_path: path,
-      page_location: window.location.href,
-      page_title: document.title,
-    });
+    if (typeof window.gtag === "function") {
+      window.gtag("event", "page_view", {
+        page_path: path,
+        page_location: window.location.href,
+        page_title: document.title,
+      });
+    }
+    // Meta Pixel page view (the base loader fires init only).
+    if (typeof window.fbq === "function") {
+      window.fbq("track", "PageView");
+    }
   }, [pathname, searchParams]);
 
   return null;

@@ -7,6 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
+import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
@@ -304,6 +305,7 @@ export default function OfferFlow() {
       return;
     }
     setSubmitting(true);
+    const metaEventId = newEventId();
     try {
       const fd = new FormData();
       fd.append("kind", "vehicle");
@@ -319,6 +321,7 @@ export default function OfferFlow() {
       fd.append("bestTime", bestTime);
       if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
       if (lookupIdRef.current) fd.append("lookupId", lookupIdRef.current);
+      fd.append("metaEventId", metaEventId);
       if (tsToken) fd.append("turnstileToken", tsToken);
       photos.forEach((f) => fd.append("photos", f));
 
@@ -333,6 +336,7 @@ export default function OfferFlow() {
         contactMethod,
         unique: !!estimate?.unique,
       });
+      trackMeta("Lead", { currency: "CAD", value: estimate?.mid ?? 0, content_name: `${year} ${make} ${model}` }, metaEventId);
       setStep(5);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {

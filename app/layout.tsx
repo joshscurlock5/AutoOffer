@@ -14,6 +14,7 @@ import JsonLd from "@/components/JsonLd";
 import { site } from "@/lib/site-config";
 import { organizationSchema } from "@/lib/seo";
 import { GA_ID } from "@/lib/analytics";
+import { META_PIXEL_ID } from "@/lib/metaPixel";
 
 // Self-hosted via next/font. Inter is the whole site's typeface — logos included.
 const sans = Inter({
@@ -76,10 +77,26 @@ export default function RootLayout({
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
               strategy="afterInteractive"
             />
-            <Suspense fallback={null}>
-              <Analytics />
-            </Suspense>
           </>
+        )}
+        {META_PIXEL_ID && (
+          <>
+            {/* Meta Pixel base — init only. PageView (first render + every route
+                change) is fired by <Analytics/>, mirroring the GA setup, so it's
+                counted exactly once. */}
+            <Script id="meta-pixel" strategy="afterInteractive">
+              {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL_ID}');`}
+            </Script>
+            <noscript>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img height="1" width="1" style={{ display: "none" }} alt="" src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`} />
+            </noscript>
+          </>
+        )}
+        {(GA_ID || META_PIXEL_ID) && (
+          <Suspense fallback={null}>
+            <Analytics />
+          </Suspense>
         )}
         <JsonLd data={organizationSchema()} />
         <Header />

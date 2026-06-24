@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, ArrowRight, Shield } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
+import { trackMeta, newEventId } from "@/lib/metaPixel";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
@@ -26,6 +27,7 @@ export default function ContactForm() {
       return;
     }
     setState("sending");
+    const metaEventId = newEventId();
     try {
       const fd = new FormData();
       fd.append("kind", "inquiry");
@@ -33,10 +35,12 @@ export default function ContactForm() {
       fd.append("email", email);
       fd.append("phone", phone);
       fd.append("message", message);
+      fd.append("metaEventId", metaEventId);
       if (tsToken) fd.append("turnstileToken", tsToken);
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       setState("done");
+      trackMeta("Lead", { currency: "CAD", value: 0 }, metaEventId);
     } catch {
       setState("error");
     }
