@@ -151,7 +151,7 @@ export default function ValueWidget() {
       )}
 
       {/* Mobile/small only: social proof inside the form (desktop shows it by the tagline). */}
-      <div className="mt-5 flex items-center justify-between gap-x-3 border-t border-slate-100 pt-4 wide:hidden">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-3 border-t border-slate-100 pt-4 wide:hidden">
         <p className="text-sm text-muted">
           <span className="text-2xl font-extrabold text-navy">{site.carsBought.toLocaleString("en-CA")}+</span> cars sold to DriveOffer
         </p>
@@ -164,12 +164,12 @@ export default function ValueWidget() {
             className="inline-flex shrink-0 items-center gap-2"
           >
             <GoogleG className="h-5 w-5" />
-            <span className="flex text-amber-400" role="img" aria-label="Five stars">
+            <span className="flex text-amber-400" role="img" aria-label="5.0 out of 5 stars">
               {[0, 1, 2, 3, 4].map((i) => (
                 <Star key={i} className="h-4 w-4" />
               ))}
             </span>
-            <span className="hidden text-sm font-semibold text-muted sm:inline">Google Reviews</span>
+            <span className="font-display text-xl font-extrabold text-navy">5.0 <span className="text-sm font-normal text-muted">stars</span></span>
           </a>
         )}
       </div>

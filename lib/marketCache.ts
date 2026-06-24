@@ -12,7 +12,7 @@ import { allowApiSpend } from "./rateLimit";
 // ---------------------------------------------------------------------------
 
 const TABLE = process.env.MARKET_CACHE_TABLE || "AutoOfferMarketCache";
-const MONTHLY_BUDGET = Number(process.env.MARKETCHECK_MONTHLY_BUDGET || 480);
+const MONTHLY_BUDGET = Number(process.env.MARKETCHECK_MONTHLY_BUDGET || 500);
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -63,6 +63,48 @@ export async function getBudgetCount(): Promise<number> {
 
 export function hasBudget(count: number): boolean {
   return count < MONTHLY_BUDGET;
+}
+
+/**
+ * This month's MarketCheck usage, for surfacing on demand (e.g. the Telegram
+ * /usage command). Reads the counter directly (does NOT use getBudgetCount's
+ * fail-closed sentinel) so we can report a clean "couldn't read" instead of a
+ * bogus "0 left". `reset` is the first day of next month, 00:00 UTC — which is
+ * when monthKey() rolls over. Note: this is the app's calendar-month counter,
+ * which may differ from MarketCheck's real billing-cycle reset.
+ */
+export async function getBudgetStatus(): Promise<{
+  ok: boolean;
+  used: number;
+  cap: number;
+  remaining: number;
+  resetISO: string;
+  resetLabel: string;
+}> {
+  let used = 0;
+  let ok = true;
+  try {
+    const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: monthKey() } }));
+    used = Number(res.Item?.count ?? 0);
+  } catch {
+    ok = false;
+  }
+  const cap = MONTHLY_BUDGET;
+  const d = new Date();
+  const reset = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  return {
+    ok,
+    used,
+    cap,
+    remaining: Math.max(0, cap - used),
+    resetISO: reset.toISOString(),
+    resetLabel: reset.toLocaleDateString("en-CA", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    }),
+  };
 }
 
 /**

@@ -115,3 +115,31 @@ export async function notifyNewLead(lead: Lead, photos: NotifyPhoto[] = []): Pro
     console.error("[notify] lead Telegram alert failed:", e);
   }
 }
+
+/**
+ * Alert the owner about a new visitor chat message. Fires on every visitor
+ * message. No-op if the bot isn't configured; never throws (the message is
+ * already saved by the time this runs). Caller must `await` it (Lambda freezes
+ * on response — see the note at the top of this file).
+ */
+export async function notifyNewChatMessage(opts: {
+  text: string;
+  name?: string;
+  conversationId: string;
+}): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  const who = opts.name?.trim() ? opts.name.trim() : "Visitor";
+  const text = [
+    "💬 New chat message",
+    "",
+    `From: ${who}`,
+    `"${opts.text.slice(0, 500)}"`,
+    "",
+    "Reply in Messages → https://www.driveoffer.ca/admin",
+  ].join("\n");
+  try {
+    await sendText(text);
+  } catch (e) {
+    console.error("[notify] chat Telegram alert failed:", e);
+  }
+}

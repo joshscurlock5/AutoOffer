@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addChatMessage, getConversation } from "@/lib/store";
+import { notifyNewChatMessage } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
     if (!conv) {
       return NextResponse.json({ error: "Could not send." }, { status: 500 });
     }
+    // Telegram alert on every visitor message (best-effort; must be awaited so
+    // the Lambda doesn't freeze before it sends).
+    await notifyNewChatMessage({ text, name, conversationId: conv.id });
     return NextResponse.json({ ok: true, conversationId: conv.id, messages: conv.messages });
   } catch (err) {
     console.error("POST /api/chat failed", err);
