@@ -291,13 +291,12 @@ export default function OfferFlow() {
       setError("Please add your first name.");
       return;
     }
-    if (contactMethod === "email") {
-      if (!email.trim()) {
-        setError("You chose email — please add your email address.");
-        return;
-      }
-    } else if (phone.replace(/\D/g, "").length < 10) {
-      setError(`You chose ${contactMethod} — please add a 10-digit phone number.`);
+    if (phone.replace(/\D/g, "").length < 10) {
+      setError("Please add a 10-digit phone number.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please add a valid email address.");
       return;
     }
     if (turnstileEnabled && !tsToken) {
@@ -432,29 +431,24 @@ export default function OfferFlow() {
           </div>
         </div>
 
-        {contactMethod === "email" ? (
+        <div>
+          <label className="label" htmlFor="cphone">Mobile phone</label>
+          <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+        </div>
+        <div>
+          <label className="label" htmlFor="email">Email</label>
+          <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+        </div>
+        {contactMethod !== "email" && (
           <div>
-            <label className="label" htmlFor="email">Email</label>
-            <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+            <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
+            <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
+              <option>Anytime</option>
+              <option>Morning</option>
+              <option>Afternoon</option>
+              <option>Evening</option>
+            </select>
           </div>
-        ) : (
-          <>
-            <div>
-              <label className="label" htmlFor="cphone">
-                Mobile {contactMethod === "text" ? "number (for text)" : "phone"}
-              </label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
-            </div>
-            <div>
-              <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
-              <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
-                <option>Anytime</option>
-                <option>Morning</option>
-                <option>Afternoon</option>
-                <option>Evening</option>
-              </select>
-            </div>
-          </>
         )}
         </div>
 
@@ -738,12 +732,12 @@ export default function OfferFlow() {
             <span className="font-semibold text-navy">{contactMethod}</span> with your firm
             offer for the {year} {make} {model}.
           </p>
-          <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-left">
+          <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
             <p className="font-semibold text-navy">Want it faster? Call or text us now.</p>
             <p className="mt-1 text-sm text-muted">
               Skip the wait — our team can finalize your offer right over the phone.
             </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
               <PhoneButton variant="primary" location="offer_success" />
               <Link href="/" className="btn-ghost">Back to home</Link>
             </div>
