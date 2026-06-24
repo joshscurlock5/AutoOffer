@@ -7,7 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track } from "@/lib/analytics";
-import { site, telHref } from "@/lib/site-config";
+import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
@@ -16,7 +16,7 @@ import SecurePayment from "@/components/SecurePayment";
 import CarBodyIllustration from "@/components/CarBodyIllustration";
 import TurnstileBox, { turnstileEnabled } from "@/components/TurnstileBox";
 import {
-  ArrowRight, Phone, Check, Camera, Trash,
+  ArrowRight, Check, Camera, Trash,
   Car, Lock,
 } from "@/components/icons";
 
@@ -393,14 +393,9 @@ export default function OfferFlow() {
   );
 
   // The shared contact form — rendered inline on both the priced and the unique
-  // step. `notice` is the small grey banner above the form (differs per path).
-  const renderContactForm = (notice: React.ReactNode) => (
-    <>
-      <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-navy">
-        {notice}
-      </div>
-
-      <form onSubmit={submitLead} className="mt-5">
+  // step. The screen header above it carries the per-path message.
+  const renderContactForm = () => (
+    <form onSubmit={submitLead} className="mt-6">
         <div className="space-y-4">
         <div>
           <label className="label" htmlFor="name">First name</label>
@@ -462,19 +457,11 @@ export default function OfferFlow() {
           {submitting ? "Sending…" : "Get My Firm Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
-        <a
-          href={telHref}
-          onClick={() => track("phone_click", { location: "offer_contact" })}
-          className="btn w-full border-2 border-brand-600 bg-white py-4 text-lg text-brand-700 hover:-translate-y-0.5 hover:bg-brand-50"
-        >
-          <Phone className="h-5 w-5" /> Call Now Instead
-        </a>
-        <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
+        <p className="flex items-center justify-center gap-2 pt-1 text-center text-sm text-muted">
           <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
         </p>
         </div>
       </form>
-    </>
   );
 
   // Always 3 steps now — both the priced and the unique (custom-offer) paths
@@ -677,7 +664,10 @@ export default function OfferFlow() {
                 <h1 className="font-display text-2xl font-bold text-navy">
                   Your vehicle is unique
                 </h1>
-                {renderContactForm("Please fill in your information and a specialist will contact you shortly")}
+                <p className="mt-2 text-muted">
+                  Please fill in your information and a specialist will contact you shortly.
+                </p>
+                {renderContactForm()}
               </div>
             </div>
           ) : (
@@ -716,11 +706,9 @@ export default function OfferFlow() {
               {/* Contact — merged into this step so a priced car is a single screen. */}
               <div className="card mt-6 p-6 sm:p-9 lg:p-10">
                 <h2 className="font-display text-xl font-bold text-navy sm:text-2xl">
-                  Where should we send your firm offer?
+                  We&apos;ll confirm a firm offer for your {make} {model} after a few quick details.
                 </h2>
-                {renderContactForm(
-                  <>We&apos;ll confirm a firm offer for your {make} {model} after a few quick details.</>
-                )}
+                {renderContactForm()}
               </div>
             </div>
           )}
