@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, LeadStatus, Referral, UploadedPhoto, ChatConversation } from "@/lib/types";
+import type { Lead, LeadStatus, Referral, UploadedPhoto, ChatConversation, Lookup } from "@/lib/types";
 import { LEAD_STATUSES } from "@/lib/types";
 import { cad, km as fmtKm, formatDateTime, timeAgo } from "@/lib/format";
 import { site } from "@/lib/site-config";
 import {
   Phone, Mail, Car, Trash, Search, Gift, Check, Camera, Star, X,
-  ChevronLeft, ChevronRight, Dollar, Chat, Send,
+  ChevronLeft, ChevronRight, Dollar, Chat, Send, Activity, Database,
 } from "@/components/icons";
 
 type ChatSummary = {
@@ -51,13 +51,15 @@ export default function AdminDashboard({
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
-  const [tab, setTab] = useState<"leads" | "referrals" | "chats">("leads");
+  const [tab, setTab] = useState<"leads" | "referrals" | "chats" | "lookups">("leads");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "bookmarked" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [activeChat, setActiveChat] = useState<ChatConversation | null>(null);
+  const [lookups, setLookups] = useState<Lookup[]>([]);
+  const [focusLeadId, setFocusLeadId] = useState<string | null>(null);
   const chatsNeedingReply = chats.filter((c) => c.lastSender === "visitor").length;
 
   const counts = useMemo(
@@ -142,6 +144,16 @@ export default function AdminDashboard({
     }
   }
 
+  async function refreshLookups() {
+    try {
+      const r = await fetch("/api/admin/lookups");
+      const d = await r.json();
+      if (Array.isArray(d.lookups)) setLookups(d.lookups);
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function openChat(id: string) {
     try {
       const r = await fetch(`/api/admin/chats?conversationId=${encodeURIComponent(id)}`);
@@ -174,6 +186,24 @@ export default function AdminDashboard({
     const t = setInterval(refreshChats, 8000);
     return () => clearInterval(t);
   }, []);
+
+  // Load the API Calls log when that tab is open (and keep it fresh while there).
+  useEffect(() => {
+    if (tab !== "lookups") return;
+    refreshLookups();
+    const t = setInterval(refreshLookups, 15000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // Scroll to + briefly highlight a lead when clicked through from API Calls.
+  useEffect(() => {
+    if (!focusLeadId || tab !== "leads") return;
+    document.getElementById(`lead-${focusLeadId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setFocusLeadId(null), 2600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusLeadId, tab]);
 
   // Poll the open conversation for new visitor messages.
   useEffect(() => {
@@ -269,6 +299,12 @@ export default function AdminDashboard({
               </span>
             )}
           </button>
+          <button
+            onClick={() => setTab("lookups")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition ${tab === "lookups" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}
+          >
+            <Activity className="h-4 w-4" /> API Calls{lookups.length ? ` (${lookups.length})` : ""}
+          </button>
         </div>
 
         {tab === "leads" && (
@@ -305,15 +341,20 @@ export default function AdminDashboard({
                 </div>
               )}
               {filtered.map((lead) => (
-                <LeadCard
+                <div
                   key={lead.id}
-                  lead={lead}
-                  onPatch={patchLead}
-                  onDelete={removeLead}
-                  onStatusChange={changeStatus}
-                  onToggleBookmark={(l) => patchLead(l.id, { bookmarked: !l.bookmarked })}
-                  onOpenPhoto={(l, index) => setLightbox({ leadId: l.id, photos: l.photos, index })}
-                />
+                  id={`lead-${lead.id}`}
+                  className={`rounded-2xl transition ${focusLeadId === lead.id ? "ring-2 ring-brand ring-offset-2" : ""}`}
+                >
+                  <LeadCard
+                    lead={lead}
+                    onPatch={patchLead}
+                    onDelete={removeLead}
+                    onStatusChange={changeStatus}
+                    onToggleBookmark={(l) => patchLead(l.id, { bookmarked: !l.bookmarked })}
+                    onOpenPhoto={(l, index) => setLightbox({ leadId: l.id, photos: l.photos, index })}
+                  />
+                </div>
               ))}
             </div>
           </>
@@ -369,6 +410,18 @@ export default function AdminDashboard({
 
         {tab === "chats" && (
           <ChatsPanel chats={chats} active={activeChat} onOpen={openChat} onSend={sendReply} />
+        )}
+
+        {tab === "lookups" && (
+          <LookupsPanel
+            lookups={lookups}
+            onOpenLead={(leadId) => {
+              setTab("leads");
+              setFilter("all");
+              setQuery("");
+              setFocusLeadId(leadId);
+            }}
+          />
         )}
       </div>
 
@@ -845,6 +898,116 @@ function ChatsPanel({
             </form>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function LookupsPanel({
+  lookups,
+  onOpenLead,
+}: {
+  lookups: Lookup[];
+  onOpenLead: (leadId: string) => void;
+}) {
+  return (
+    <div className="mt-5 space-y-3">
+      <p className="text-sm text-muted">
+        Every price lookup a visitor ran — the car they checked, the result shown, whether it used a
+        live market-data call or a saved price, and whether they went on to share their contact info.
+      </p>
+      {lookups.length === 0 && (
+        <div className="card p-12 text-center text-muted">
+          No lookups yet. Each time someone checks a car&apos;s value, it appears here.
+        </div>
+      )}
+      {lookups.map((lk) => (
+        <LookupCard key={lk.id} lookup={lk} onOpenLead={onOpenLead} />
+      ))}
+    </div>
+  );
+}
+
+function LookupCard({
+  lookup,
+  onOpenLead,
+}: {
+  lookup: Lookup;
+  onOpenLead: (leadId: string) => void;
+}) {
+  const v = lookup.vehicle;
+  const est = lookup.estimate;
+  const priced = lookup.outcome === "priced" && est;
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
+          <Car className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-lg font-bold text-navy">
+              {v.year} {v.make} {v.model} {v.trim || ""}
+            </span>
+            {lookup.apiCalls > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-[11px] font-bold text-green-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-600" aria-hidden />
+                Live API call{lookup.apiCalls > 1 ? ` ×${lookup.apiCalls}` : ""}
+              </span>
+            ) : lookup.cached ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                <Database className="h-3 w-3" /> Saved price (no call)
+              </span>
+            ) : (
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                No API call
+              </span>
+            )}
+            <span className="ml-auto shrink-0 text-xs text-muted" title={formatDateTime(lookup.createdAt)}>
+              {timeAgo(lookup.createdAt)}
+            </span>
+          </div>
+
+          <div className="mt-1 text-sm text-muted">
+            {v.mileageKm ? `${fmtKm(v.mileageKm)} · ` : ""}
+            {priced ? (
+              <>
+                Quoted{" "}
+                <span className="font-semibold text-navy">
+                  {cad(est.low)} – {cad(est.high)}
+                </span>
+                {est.source === "market" ? (
+                  <span className="ml-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                    Market{est.comps != null ? ` · ${est.comps} comps` : ""}
+                  </span>
+                ) : (
+                  <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    Model est.
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="font-semibold text-amber-600">
+                No price shown — sent to the custom-offer form
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            {lookup.converted && lookup.leadId ? (
+              <button
+                onClick={() => onOpenLead(lookup.leadId!)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-100"
+              >
+                <Check className="h-4 w-4" /> Filled out their info — view lead
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <span className="text-sm text-muted">Did not submit contact info.</span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

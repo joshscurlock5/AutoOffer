@@ -83,6 +83,9 @@ export default function OfferFlow() {
   const flowStarted = useRef(false);
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
+  // The id of the most recent /api/estimate lookup — sent with the lead so the
+  // admin "API Calls" log can mark that lookup as converted.
+  const lookupIdRef = useRef<string | null>(null);
 
   // Load the real trims for the chosen year/make/model.
   useEffect(() => {
@@ -157,6 +160,7 @@ export default function OfferFlow() {
     });
     if (!res.ok) throw new Error("estimate failed");
     const data = await res.json();
+    lookupIdRef.current = typeof data.lookupId === "string" ? data.lookupId : null;
     return data.estimate as OfferEstimate;
   }
 
@@ -314,6 +318,7 @@ export default function OfferFlow() {
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
       if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
+      if (lookupIdRef.current) fd.append("lookupId", lookupIdRef.current);
       if (tsToken) fd.append("turnstileToken", tsToken);
       photos.forEach((f) => fd.append("photos", f));
 

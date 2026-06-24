@@ -26,4 +26,5 @@ export const LEADS_TABLE = process.env.LEADS_TABLE || "AutoOfferLeads";
 export const REFERRALS_TABLE =
   process.env.REFERRALS_TABLE || "AutoOfferReferrals";
 export const CHATS_TABLE = process.env.CHATS_TABLE || "AutoOfferChats";
+export const LOOKUPS_TABLE = process.env.LOOKUPS_TABLE || "AutoOfferLookups";
 export const PHOTOS_BUCKET = process.env.PHOTOS_BUCKET || "";

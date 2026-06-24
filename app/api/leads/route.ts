@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, savePhotos } from "@/lib/store";
+import { addLead, savePhotos, markLookupConverted } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
@@ -174,6 +174,12 @@ export async function POST(req: NextRequest) {
     // Best-effort owner alert (Telegram), with a photo gallery if any. Awaited so
     // Amplify's Lambda doesn't freeze the send; never throws, so the lead is safe.
     await notifyNewLead(lead, photoBuffers);
+    // Link this lead back to the price-lookup it came from (admin "API Calls"
+    // conversion tracking). Strictly after the lead is saved + alerted, and
+    // best-effort (markLookupConverted swallows its own errors), so it can never
+    // block or fail a lead.
+    const lookupId = str(form.get("lookupId"));
+    if (lookupId) await markLookupConverted(lookupId, id);
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("POST /api/leads failed", err);

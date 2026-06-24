@@ -13,8 +13,8 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
-import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, CHATS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, UploadedPhoto, ChatConversation, ChatMessage } from "./types";
+import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
+import type { Lead, Referral, UploadedPhoto, ChatConversation, ChatMessage, Lookup } from "./types";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -208,5 +208,34 @@ export async function addChatMessage(opts: {
   } catch {
     // Cap exceeded (or a conditional failure) — return current state unchanged.
     return await getConversation(id);
+  }
+}
+
+// ---- Price-lookup log / "API Calls" (DynamoDB) ----------------------------
+
+export async function getLookups(): Promise<Lookup[]> {
+  const res = await ddb.send(new ScanCommand({ TableName: LOOKUPS_TABLE }));
+  const items = (res.Items || []) as Lookup[];
+  return items.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+export async function addLookup(lookup: Lookup): Promise<void> {
+  await ddb.send(new PutCommand({ TableName: LOOKUPS_TABLE, Item: lookup }));
+}
+
+/** Mark a lookup as converted (the visitor submitted contact info) + link the lead. */
+export async function markLookupConverted(lookupId: string, leadId: string): Promise<void> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LOOKUPS_TABLE,
+        Key: { id: lookupId },
+        UpdateExpression: "SET converted = :t, leadId = :l",
+        ConditionExpression: "attribute_exists(id)",
+        ExpressionAttributeValues: { ":t": true, ":l": leadId },
+      }),
+    );
+  } catch {
+    /* best-effort: the lookup may not exist (logging disabled) — never affects the lead */
   }
 }

@@ -22,7 +22,10 @@ const TABLE = process.env.MARKET_CACHE_TABLE || "AutoOfferMarketCache";
 const PER_HOUR = Number(process.env.RATE_LIMIT_PER_HOUR || 20);
 const PER_DAY = Number(process.env.RATE_LIMIT_PER_DAY || 60);
 
-const als = new AsyncLocalStorage<{ ip: string }>();
+/** Per-request estimate telemetry (powers the admin "API Calls" cache/live badge). */
+export type EstimateTelemetry = { apiCalls: number; cacheHits: number };
+
+const als = new AsyncLocalStorage<{ ip: string; tele: EstimateTelemetry }>();
 
 const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 
@@ -105,11 +108,29 @@ export function clientIpFrom(req: Request): string {
 
 /** Run `fn` with the client IP attached so reserveApiCall can rate-limit by it. */
 export function withClientIp<T>(ip: string, fn: () => Promise<T>): Promise<T> {
-  return als.run({ ip: ip || "unknown" }, fn);
+  return als.run({ ip: ip || "unknown", tele: { apiCalls: 0, cacheHits: 0 } }, fn);
 }
 
 export function currentIp(): string | null {
   return als.getStore()?.ip ?? null;
+}
+
+/** Record that a real (paid) MarketCheck call was made during this request. */
+export function noteApiCall(n = 1): void {
+  const s = als.getStore();
+  if (s) s.tele.apiCalls += n;
+}
+
+/** Record that a cached value was used during this request (no fresh API call). */
+export function noteCacheHit(): void {
+  const s = als.getStore();
+  if (s) s.tele.cacheHits += 1;
+}
+
+/** Snapshot of this request's estimate telemetry. Read INSIDE the withClientIp scope. */
+export function getEstimateTelemetry(): EstimateTelemetry {
+  const t = als.getStore()?.tele;
+  return t ? { ...t } : { apiCalls: 0, cacheHits: 0 };
 }
 
 function nowSec(): number {

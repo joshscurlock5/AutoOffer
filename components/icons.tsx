@@ -24,6 +24,8 @@ export {
   ExternalLink,
   Lock,
   Send,
+  Activity,
+  Database,
   Tag,
   Banknote,
   Users,

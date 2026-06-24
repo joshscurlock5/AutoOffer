@@ -107,6 +107,36 @@ export interface Referral {
   notes?: string;
 }
 
+/**
+ * A vehicle price-lookup event (the admin "API Calls" log). Captured on every
+ * real /api/estimate call — anonymous, no contact info. Records what was looked
+ * up, the result shown, whether it cost a live MarketCheck call or came from
+ * cache, and whether the visitor then submitted their contact info (a lead).
+ */
+export interface Lookup {
+  id: string;
+  createdAt: string; // ISO timestamp
+  vehicle: VehicleInfo;
+  /** "priced" = a $ range was shown; "unique" = no price, sent to the custom-offer form. */
+  outcome: "priced" | "unique";
+  /** The range the visitor was shown (priced outcomes only). */
+  estimate?: {
+    low: number;
+    high: number;
+    mid: number;
+    source?: "market" | "estimate";
+    comps?: number;
+  };
+  /** Real MarketCheck API calls made for this lookup (0 = served from cache / no call). */
+  apiCalls: number;
+  /** True when a cached value was used (no fresh API call). */
+  cached: boolean;
+  /** Did the visitor go on to submit their contact info (become a lead)? */
+  converted: boolean;
+  /** The linked lead id, when converted (for admin click-through). */
+  leadId?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "visitor" | "admin";

@@ -11,6 +11,7 @@ import {
   type TrimOption,
 } from "./marketcheck";
 import { cacheGet, cachePut, reserveApiCall, recordApiCalls } from "./marketCache";
+import { noteApiCall, noteCacheHit } from "./rateLimit";
 import type { OfferEstimate } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -110,17 +111,23 @@ async function fetchStats(
   const cacheKey = `mc:${COUNTRY}:${norm(STATES)}:${norm(make)}:${norm(model)}:${year}${tkey}`;
 
   const cached = await cacheGet<any>(cacheKey);
-  if (cached && cached.miss) return null;
-  if (cached && !cached.miss) return cached as MarketPriceStats;
+  if (cached) {
+    noteCacheHit();
+    return cached.miss ? null : (cached as MarketPriceStats);
+  }
 
   if (!(await reserveApiCall())) return null;
+  noteApiCall();
   const res = await getMarketPriceStats({
     make,
     model,
     year,
     trim: trim && trim.trim() ? trim.trim() : undefined,
   });
-  if (res.attempts > 1) await recordApiCalls(res.attempts - 1);
+  if (res.attempts > 1) {
+    noteApiCall(res.attempts - 1);
+    await recordApiCalls(res.attempts - 1);
+  }
   if (res.stats) await cachePut(cacheKey, res.stats, CACHE_DAYS);
   else await cachePut(cacheKey, { miss: true }, MISS_CACHE_DAYS);
   return res.stats;
