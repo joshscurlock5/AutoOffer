@@ -62,9 +62,8 @@ function buildHtml(lead: Lead): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e9ec;">
-        <tr><td style="background:#0e1c2b;padding:18px 28px;">
-          <img src="https://www.driveoffer.ca/apple-touch-icon.png" width="34" height="34" alt="DriveOffer" style="display:inline-block;vertical-align:middle;border-radius:8px;" />
-          <span style="font-size:20px;font-weight:800;color:#ffffff;vertical-align:middle;margin-left:10px;">Drive<span style="color:#4f7cf7;">Offer</span></span>
+        <tr><td style="background:#0e1c2b;padding:20px 28px;">
+          <span style="font-size:20px;font-weight:800;color:#ffffff;">Drive<span style="color:#4f7cf7;">Offer</span></span>
         </td></tr>
         <tr><td style="padding:28px 28px 8px;">
           <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">You're all set, ${first} 🚗</h1>
