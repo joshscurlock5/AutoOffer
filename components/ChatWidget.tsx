@@ -93,7 +93,7 @@ export default function ChatWidget() {
     if (open && view === "conversation") scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, open, view]);
 
-  if (pathname?.startsWith("/admin")) return null;
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer")) return null;
 
   async function send(e?: React.FormEvent) {
     e?.preventDefault();

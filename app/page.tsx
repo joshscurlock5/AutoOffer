@@ -20,11 +20,11 @@ export default function HomePage() {
           <div className="mx-auto max-w-col wide:max-w-none">
             <div className="animate-fade-up text-left wide:text-center">
               <h1 className="font-display text-[2.75rem] font-extrabold leading-[1.08] tracking-tight text-navy sm:text-[4.5rem]">
-                Sell your car the easy way.
+                Get a real offer in 2 minutes.
               </h1>
               <div className="mt-8 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 wide:justify-center lg:mt-10">
                 <p className="text-[1.375rem] text-navy wide:text-[1.75rem]">
-                  Free estimate. No haggling. <span className="font-bold">That&apos;s DriveOffer.</span>
+                  Free, no obligation, paid the same day. <span className="font-bold">That&apos;s DriveOffer.</span>
                 </p>
                 {(site.reviewsUrl as string) && (
                   <a

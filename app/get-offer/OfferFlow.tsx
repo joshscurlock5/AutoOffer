@@ -132,6 +132,46 @@ export default function OfferFlow() {
     };
   }, []);
 
+  // Restore in-progress fields (not photos) so a refresh / accidental back-button
+  // doesn't wipe what they typed. A deep-link that already carries a vehicle wins.
+  useEffect(() => {
+    if (cameWithVehicle) return;
+    try {
+      const s = JSON.parse(localStorage.getItem("ao_offer_progress") || "null");
+      if (!s) return;
+      if (s.year) setYear(s.year);
+      if (s.make) setMake(s.make);
+      if (s.model) setModel(s.model);
+      if (s.trim) setTrim(s.trim);
+      if (s.kmv) setKmv(s.kmv);
+      if (s.name) setName(s.name);
+      if (s.email) setEmail(s.email);
+      if (s.phone) setPhone(s.phone);
+      if (s.contactMethod) setContactMethod(s.contactMethod);
+      if (s.bestTime) setBestTime(s.bestTime);
+      if (s.year && s.make && s.model) setStep(2);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist progress on every change; clear it once the lead is submitted.
+  useEffect(() => {
+    try {
+      if (step === 5) {
+        localStorage.removeItem("ao_offer_progress");
+        return;
+      }
+      localStorage.setItem(
+        "ao_offer_progress",
+        JSON.stringify({ year, make, model, trim, kmv, name, email, phone, contactMethod, bestTime }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [year, make, model, trim, kmv, name, email, phone, contactMethod, bestTime, step]);
+
   const models = make ? modelsFor(make) : [];
   const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
@@ -434,10 +474,12 @@ export default function OfferFlow() {
         <div>
           <label className="label" htmlFor="cphone">Mobile phone</label>
           <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+          <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
         </div>
         <div>
           <label className="label" htmlFor="email">Email</label>
           <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+          <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
         </div>
         {contactMethod !== "email" && (
           <div>
@@ -456,7 +498,7 @@ export default function OfferFlow() {
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
-          {submitting ? "Sending…" : "Get My Firm Offer"}
+          {submitting ? "Sending…" : "Get My Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
         <p className="flex items-center justify-center gap-2 pt-1 text-center text-sm text-muted">
@@ -691,6 +733,9 @@ export default function OfferFlow() {
                       Based on {estimate.comps.toLocaleString()} recent Canadian listings.
                     </p>
                   ) : null}
+                  <p className="mt-1 text-sm text-muted">
+                    Priced from today&apos;s market — used-car values shift week to week, so it&apos;s worth locking in your offer soon.
+                  </p>
                 </div>
 
                 <div className="hidden w-px self-stretch bg-slate-200 lg:block" />
@@ -730,10 +775,22 @@ export default function OfferFlow() {
             Thanks{name.trim() ? `, ${name.trim()}` : ""} — we got it!
           </h1>
           <p className="mt-3 text-lg text-muted">
-            A real {site.name} buyer will contact you soon by{" "}
-            <span className="font-semibold text-navy">{contactMethod}</span> with your firm
-            offer for the {year} {make} {model}.
+            Check your email for a confirmation. Here&apos;s what happens next:
           </p>
+          <ol className="mx-auto mt-5 max-w-md space-y-2.5 text-left text-sm text-navy">
+            <li className="flex gap-2.5">
+              <span className="font-bold text-brand">1.</span>
+              <span>We review your {year} {make} {model} and reach out by <span className="font-semibold capitalize">{contactMethod}</span> with your firm offer — as soon as possible (we&apos;re available 24/7).</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="font-bold text-brand">2.</span>
+              <span>We arrange a quick inspection at a time and place that works for you.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="font-bold text-brand">3.</span>
+              <span>You get paid on the spot — e-transfer or bank draft before we take the keys.</span>
+            </li>
+          </ol>
           <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
             <p className="font-semibold text-navy">Want it faster? Call or text us now.</p>
             <p className="mt-1 text-sm text-muted">
@@ -743,6 +800,15 @@ export default function OfferFlow() {
               <PhoneButton variant="primary" location="offer_success" />
               <Link href="/" className="btn-ghost">Back to home</Link>
             </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-accent/40 bg-accent/10 p-6 text-center">
+            <p className="font-semibold text-navy">Know someone else selling their car?</p>
+            <p className="mt-1 text-sm text-muted">
+              Refer a friend and you each get ${site.referralReward} when they sell to {site.name}.
+            </p>
+            <Link href="/referral" className="btn-primary mt-4 inline-flex px-5 py-2.5 text-sm">
+              Refer a friend &amp; earn ${site.referralReward}
+            </Link>
           </div>
         </div>
       )}
