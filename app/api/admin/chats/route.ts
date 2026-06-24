@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     return {
       id: c.id,
       name: c.name || null,
+      contact: c.contact || null,
       updatedAt: c.updatedAt,
       lastSender: c.lastSender,
       count: c.messages?.length || 0,

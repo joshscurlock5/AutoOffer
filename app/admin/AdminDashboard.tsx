@@ -14,6 +14,7 @@ import {
 type ChatSummary = {
   id: string;
   name: string | null;
+  contact: string | null;
   updatedAt: string;
   lastSender: "visitor" | "admin";
   count: number;
@@ -839,6 +840,12 @@ function ChatsPanel({
               <span className="font-semibold text-navy">{c.name || "Visitor"}</span>
               <span className="shrink-0 text-[11px] text-muted">{timeAgo(c.updatedAt)}</span>
             </div>
+            {c.contact && (
+              <span className="flex items-center gap-1 truncate text-xs font-semibold text-brand">
+                {c.contact.includes("@") ? <Mail className="h-3 w-3 shrink-0" /> : <Phone className="h-3 w-3 shrink-0" />}
+                {c.contact}
+              </span>
+            )}
             <span className="truncate text-sm text-muted">{c.preview}</span>
             {c.lastSender === "visitor" && (
               <span className="w-fit rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
@@ -858,8 +865,21 @@ function ChatsPanel({
         ) : (
           <>
             <div className="border-b border-slate-100 px-4 py-3">
-              <span className="font-semibold text-navy">{active.name || "Visitor"}</span>
-              <span className="ml-2 text-xs text-muted">{active.messages.length} messages</span>
+              <div>
+                <span className="font-semibold text-navy">{active.name || "Visitor"}</span>
+                <span className="ml-2 text-xs text-muted">{active.messages.length} messages</span>
+              </div>
+              {active.contact ? (
+                <a
+                  href={active.contact.includes("@") ? `mailto:${active.contact}` : `tel:${active.contact}`}
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+                >
+                  {active.contact.includes("@") ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                  {active.contact}
+                </a>
+              ) : (
+                <span className="mt-1 block text-xs text-muted">No contact info provided.</span>
+              )}
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
               {active.messages.map((m) => (
