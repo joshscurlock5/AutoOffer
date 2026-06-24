@@ -120,6 +120,8 @@ export interface ChatConversation {
   updatedAt: string;
   /** Optional visitor name. */
   name?: string | null;
+  /** Visitor's phone or email — required before they can send their first message. */
+  contact?: string | null;
   messages: ChatMessage[];
   /** Who sent the most recent message (drives the admin "needs reply" cue). */
   lastSender: "visitor" | "admin";

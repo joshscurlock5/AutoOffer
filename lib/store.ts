@@ -172,6 +172,7 @@ export async function addChatMessage(opts: {
   role: "visitor" | "admin";
   text: string;
   name?: string;
+  contact?: string;
 }): Promise<ChatConversation | null> {
   const now = new Date().toISOString();
   const id = opts.conversationId || crypto.randomUUID();
@@ -188,9 +189,9 @@ export async function addChatMessage(opts: {
         TableName: CHATS_TABLE,
         Key: { id },
         UpdateExpression:
-          "SET messages = list_append(if_not_exists(messages, :empty), :m), updatedAt = :now, lastSender = :ls, createdAt = if_not_exists(createdAt, :now), #nm = if_not_exists(#nm, :name)",
+          "SET messages = list_append(if_not_exists(messages, :empty), :m), updatedAt = :now, lastSender = :ls, createdAt = if_not_exists(createdAt, :now), #nm = if_not_exists(#nm, :name), #ct = if_not_exists(#ct, :contact)",
         ConditionExpression: "attribute_not_exists(messages) OR size(messages) < :cap",
-        ExpressionAttributeNames: { "#nm": "name" },
+        ExpressionAttributeNames: { "#nm": "name", "#ct": "contact" },
         ExpressionAttributeValues: {
           ":empty": [],
           ":m": [msg],
@@ -198,6 +199,7 @@ export async function addChatMessage(opts: {
           ":ls": opts.role,
           ":cap": MAX_CHAT_MESSAGES,
           ":name": opts.name ?? null,
+          ":contact": opts.contact ?? null,
         },
         ReturnValues: "ALL_NEW",
       }),

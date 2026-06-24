@@ -130,18 +130,15 @@ export async function notifyNewLead(lead: Lead, photos: NotifyPhoto[] = []): Pro
 export async function notifyNewChatMessage(opts: {
   text: string;
   name?: string;
+  contact?: string;
   conversationId: string;
 }): Promise<void> {
   if (!BOT_TOKEN || !CHAT_ID) return;
   const who = opts.name?.trim() ? opts.name.trim() : "Visitor";
-  const text = [
-    `${EMOJI_CHAT} New chat message`,
-    "",
-    `From: ${who}`,
-    `"${opts.text.slice(0, 500)}"`,
-    "",
-    "Reply in Messages: https://www.driveoffer.ca/admin",
-  ].join("\n");
+  const lines: string[] = [`${EMOJI_CHAT} New chat message`, "", `From: ${who}`];
+  if (opts.contact?.trim()) lines.push(`Contact: ${opts.contact.trim()}`);
+  lines.push("", `"${opts.text.slice(0, 500)}"`, "", "Reply in Messages: https://www.driveoffer.ca/admin");
+  const text = lines.join("\n");
   try {
     await sendText(text);
   } catch (e) {

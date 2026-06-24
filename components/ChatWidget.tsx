@@ -22,6 +22,13 @@ const TEAM_AVATARS = [
   { initial: "A", className: "from-violet-500 to-violet-700" },
 ];
 
+/** A usable phone (10+ digits) or a basic email — required before the first send. */
+function validContact(v: string): boolean {
+  const t = v.trim();
+  if (t.replace(/\D/g, "").length >= 10) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+}
+
 function AvatarStack() {
   return (
     <div className="flex shrink-0 -space-x-2">
@@ -44,6 +51,7 @@ export default function ChatWidget() {
   const [convId, setConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [contact, setContact] = useState("");
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -91,6 +99,8 @@ export default function ChatWidget() {
     e.preventDefault();
     const text = input.trim();
     if (!text || sending) return;
+    // Require a phone or email before the first message of a new conversation.
+    if (!convId && !validContact(contact)) return;
     setSending(true);
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -105,7 +115,7 @@ export default function ChatWidget() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convId, text }),
+        body: JSON.stringify({ conversationId: convId, text, contact: contact.trim() || undefined }),
       });
       const d = await r.json();
       if (d.conversationId) {
@@ -159,7 +169,7 @@ export default function ChatWidget() {
 
       {/* Panel */}
       {open && (
-        <div className="chat-panel fixed right-4 z-50 flex h-[40rem] max-h-[calc(100vh-6rem)] w-[calc(100vw-2rem)] max-w-md flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
+        <div className="chat-panel fixed right-4 z-50 flex h-[44rem] max-h-[calc(100vh-5rem)] w-[calc(100vw-2rem)] max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
           {/* -------------------- HOME -------------------- */}
           {view === "home" && (
             <>
@@ -291,32 +301,43 @@ export default function ChatWidget() {
                     </div>
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Type a message…"
-                    maxLength={2000}
-                    className="field flex-1 py-2.5"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowEmoji((s) => !s)}
-                    aria-label="Emoji picker"
-                    aria-expanded={showEmoji}
-                    className={`grid h-11 w-10 shrink-0 place-items-center rounded-xl text-xl transition hover:bg-slate-100 ${showEmoji ? "bg-slate-100" : ""}`}
-                  >
-                    🙂
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!input.trim() || sending}
-                    aria-label="Send"
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    <Send className="h-5 w-5" />
-                  </button>
+                <div className="space-y-2">
+                  {!convId && (
+                    <input
+                      value={contact}
+                      onChange={(e) => setContact(e.target.value)}
+                      placeholder="Your phone or email (so we can reply)"
+                      maxLength={120}
+                      className="field w-full py-2.5"
+                      autoFocus
+                    />
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Type a message…"
+                      maxLength={2000}
+                      className="field flex-1 py-2.5"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEmoji((s) => !s)}
+                      aria-label="Emoji picker"
+                      aria-expanded={showEmoji}
+                      className={`grid h-11 w-10 shrink-0 place-items-center rounded-xl text-xl transition hover:bg-slate-100 ${showEmoji ? "bg-slate-100" : ""}`}
+                    >
+                      🙂
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || sending || (!convId && !validContact(contact))}
+                      aria-label="Send"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
+                    >
+                      <Send className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               </form>
             </>
