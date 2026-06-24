@@ -7,6 +7,8 @@ import {
   deleteLead,
   updateReferral,
 } from "@/lib/store";
+import { cancelScheduledEmails } from "@/lib/email";
+import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -32,6 +34,15 @@ export async function PATCH(req: NextRequest) {
       : await updateLead(id, patch);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  // Once a vehicle lead leaves "new" (owner reached them / deal resolved), cancel
+  // its scheduled reminder-drip emails so we don't keep nudging. Best-effort.
+  if (type !== "referral" && patch.status && patch.status !== "new") {
+    const ids = (item as Lead).dripEmailIds;
+    if (ids && ids.length) {
+      await cancelScheduledEmails(ids);
+      await updateLead(id, { dripEmailIds: [] });
+    }
   }
   return NextResponse.json({ ok: true, item });
 }

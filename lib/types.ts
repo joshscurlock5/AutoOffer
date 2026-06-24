@@ -92,6 +92,8 @@ export interface Lead {
   bookmarked?: boolean;
   /** Final price the vehicle was purchased for (CAD). */
   purchasePrice?: number;
+  /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
+  dripEmailIds?: string[];
   source: string;
 }
 

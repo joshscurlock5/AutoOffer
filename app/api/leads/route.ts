@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, savePhotos, markLookupConverted } from "@/lib/store";
+import { addLead, savePhotos, markLookupConverted, updateLead } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead } from "@/lib/metaCapi";
-import { sendLeadConfirmation } from "@/lib/email";
+import { sendLeadConfirmation, scheduleLeadDrip } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -180,6 +180,10 @@ export async function POST(req: NextRequest) {
     // they gave an email — phone-only call/text leads have none). Never blocks
     // or fails the lead.
     await sendLeadConfirmation(lead);
+    // Schedule the reminder drip (Day 2 + Day 5) and store the ids so they can be
+    // cancelled when the lead leaves "new". Best-effort; never affects the lead.
+    const dripIds = await scheduleLeadDrip(lead);
+    if (dripIds.length) await updateLead(id, { dripEmailIds: dripIds });
     // Link this lead back to the price-lookup it came from (admin "API Calls"
     // conversion tracking). Strictly after the lead is saved + alerted, and
     // best-effort (markLookupConverted swallows its own errors), so it can never
