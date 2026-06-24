@@ -48,6 +48,12 @@ export async function POST(req: NextRequest) {
 
 /** Visitor polls for new messages (admin replies). */
 export async function GET(req: NextRequest) {
+  // Generous per-IP cap so a tight polling loop can't drive unbounded DynamoDB
+  // reads — well above the widget's few-second poll cadence.
+  const ip = clientIpFrom(req);
+  if (!(await allowRequest(ip, "chat-poll", 600, 3600))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
   const id = req.nextUrl.searchParams.get("conversationId");
   if (!id) return NextResponse.json({ ok: true, messages: [] });
   const conv = await getConversation(String(id).slice(0, 64));

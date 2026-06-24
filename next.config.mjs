@@ -15,6 +15,7 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false, // don't advertise the framework (X-Powered-By)
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

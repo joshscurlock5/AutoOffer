@@ -1,0 +1,17 @@
+# Automated dependency-update PRs + CVE alerts. Pairs with GitHub's repo-level
+# Dependabot security alerts (Settings > Code security). amplify.yml runs
+# `npm ci --no-audit`, so this is the mechanism that surfaces new advisories.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
