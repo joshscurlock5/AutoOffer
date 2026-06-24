@@ -453,7 +453,6 @@ export default function OfferFlow() {
         </div>
 
         <div className="mt-6 space-y-4">
-        <TurnstileBox onToken={setTsToken} />
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
@@ -463,6 +462,9 @@ export default function OfferFlow() {
         <p className="flex items-center justify-center gap-2 pt-1 text-center text-sm text-muted">
           <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
         </p>
+        <div className="flex justify-end">
+          <TurnstileBox onToken={setTsToken} />
+        </div>
         </div>
       </form>
   );
