@@ -22,11 +22,9 @@ const TEAM_AVATARS = [
   { initial: "A", className: "from-violet-500 to-violet-700" },
 ];
 
-/** A usable phone (10+ digits) or a basic email — required before the first send. */
-function validContact(v: string): boolean {
-  const t = v.trim();
-  if (t.replace(/\D/g, "").length >= 10) return true;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+/** A usable phone number (10+ digits) — required before the first send. */
+function validPhone(v: string): boolean {
+  return v.replace(/\D/g, "").length >= 10;
 }
 
 function AvatarStack() {
@@ -95,12 +93,12 @@ export default function ChatWidget() {
 
   if (pathname?.startsWith("/admin")) return null;
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
+  async function send(e?: React.FormEvent) {
+    e?.preventDefault();
     const text = input.trim();
     if (!text || sending) return;
-    // Require a phone or email before the first message of a new conversation.
-    if (!convId && !validContact(contact)) return;
+    // Require a phone number before the first message of a new conversation.
+    if (!convId && !validPhone(contact)) return;
     setSending(true);
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -306,19 +304,27 @@ export default function ChatWidget() {
                     <input
                       value={contact}
                       onChange={(e) => setContact(e.target.value)}
-                      placeholder="Your phone or email (so we can reply)"
-                      maxLength={120}
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="Your phone number (so we can reply)"
+                      maxLength={20}
                       className="field w-full py-2.5"
                       autoFocus
                     />
                   )}
-                  <div className="flex items-center gap-2">
-                    <input
+                  <div className="flex items-end gap-2">
+                    <textarea
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void send();
+                        }
+                      }}
                       placeholder="Type a message…"
                       maxLength={2000}
-                      className="field flex-1 py-2.5"
+                      className="field h-40 flex-1 resize-none py-2.5"
                     />
                     <button
                       type="button"
@@ -331,7 +337,7 @@ export default function ChatWidget() {
                     </button>
                     <button
                       type="submit"
-                      disabled={!input.trim() || sending || (!convId && !validContact(contact))}
+                      disabled={!input.trim() || sending || (!convId && !validPhone(contact))}
                       aria-label="Send"
                       className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
                     >
