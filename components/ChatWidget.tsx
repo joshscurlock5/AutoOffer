@@ -10,6 +10,33 @@ import { Chat, Send, X, ChevronLeft, ChevronDown, ArrowRight, Phone, Home } from
 const KEY = "ao_chat_id";
 type View = "home" | "messages" | "conversation";
 
+// Quick-pick emojis for the message box. Literal emojis render fine in the
+// browser (this is client-side, not the Telegram JSON path).
+const EMOJIS = ["👍","🙏","😀","😂","❤️","🔥","🎉","👌","😊","🙌","💯","🚗","💰","✅","👋","🤝","😎","🤔","😅","🙂","😍","👏","✨","😉","😮","😢","🙃","🤷"];
+
+// Placeholder team avatars (overlapping, like Clutch) so it reads as a team
+// rather than a single bot. Swap these for real team photos when available.
+const TEAM_AVATARS = [
+  { initial: "S", className: "from-blue-500 to-blue-700" },
+  { initial: "M", className: "from-emerald-500 to-emerald-700" },
+  { initial: "A", className: "from-violet-500 to-violet-700" },
+];
+
+function AvatarStack() {
+  return (
+    <div className="flex shrink-0 -space-x-2">
+      {TEAM_AVATARS.map((a) => (
+        <span
+          key={a.initial}
+          className={`grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br ${a.className} text-xs font-bold text-white ring-2 ring-white`}
+        >
+          {a.initial}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function ChatWidget() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -18,6 +45,7 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Restore an existing conversation id (returning visitor).
@@ -72,6 +100,7 @@ export default function ChatWidget() {
     };
     setMessages((m) => [...m, optimistic]);
     setInput("");
+    setShowEmoji(false);
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
@@ -130,7 +159,7 @@ export default function ChatWidget() {
 
       {/* Panel */}
       {open && (
-        <div className="chat-panel fixed right-4 z-50 flex h-[32rem] max-h-[calc(100vh-12rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
+        <div className="chat-panel fixed right-4 z-50 flex h-[40rem] max-h-[calc(100vh-6rem)] w-[calc(100vw-2rem)] max-w-md flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lift lg:right-5">
           {/* -------------------- HOME -------------------- */}
           {view === "home" && (
             <>
@@ -219,50 +248,76 @@ export default function ChatWidget() {
           {/* -------------------- CONVERSATION -------------------- */}
           {view === "conversation" && (
             <>
-              <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-3">
+              <div className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-3">
                 <button onClick={() => setView("messages")} aria-label="Back" className="rounded-lg p-1 text-navy transition hover:bg-slate-100">
                   <ChevronLeft className="h-5 w-5" />
                 </button>
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-white">
-                  <Chat className="h-5 w-5" />
-                </span>
+                <AvatarStack />
                 <div className="flex-1 leading-tight">
                   <div className="text-sm font-bold text-navy">{site.name} team</div>
-                  <div className="text-xs text-muted">A real person — usually replies fast</div>
                 </div>
                 <button onClick={() => setOpen(false)} aria-label="Close chat" className="rounded-lg p-1 text-muted transition hover:bg-slate-100">
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
-                <Bubble role="admin">
-                  👋 Hi! Ask us anything about selling your car — we&apos;ll get right back to you.
-                </Bubble>
-                {messages.map((m) => (
-                  <Bubble key={m.id} role={m.role}>
-                    {m.text}
-                  </Bubble>
-                ))}
+              <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white p-4">
+                <p className="px-6 py-8 text-center text-sm text-muted">
+                  Ask us anything about the {site.name} process.
+                </p>
+                <div className="space-y-3">
+                  {messages.map((m) => (
+                    <Bubble key={m.id} role={m.role}>
+                      {m.text}
+                    </Bubble>
+                  ))}
+                </div>
               </div>
 
-              <form onSubmit={send} className="flex items-center gap-2 border-t border-slate-200 p-3">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type a message…"
-                  maxLength={2000}
-                  className="field flex-1 py-2.5"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim() || sending}
-                  aria-label="Send"
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
-                >
-                  <Send className="h-5 w-5" />
-                </button>
+              <form onSubmit={send} className="relative border-t border-slate-200 p-3">
+                {showEmoji && (
+                  <div className="absolute bottom-full left-3 right-3 mb-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-lift">
+                    <div className="grid grid-cols-7 gap-1">
+                      {EMOJIS.map((em) => (
+                        <button
+                          key={em}
+                          type="button"
+                          onClick={() => setInput((v) => v + em)}
+                          className="grid h-9 w-full place-items-center rounded-lg text-xl transition hover:bg-slate-100"
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Type a message…"
+                    maxLength={2000}
+                    className="field flex-1 py-2.5"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmoji((s) => !s)}
+                    aria-label="Emoji picker"
+                    aria-expanded={showEmoji}
+                    className={`grid h-11 w-10 shrink-0 place-items-center rounded-xl text-xl transition hover:bg-slate-100 ${showEmoji ? "bg-slate-100" : ""}`}
+                  >
+                    🙂
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || sending}
+                    aria-label="Send"
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                </div>
               </form>
             </>
           )}
