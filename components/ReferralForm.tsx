@@ -108,6 +108,10 @@ export default function ReferralForm() {
           </div>
         </div>
         <div>
+          <label className="label" htmlFor="f-email">Friend&apos;s email</label>
+          <input id="f-email" type="email" className="field" value={f.friendEmail} onChange={set("friendEmail")} placeholder="their@email.com" />
+        </div>
+        <div>
           <label className="label" htmlFor="f-msg">Anything we should know? <span className="font-normal text-muted">(optional)</span></label>
           <textarea id="f-msg" rows={3} className="field resize-none" value={f.message} onChange={set("message")} placeholder="e.g. They have a 2018 Civic they want to sell." />
         </div>
