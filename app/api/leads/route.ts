@@ -4,8 +4,22 @@ import { addLead, savePhotos } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
+import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
+
+// Hard caps on uploaded photos — bound S3 cost / server memory against abuse.
+const MAX_PHOTOS = 12;
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB per file
+const MAX_PHOTOS_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB per submission
+const ALLOWED_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+]);
 
 function str(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
@@ -37,6 +51,11 @@ function parseShownEstimate(raw: string): OfferEstimate | undefined {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit by IP BEFORE parsing the (potentially large) multipart body.
+    const ip = clientIpFrom(req);
+    if (!(await allowRequest(ip, "leads", 6, 3600))) {
+      return NextResponse.json({ error: "Too many submissions. Please try again in a bit." }, { status: 429 });
+    }
     const form = await req.formData();
 
     const kind = str(form.get("kind")) === "inquiry" ? "inquiry" : "vehicle";
@@ -99,6 +118,22 @@ export async function POST(req: NextRequest) {
       const files = form
         .getAll("photos")
         .filter((f): f is File => f instanceof File && f.size > 0);
+      if (files.length > MAX_PHOTOS) {
+        return NextResponse.json({ error: `Please attach at most ${MAX_PHOTOS} photos.` }, { status: 413 });
+      }
+      let totalBytes = 0;
+      for (const f of files) {
+        if (!ALLOWED_PHOTO_TYPES.has(f.type)) {
+          return NextResponse.json({ error: "Photos must be images (JPG, PNG, WebP, HEIC or GIF)." }, { status: 415 });
+        }
+        if (f.size > MAX_PHOTO_BYTES) {
+          return NextResponse.json({ error: "Each photo must be under 10 MB." }, { status: 413 });
+        }
+        totalBytes += f.size;
+      }
+      if (totalBytes > MAX_PHOTOS_TOTAL_BYTES) {
+        return NextResponse.json({ error: "Total photo size must be under 50 MB." }, { status: 413 });
+      }
       photos = await savePhotos(id, files);
       // Keep the raw bytes in memory to attach to the owner's Telegram alert as
       // a photo gallery (read after savePhotos so it can never disrupt the S3 save).

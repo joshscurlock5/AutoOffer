@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addChatMessage, getConversation } from "@/lib/store";
 import { notifyNewChatMessage } from "@/lib/notify";
+import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -9,12 +10,20 @@ const MAX_LEN = 2000;
 /** Visitor sends a message (creates the conversation on the first one). */
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIpFrom(req);
+    if (!(await allowRequest(ip, "chat", 40, 3600))) {
+      return NextResponse.json({ error: "Too many messages. Please try again in a bit." }, { status: 429 });
+    }
     const body = await req.json().catch(() => ({}));
     const text = String(body.text || "").trim().slice(0, MAX_LEN);
     if (!text) {
       return NextResponse.json({ error: "Empty message." }, { status: 400 });
     }
     const conversationId = body.conversationId ? String(body.conversationId).slice(0, 64) : undefined;
+    // Starting a NEW conversation is the real flood vector — cap it much tighter.
+    if (!conversationId && !(await allowRequest(ip, "chat-new", 6, 3600))) {
+      return NextResponse.json({ error: "Too many new chats. Please try again later." }, { status: 429 });
+    }
     const name = body.name ? String(body.name).trim().slice(0, 80) : undefined;
     const contact = body.contact ? String(body.contact).trim().slice(0, 120) : undefined;
     const conv = await addChatMessage({ conversationId, role: "visitor", text, name, contact });

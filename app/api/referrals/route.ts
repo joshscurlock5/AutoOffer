@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { addReferral } from "@/lib/store";
 import { notifyNewReferral } from "@/lib/notify";
 import type { Referral } from "@/lib/types";
+import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,10 @@ function code(name: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIpFrom(req);
+    if (!(await allowRequest(ip, "referrals", 6, 3600))) {
+      return NextResponse.json({ error: "Too many submissions. Please try again later." }, { status: 429 });
+    }
     const body = await req.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: "Invalid request." }, { status: 400 });

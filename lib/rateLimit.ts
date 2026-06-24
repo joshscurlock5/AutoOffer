@@ -70,6 +70,25 @@ async function bumpWindow(key: string, limit: number, ttl: number): Promise<bool
 }
 
 /**
+ * Generic per-IP fixed-window limiter for public write endpoints (lead / chat /
+ * referral spam). Returns false ONLY when this IP has exceeded `limit` requests
+ * in the current `windowSec` window for `bucket`. Fails OPEN on a missing IP
+ * (local dev) or any transient DynamoDB error, so a real customer is never
+ * blocked by an infra hiccup. Counters auto-expire via DynamoDB TTL.
+ */
+export async function allowRequest(
+  ip: string,
+  bucket: string,
+  limit: number,
+  windowSec: number,
+): Promise<boolean> {
+  if (!ip || ip === "unknown") return true;
+  const now = nowSec();
+  const key = `rl:${bucket}:${ip}:${Math.floor(now / windowSec)}`;
+  return bumpWindow(key, limit, now + windowSec + 60);
+}
+
+/**
  * Returns false only when the current IP has exhausted its hourly OR daily
  * MarketCheck-call allowance. No IP context (e.g. local dev) -> not gated.
  */
