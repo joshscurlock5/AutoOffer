@@ -1,4 +1,4 @@
-import type { Lead } from "./types";
+import type { Lead, Referral } from "./types";
 
 /**
  * Owner alert on every new lead, via a Telegram bot.
@@ -21,6 +21,11 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const api = (method: string) => `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
 const MAX_ALBUM = 10; // Telegram media-group hard limit
+
+// Category emojis built from codepoints so they always survive the build + JSON
+// transport intact (a literal emoji added here once arrived as escaped text).
+const EMOJI_CHAT = String.fromCodePoint(0x1f4ac); // 💬 speech balloon
+const EMOJI_REFERRAL = String.fromCodePoint(0x1f91d); // 🤝 handshake
 
 /** A lead photo's raw bytes (read from the upload in the API route). */
 export type NotifyPhoto = { buffer: Buffer; name: string; type: string };
@@ -130,7 +135,7 @@ export async function notifyNewChatMessage(opts: {
   if (!BOT_TOKEN || !CHAT_ID) return;
   const who = opts.name?.trim() ? opts.name.trim() : "Visitor";
   const text = [
-    "New chat message",
+    `${EMOJI_CHAT} New chat message`,
     "",
     `From: ${who}`,
     `"${opts.text.slice(0, 500)}"`,
@@ -141,5 +146,28 @@ export async function notifyNewChatMessage(opts: {
     await sendText(text);
   } catch (e) {
     console.error("[notify] chat Telegram alert failed:", e);
+  }
+}
+
+/**
+ * Alert the owner about a new referral — shows the referrer's details and the
+ * friend they referred. No-op if unconfigured; never throws. Caller must await.
+ */
+export async function notifyNewReferral(ref: Referral): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  const r = ref.referrer;
+  const fr = ref.friend;
+  const lines: string[] = [`${EMOJI_REFERRAL} New DriveOffer referral`, "", `Referred by: ${r.name}`];
+  if (r.phone) lines.push(`Phone: ${r.phone}`);
+  if (r.email) lines.push(`Email: ${r.email}`);
+  lines.push("", "Their friend:");
+  lines.push(`Name: ${fr.name || "(not given)"}`);
+  if (fr.phone) lines.push(`Phone: ${fr.phone}`);
+  if (fr.email) lines.push(`Email: ${fr.email}`);
+  if (ref.message) lines.push("", `"${ref.message.slice(0, 300)}"`);
+  try {
+    await sendText(lines.join("\n"));
+  } catch (e) {
+    console.error("[notify] referral Telegram alert failed:", e);
   }
 }

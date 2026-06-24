@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const EMOJI_USAGE = String.fromCodePoint(0x1f4ca); // 📊 bar chart
 
 async function reply(chatId: number | string, text: string): Promise<void> {
   if (!BOT_TOKEN) return;
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       const s = await getBudgetStatus();
       const body = s.ok
         ? [
-            "MarketCheck API usage",
+            `${EMOJI_USAGE} MarketCheck API usage`,
             "",
             `Used: ${s.used} / ${s.cap}`,
             `Left: ${s.remaining}`,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addReferral } from "@/lib/store";
+import { notifyNewReferral } from "@/lib/notify";
 import type { Referral } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
     };
 
     await addReferral(ref);
+    // Telegram alert (best-effort; awaited so the Lambda doesn't freeze first).
+    await notifyNewReferral(ref);
     return NextResponse.json({ ok: true, code: ref.code });
   } catch (err) {
     console.error("POST /api/referrals failed", err);

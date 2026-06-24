@@ -16,8 +16,6 @@ export default function ReferralForm() {
     message: "",
   });
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
-  const [code, setCode] = useState("");
-  const [copied, setCopied] = useState(false);
 
   function set(k: keyof typeof f) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -37,9 +35,7 @@ export default function ReferralForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(f),
       });
-      const data = await res.json();
       if (!res.ok) throw new Error();
-      setCode(data.code || "");
       setState("done");
       track("referral_submitted", { hasFriendDetails: !!(f.friendName || f.friendPhone) });
     } catch {
@@ -54,30 +50,12 @@ export default function ReferralForm() {
         <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand">
           <Check className="h-8 w-8" />
         </span>
-        <h3 className="mt-5 font-display text-2xl font-bold text-navy">You&apos;re in!</h3>
+        <h3 className="mt-5 font-display text-2xl font-bold text-navy">Thank you!</h3>
         <p className="mt-2 text-muted">
-          Thanks {f.referrerName.split(" ")[0]}! Share your code with your friend.
-          When they sell to {site.name}, we&apos;ll send you ${site.referralReward}.
+          Thanks {f.referrerName.split(" ")[0]}! We&apos;ve received your referral. We&apos;ll
+          contact you once your friend sells their car to {site.name} and send you $
+          {site.referralReward}.
         </p>
-        {code && (
-          <div className="mx-auto mt-6 max-w-xs">
-            <p className="text-sm font-medium text-muted">Your referral code</p>
-            <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border-2 border-dashed border-brand bg-brand-50 px-4 py-3">
-              <span className="font-mono text-lg font-bold tracking-wider text-brand">{code}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(code);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                }}
-                className="text-sm font-semibold text-brand hover:underline"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -133,7 +111,7 @@ export default function ReferralForm() {
       )}
 
       <button type="submit" disabled={state === "sending"} className="btn-primary mt-6 w-full text-lg disabled:opacity-60">
-        {state === "sending" ? "Submitting…" : "Get My Referral Code"}
+        {state === "sending" ? "Submitting…" : "Submit Referral"}
         {state !== "sending" && <ArrowRight className="h-5 w-5" />}
       </button>
     </form>
