@@ -29,6 +29,7 @@ export {
   Tag,
   Banknote,
   Users,
+  Hand,
   Handshake,
   Landmark,
   ArrowLeftRight,

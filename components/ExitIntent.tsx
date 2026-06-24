@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
-import { X, ArrowRight, Phone, Sparkles } from "./icons";
+import { X, ArrowRight, Phone, Hand } from "./icons";
 
 /**
  * Subtle exit-intent reminder. Shown once per browser session on deeper pages
@@ -75,7 +75,7 @@ export default function ExitIntent() {
           <X className="h-5 w-5" />
         </button>
         <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand">
-          <Sparkles className="h-7 w-7" />
+          <Hand className="h-7 w-7" />
         </span>
         <p className="mt-4 text-sm font-medium text-muted">Before you go…</p>
         <h2 className="mt-1 font-display text-2xl font-bold text-navy">
