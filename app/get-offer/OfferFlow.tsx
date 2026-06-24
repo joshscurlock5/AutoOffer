@@ -331,12 +331,13 @@ export default function OfferFlow() {
       setError("Please add your first name.");
       return;
     }
-    if (phone.replace(/\D/g, "").length < 10) {
+    if (contactMethod === "email") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setError("Please add a valid email address.");
+        return;
+      }
+    } else if (phone.replace(/\D/g, "").length < 10) {
       setError("Please add a 10-digit phone number.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Please add a valid email address.");
       return;
     }
     if (turnstileEnabled && !tsToken) {
@@ -471,26 +472,41 @@ export default function OfferFlow() {
           </div>
         </div>
 
-        <div>
-          <label className="label" htmlFor="cphone">Mobile phone</label>
-          <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
-          <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
-        </div>
-        <div>
-          <label className="label" htmlFor="email">Email</label>
-          <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
-          <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
-        </div>
-        {contactMethod !== "email" && (
-          <div>
-            <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
-            <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
-              <option>Anytime</option>
-              <option>Morning</option>
-              <option>Afternoon</option>
-              <option>Evening</option>
-            </select>
-          </div>
+        {contactMethod === "email" ? (
+          <>
+            <div>
+              <label className="label" htmlFor="email">Email</label>
+              <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+              <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="cphone">Mobile phone <span className="font-normal text-muted">(optional)</span></label>
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+              <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="label" htmlFor="cphone">Mobile phone</label>
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+              <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
+              <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+              <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
+              <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
+                <option>Anytime</option>
+                <option>Morning</option>
+                <option>Afternoon</option>
+                <option>Evening</option>
+              </select>
+            </div>
+          </>
         )}
         </div>
 
@@ -501,10 +517,10 @@ export default function OfferFlow() {
           {submitting ? "Sending…" : "Get My Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
-        <p className="flex items-center justify-center gap-2 pt-1 text-center text-sm text-muted">
-          <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
-        </p>
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-sm text-muted">
+          <span className="flex items-center gap-2">
+            <Lock className="h-4 w-4 shrink-0" /> Secure form. Your details are only used to prepare your vehicle estimate.
+          </span>
           <TurnstileBox onToken={setTsToken} />
         </div>
         </div>
@@ -680,7 +696,7 @@ export default function OfferFlow() {
 
               {photoBlock}
 
-              <div className="mx-auto mt-8 max-w-md">
+              <div className="mt-8">
                 <button type="submit" className="btn-primary w-full py-4 text-lg">
                   See My Value <ArrowRight className="h-5 w-5" />
                 </button>
