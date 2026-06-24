@@ -517,7 +517,7 @@ export default function OfferFlow() {
           {submitting ? "Sending…" : "Get My Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-sm text-muted">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-1 text-center text-sm text-muted">
           <span className="flex items-center gap-2">
             <Lock className="h-4 w-4 shrink-0" /> Secure form. Your details are only used to prepare your vehicle estimate.
           </span>
