@@ -2,23 +2,25 @@ import { Star } from "./icons";
 import Carousel from "./Carousel";
 
 /* ───────────────────────────────────────────────────────────────────────────
-   TODO — REPLACE WITH REAL GOOGLE REVIEWS BEFORE RUNNING ADS.
-   These are placeholder reviews. Swap REVIEWS for your hand-picked real ones.
+   The first two are REAL Google reviews (no date shown by request). The last
+   three are still placeholders — replace them as more real reviews come in.
    ─────────────────────────────────────────────────────────────────────────── */
-const REVIEWS = [
+const REVIEWS: {
+  name: string;
+  location?: string;
+  when?: string;
+  rating: number;
+  text: string;
+}[] = [
   {
-    name: "Sarah M.",
-    location: "Edmonton",
-    when: "2 weeks ago",
+    name: "Andrew Schmit",
     rating: 5,
-    text: "Honestly the easiest car sale I've ever done. Fair offer, they came to me, and I had a bank draft in hand the same afternoon.",
+    text: "Sold my Toyota Camry to Auto Offer today. Samir was great to deal with and made the whole process real easy. He came to me and everything went exactly as he said it would. Fair offer and quick payment! Highly recommend!",
   },
   {
-    name: "Daniel R.",
-    location: "Sherwood Park",
-    when: "1 month ago",
+    name: "Alex",
     rating: 5,
-    text: "Got more than the dealership's trade-in quote. No haggling, no pressure — exactly what they promised online.",
+    text: "They bought my truck. Super quick process, barely had to do anything and got an awesome deal.",
   },
   {
     name: "Priya K.",
@@ -72,10 +74,12 @@ export default function ReviewsCarousel() {
           </p>
           <p className="mt-4 text-base font-semibold text-navy">
             {r.name}
-            <span className="font-normal text-muted">
-              {" "}
-              · {r.location} · {r.when}
-            </span>
+            {(r.location || r.when) && (
+              <span className="font-normal text-muted">
+                {" "}
+                {[r.location, r.when].filter(Boolean).map((m) => `· ${m}`).join(" ")}
+              </span>
+            )}
           </p>
         </article>
       ))}
