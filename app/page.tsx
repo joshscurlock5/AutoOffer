@@ -20,11 +20,11 @@ export default function HomePage() {
           <div className="mx-auto max-w-col wide:max-w-none">
             <div className="animate-fade-up text-left wide:text-center">
               <h1 className="font-display text-[2.75rem] font-extrabold leading-[1.08] tracking-tight text-navy sm:text-[4.5rem]">
-                Get a real offer in 2 minutes.
+                Sell your car today.
               </h1>
               <div className="mt-8 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 wide:justify-center lg:mt-10">
                 <p className="text-[1.375rem] text-navy wide:text-[1.75rem]">
-                  Free, no obligation, paid the same day. <span className="font-bold">That&apos;s DriveOffer.</span>
+                  Get a free offer in 2 minutes. No obligation. Same-day payment.
                 </p>
                 {(site.reviewsUrl as string) && (
                   <a
@@ -52,7 +52,7 @@ export default function HomePage() {
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-2 text-sm text-muted">
-              <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
             </p>
           </div>
         </div>

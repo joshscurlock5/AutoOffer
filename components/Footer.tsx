@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { site, fullAddress, mailHref, amvicLicence } from "@/lib/site-config";
+import { site, fullAddress, mailHref } from "@/lib/site-config";
 import TelLink from "./TelLink";
 import { Phone, Mail, MapPin, Clock, Facebook, Instagram, MapleLeaf } from "./icons";
 
@@ -27,13 +27,13 @@ const quickLinks = [
   { label: "About Us", href: "/about" },
   { label: "Contact Us", href: "/contact" },
   { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms of Use", href: "/terms" },
 ];
 
 const headingClass = "text-[13px] font-semibold uppercase tracking-[0.08em] text-navy";
 const linkClass = "transition hover:text-brand-700";
 
 export default function Footer() {
-  const year = new Date().getFullYear();
   const hasSocial =
     (site.social.facebook as string) !== "#" || (site.social.instagram as string) !== "#";
 
@@ -163,28 +163,13 @@ export default function Footer() {
 
       {/* Bottom bar */}
       <div className="border-t border-slate-200">
-        <div className="container-x flex flex-col items-center justify-between gap-3 py-6 text-sm text-muted sm:flex-row">
-          <p>© {year} {site.legalName}. All rights reserved.</p>
-          <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            <Link href="/privacy" className="hover:text-brand-700">Privacy Policy</Link>
-            <span aria-hidden className="text-slate-300">•</span>
-            <span className="inline-flex items-center gap-1.5">
-              Proudly buying cars across Canada
-              <MapleLeaf className="h-4 w-4 text-navy" />
-            </span>
-            {amvicLicence ? (
-              <>
-                <span aria-hidden className="text-slate-300">•</span>
-                <span>{amvicLicence}</span>
-              </>
-            ) : null}
-            {site.insured ? (
-              <>
-                <span aria-hidden className="text-slate-300">•</span>
-                <span>{site.insuranceText}</span>
-              </>
-            ) : null}
-          </p>
+        <div className="container-x flex flex-col items-center justify-center gap-1.5 py-6 text-sm text-muted sm:flex-row sm:gap-4">
+          <p>© 2023 DriveOffer</p>
+          <span aria-hidden className="hidden text-slate-300 sm:inline">•</span>
+          <span className="inline-flex items-center gap-1.5">
+            Proudly buying cars across Canada
+            <MapleLeaf className="h-4 w-4 text-navy" />
+          </span>
         </div>
       </div>
     </footer>

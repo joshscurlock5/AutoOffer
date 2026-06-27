@@ -42,7 +42,7 @@ async function main() {
   }
 
   const home = await (await fetch(BASE + "/")).text();
-  ok("home headline present", /Sell your car the/.test(home));
+  ok("home headline present", /Sell your car today/.test(home));
   ok("home phone number present", /\(780\) 952-4504/.test(home));
   ok("home value widget present", /See What Your Car Is Worth/.test(home));
   ok(

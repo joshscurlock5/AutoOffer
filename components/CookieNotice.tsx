@@ -59,15 +59,15 @@ export default function CookieNotice() {
         scrolled ? "lg:bottom-24" : "lg:bottom-6"
       }`}
     >
-      <div className="mx-auto flex max-w-3xl flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 text-sm text-muted shadow-lift backdrop-blur sm:flex-row">
-        <p className="flex-1 text-center sm:text-left">
+      <div className="mx-auto flex max-w-3xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 text-xs text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
+        <p className="flex-1 text-left">
           We use cookies and Google Analytics to understand how the site is used.{" "}
           <Link href="/privacy" className="font-semibold text-brand hover:underline">
             See our Privacy Policy
           </Link>
           .
         </p>
-        <button onClick={dismiss} className="btn-primary shrink-0 px-6 py-2 text-sm">
+        <button onClick={dismiss} className="btn-primary shrink-0 px-4 py-1.5 text-xs sm:px-6 sm:py-2 sm:text-sm">
           OK
         </button>
       </div>

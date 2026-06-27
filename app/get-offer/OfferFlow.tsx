@@ -519,7 +519,7 @@ export default function OfferFlow() {
         </button>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-1 text-center text-sm text-muted">
           <span className="flex items-center gap-2">
-            <Lock className="h-4 w-4 shrink-0" /> Secure form. Your details are only used to prepare your vehicle estimate.
+            <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
           </span>
           <TurnstileBox onToken={setTsToken} />
         </div>
@@ -644,7 +644,7 @@ export default function OfferFlow() {
             )}
 
             <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
-              <Lock className="h-4 w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
             </p>
           </div>
         </div>
