@@ -16,13 +16,14 @@ const MIME: Record<string, string> = {
 // Serves uploaded customer photos — admins only.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { path: string[] } },
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const [leadId, fileName] = params.path || [];
+  const { path } = await params;
+  const [leadId, fileName] = path || [];
   if (!leadId || !fileName) {
     return new NextResponse("Not found", { status: 404 });
   }

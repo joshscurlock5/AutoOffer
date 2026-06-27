@@ -67,7 +67,7 @@ function verifySession(token: string): boolean {
 }
 
 /** Whether the current request has a valid, unexpired admin session cookie. */
-export function isAuthed(): boolean {
-  const value = cookies().get(ADMIN_COOKIE)?.value;
+export async function isAuthed(): Promise<boolean> {
+  const value = (await cookies()).get(ADMIN_COOKIE)?.value;
   return !!value && verifySession(value);
 }

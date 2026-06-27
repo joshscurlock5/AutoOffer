@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 /** Admin-only: the price-lookup log shown in the "API Calls" tab. */
 export async function GET() {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const lookups = await getLookups();

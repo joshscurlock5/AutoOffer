@@ -18,14 +18,15 @@ import { articleSchema, breadcrumbSchema, faqSchema } from "@/lib/seo";
 import { site } from "@/lib/site-config";
 import { Home, ChevronRight, ArrowRight, Check } from "@/components/icons";
 
-type Params = { params: { slug: string } };
+type Params = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
   return allArticles.map((a) => ({ slug: a.slug }));
 }
 
-export function generateMetadata({ params }: Params): Metadata {
-  const a = getArticle(params.slug);
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const { slug } = await params;
+  const a = getArticle(slug);
   if (!a) return { title: "Car Selling Guide" };
   const path = `/car-selling-guide/${a.slug}`;
   const description = a.metaDescription || a.blurb;
@@ -49,8 +50,9 @@ export function generateMetadata({ params }: Params): Metadata {
   };
 }
 
-export default function GuideArticlePage({ params }: Params) {
-  const article = getArticle(params.slug);
+export default async function GuideArticlePage({ params }: Params) {
+  const { slug } = await params;
+  const article = getArticle(slug);
   if (!article) notFound();
 
   const path = `/car-selling-guide/${article.slug}`;

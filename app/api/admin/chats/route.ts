@@ -8,7 +8,7 @@ const MAX_LEN = 2000;
 
 /** List conversation summaries, or one full conversation via ?conversationId. */
 export async function GET(req: NextRequest) {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const id = req.nextUrl.searchParams.get("conversationId");
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
 /** Admin replies to a conversation. */
 export async function POST(req: NextRequest) {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));

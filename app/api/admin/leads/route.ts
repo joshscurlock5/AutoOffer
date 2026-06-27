@@ -13,7 +13,7 @@ import type { Lead } from "@/lib/types";
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const [leads, referrals] = await Promise.all([getLeads(), getReferrals()]);
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { type, id, patch } = await req.json().catch(() => ({}));
@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await req.json().catch(() => ({}));

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  if (!isAuthed()) {
+  if (!(await isAuthed())) {
     return <LoginForm />;
   }
   const [leads, referrals] = await Promise.all([getLeads(), getReferrals()]);
