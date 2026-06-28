@@ -146,8 +146,7 @@ body {
      that line regardless of the notice's height. lg+ reverts (transform:none +
      the lg:bottom-* utilities take over to clear the centered desktop pill). */
   .cookie-notice {
-    bottom: calc(3rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
-    transform: translateY(50%);
+    bottom: calc(1.25rem + 3.5rem + 0.75rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
     transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   @media (min-width: 1024px) {

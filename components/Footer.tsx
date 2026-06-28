@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { site, fullAddress, mailHref } from "@/lib/site-config";
 import TelLink from "./TelLink";
-import { Phone, Mail, MapPin, Clock, Facebook, Instagram, MapleLeaf } from "./icons";
+import { Phone, Mail, MapPin, Clock, Facebook, Instagram, TikTok, MapleLeaf } from "./icons";
 
 const makes = [
   "Toyota", "Honda", "Ford", "Chevrolet", "Hyundai", "Kia",
@@ -138,6 +138,37 @@ export default function Footer() {
                 >
                   Review DriveOffer on Trustpilot
                 </a>
+              </li>
+              <li className="pt-1">
+                <div className="flex items-center gap-4">
+                  <a
+                    href="https://www.facebook.com/DriveOfferCA"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="DriveOffer on Facebook"
+                    className="text-muted transition hover:text-brand-700"
+                  >
+                    <Facebook className="h-5 w-5" />
+                  </a>
+                  <a
+                    href="https://www.instagram.com/driveofferca"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="DriveOffer on Instagram"
+                    className="text-muted transition hover:text-brand-700"
+                  >
+                    <Instagram className="h-5 w-5" />
+                  </a>
+                  <a
+                    href="https://www.tiktok.com/@driveofferca"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="DriveOffer on TikTok"
+                    className="text-muted transition hover:text-brand-700"
+                  >
+                    <TikTok className="h-5 w-5" />
+                  </a>
+                </div>
               </li>
             </ul>
           </nav>

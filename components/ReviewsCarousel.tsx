@@ -2,8 +2,8 @@ import { Star } from "./icons";
 import Carousel from "./Carousel";
 
 /* ───────────────────────────────────────────────────────────────────────────
-   The first two are REAL Google reviews (no date shown by request). The last
-   three are still placeholders — replace them as more real reviews come in.
+   All REAL Google reviews (no date shown by request). Add new ones here as more
+   come in.
    ─────────────────────────────────────────────────────────────────────────── */
 const REVIEWS: {
   name: string;
@@ -23,25 +23,14 @@ const REVIEWS: {
     text: "They bought my truck. Super quick process, barely had to do anything and got an awesome deal.",
   },
   {
-    name: "Priya K.",
-    location: "St. Albert",
-    when: "3 weeks ago",
+    name: "Gurwinder Singh",
     rating: 5,
-    text: "Booked online, they inspected my SUV at my work, and paid on the spot. Super professional from start to finish.",
+    text: "Great experience selling my two vehicles, picked up the vehicles same and offered very strong cash offer. Definitely offered top dollar, will recommend strongly. If you looking to sell the car, avoid the marketplace hassle and contact them💯",
   },
   {
-    name: "Mike T.",
-    location: "Edmonton",
-    when: "1 month ago",
+    name: "Andrew Morgan",
     rating: 5,
-    text: "I was nervous about selling, so this was perfect. The final offer matched the online estimate to the dollar.",
-  },
-  {
-    name: "Jenna L.",
-    location: "Leduc",
-    when: "2 months ago",
-    rating: 5,
-    text: "Quick, friendly, and paid by bank draft before they took the keys. Would absolutely sell to them again.",
+    text: "I sold my 2014 Ford F150 through Auto Offer and honestly it was way easier than trying to sell it myself. Samir answered all my questions. Couldn’t have asked for a smoother experience.",
   },
 ];
 
