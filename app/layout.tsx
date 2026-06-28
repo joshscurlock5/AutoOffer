@@ -30,10 +30,6 @@ export const metadata: Metadata = {
     template: `%s | ${site.name}`,
   },
   description: site.description,
-  // Trustpilot domain ownership verification (one-time meta tag).
-  other: {
-    "trustpilot-one-time-domain-verification-id": "29eca80c-0db1-4879-b77c-d639c6455aca",
-  },
   openGraph: {
     title: `${site.name} — ${site.tagline}`,
     description: site.description,
