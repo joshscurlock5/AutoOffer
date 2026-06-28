@@ -47,11 +47,15 @@ const REVIEWS: {
 
 function Stars({ n }: { n: number }) {
   return (
-    <span className="flex text-amber-400" role="img" aria-label={`${n} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star key={i} className={`h-5 w-5 ${i < n ? "" : "text-slate-200"}`} />
-      ))}
-    </span>
+    <div className="flex items-center gap-2" role="img" aria-label={`${n.toFixed(1)} out of 5 stars`}>
+      <span className="flex text-amber-400">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star key={i} className={`h-5 w-5 ${i < n ? "" : "text-slate-200"}`} />
+        ))}
+      </span>
+      <span className="font-display text-lg font-extrabold leading-none text-navy">{n.toFixed(1)}</span>
+      <span className="text-sm text-muted">stars</span>
+    </div>
   );
 }
 
