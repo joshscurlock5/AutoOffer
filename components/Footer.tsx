@@ -129,6 +129,16 @@ export default function Footer() {
                   </a>
                 </li>
               )}
+              <li>
+                <a
+                  href="https://www.trustpilot.com/review/driveoffer.ca"
+                  target="_blank"
+                  rel="noreferrer"
+                  className={linkClass}
+                >
+                  Review DriveOffer on Trustpilot
+                </a>
+              </li>
             </ul>
           </nav>
 
