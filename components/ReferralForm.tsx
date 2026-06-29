@@ -127,7 +127,7 @@ export default function ReferralForm() {
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col items-center sm:items-start">
+      <div className="mt-5 flex flex-col items-center">
         <TurnstileBox onToken={setTsToken} />
       </div>
 

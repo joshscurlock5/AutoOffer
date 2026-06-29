@@ -65,7 +65,7 @@ export default function ReviewsCarousel() {
           <p className="mt-4 min-h-[6rem] text-lg leading-relaxed text-navy">
             &ldquo;{r.text}&rdquo;
           </p>
-          <p className="mt-4 text-base font-semibold text-navy">
+          <p className="mt-auto pt-4 text-base font-semibold text-navy">
             {r.name}
             {(r.location || r.when) && (
               <span className="font-normal text-muted">

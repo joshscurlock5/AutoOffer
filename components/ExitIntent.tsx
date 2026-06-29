@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track, trackPhoneClick } from "@/lib/analytics";
-import { X, ArrowRight, Phone, Hand } from "./icons";
+import { X, ArrowRight, Phone } from "./icons";
 
 /**
  * Subtle exit-intent reminder. Shown once per browser session on deeper pages
@@ -74,14 +74,11 @@ export default function ExitIntent() {
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand">
-          <Hand className="h-7 w-7" />
-        </span>
+        <div className="text-5xl leading-none" role="img" aria-label="Waving hand">👋</div>
         <p className="mt-4 text-sm font-medium text-muted">Before you go…</p>
         <h2 className="mt-1 font-display text-2xl font-bold text-navy">
           Get your free estimate in under 2 minutes.
         </h2>
-        <p className="mt-2 text-muted">No spam. No obligation.</p>
         <Link
           href="/get-offer"
           onClick={() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -54,13 +55,16 @@ export default function CookieNotice() {
 
   return (
     <div
-      className={`cookie-notice fixed left-3 right-3 z-30 lg:left-0 lg:right-0 lg:px-4 ${
+      className={`cookie-notice fixed left-3 right-[5.5rem] z-30 lg:left-0 lg:right-0 lg:px-4 ${
         scrolled ? "lg:bottom-24" : "lg:bottom-6"
       }`}
     >
-      <div className="mx-auto flex max-w-3xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-xs text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
-        <p className="min-w-0 flex-1 truncate text-left sm:overflow-visible sm:whitespace-normal">
-          We use cookies and Google Analytics to understand how the site is used.
+      <div className="mx-auto flex max-w-4xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] leading-snug text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
+        <p className="min-w-0 flex-1 text-center">
+          We use cookies and Google Analytics to understand how the site is used.{" "}
+          <Link href="/privacy" className="hidden font-semibold text-brand hover:underline sm:inline">
+            See our Privacy Policy
+          </Link>
         </p>
         <button onClick={dismiss} className="btn-primary shrink-0 px-4 py-1.5 text-xs sm:px-6 sm:py-2 sm:text-sm">
           OK
