@@ -55,7 +55,7 @@ export default function ReferralPage() {
         <div className="grid items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
           {/* LEFT — image card. The form drives the row height; this card stretches
               to match it, and object-cover keeps the photo filling it at any size. */}
-          <div className="relative flex min-h-[560px] flex-col justify-end overflow-hidden rounded-2xl bg-navy text-white shadow-card">
+          <div className="relative order-2 flex min-h-[560px] flex-col justify-end overflow-hidden rounded-2xl bg-navy text-white shadow-card lg:order-1">
             {/* hero photo */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/referral-hero.jpg" alt="A happy customer referring a friend from their couch" className="absolute inset-0 h-full w-full object-cover" />
@@ -84,8 +84,10 @@ export default function ReferralPage() {
             </div>
           </div>
 
-          {/* RIGHT — the form */}
-          <ReferralForm />
+          {/* Form: right column on desktop, ABOVE the image on mobile. */}
+          <div className="order-1 lg:order-2">
+            <ReferralForm />
+          </div>
         </div>
 
       </Section>
