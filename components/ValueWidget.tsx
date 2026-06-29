@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import { trackFunnel } from "@/lib/analytics";
+import { track, trackFunnel } from "@/lib/analytics";
 import { site } from "@/lib/site-config";
 import { ArrowRight, Car, GoogleG, Star } from "./icons";
 
@@ -17,6 +17,14 @@ export default function ValueWidget() {
   const [model, setModel] = useState("");
   const [vin, setVin] = useState("");
   const [showError, setShowError] = useState(false);
+
+  // Fire each granular funnel event at most once per mount (on first interaction).
+  const fired = useRef<Set<string>>(new Set());
+  function once(event: string) {
+    if (fired.current.has(event)) return;
+    fired.current.add(event);
+    track(event);
+  }
 
   const models = make ? modelsFor(make) : [];
   const ready = Boolean(year && make && model);
@@ -82,7 +90,7 @@ export default function ValueWidget() {
             id="vw-vin"
             className="field font-mono uppercase tracking-wide"
             value={vin}
-            onChange={(e) => setVin(e.target.value.toUpperCase())}
+            onChange={(e) => { once("home_form_start"); setVin(e.target.value.toUpperCase()); }}
             placeholder="e.g. 1HGCM82633A004352"
             maxLength={17}
             autoCapitalize="characters"
@@ -97,7 +105,7 @@ export default function ValueWidget() {
               is chosen (its options depend on the make). */}
           <div>
             <label className="label" htmlFor="vw-year">Year</label>
-            <select id="vw-year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+            <select id="vw-year" className="field" value={year} onChange={(e) => { once("home_form_start"); if (e.target.value) once("home_year_selected"); setYear(e.target.value); }}>
               <option value="">Year</option>
               {YEARS.map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -111,7 +119,7 @@ export default function ValueWidget() {
               id="vw-make"
               className="field"
               value={make}
-              onChange={(e) => { setMake(e.target.value); setModel(""); }}
+              onChange={(e) => { once("home_form_start"); if (e.target.value) once("home_make_selected"); setMake(e.target.value); setModel(""); }}
             >
               <option value="">Make</option>
               {MAKES.map((m) => (
@@ -127,7 +135,7 @@ export default function ValueWidget() {
               className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
               value={model}
               disabled={!make}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => { once("home_form_start"); if (e.target.value) once("home_model_selected"); setModel(e.target.value); }}
             >
               <option value="">{make ? "Model" : "Select a make first"}</option>
               {models.map((m) => (

@@ -93,6 +93,8 @@ export default function OfferFlow() {
   // contact_started (form merely shown). Does not re-fire after an editVehicle()
   // round-trip since the flow doesn't remount: one engagement per session.
   const contactEngaged = useRef(false);
+  // Generic fire-once guard for the granular per-field funnel events.
+  const fired = useRef<Set<string>>(new Set());
   // The id of the most recent /api/estimate lookup — sent with the lead so the
   // admin "API Calls" log can mark that lookup as converted.
   const lookupIdRef = useRef<string | null>(null);
@@ -198,6 +200,13 @@ export default function OfferFlow() {
     setPhotos((p) => [...p, ...accepted]);
     setPreviews((p) => [...p, ...accepted.map((f) => URL.createObjectURL(f))]);
     track("photos_added", { count: accepted.length, total: photos.length + accepted.length });
+  }
+
+  /** Fire a granular per-field funnel event at most once per mount. */
+  function once(event: string) {
+    if (fired.current.has(event)) return;
+    fired.current.add(event);
+    track(event);
   }
 
   /** Fire contact_engaged (+ Meta InitiateCheckout) once on first real field interaction. */
@@ -494,7 +503,7 @@ export default function OfferFlow() {
         <div className="space-y-4">
         <div>
           <label className="label" htmlFor="name">First name</label>
-          <input id="name" className="field" value={name} onChange={(e) => { markContactEngaged(); setName(e.target.value); }} placeholder="Your first name" autoComplete="given-name" />
+          <input id="name" className="field" value={name} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_name_entered"); setName(e.target.value); }} placeholder="Your first name" autoComplete="given-name" />
         </div>
 
         <div>
@@ -522,12 +531,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone <span className="font-normal text-muted">(optional)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
           </>
@@ -535,17 +544,17 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
               <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
               <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>
-              <select id="besttime" className="field" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
+              <select id="besttime" className="field" value={bestTime} onChange={(e) => { once("contact_besttime_selected"); setBestTime(e.target.value); }}>
                 <option>Anytime</option>
                 <option>Morning</option>
                 <option>Afternoon</option>
@@ -625,7 +634,7 @@ export default function OfferFlow() {
                     id="vin"
                     className="field font-mono uppercase tracking-wide"
                     value={vin}
-                    onChange={(e) => setVin(e.target.value.toUpperCase())}
+                    onChange={(e) => { once("offer_form_start"); setVin(e.target.value.toUpperCase()); }}
                     placeholder="e.g. 1HGCM82633A004352"
                     maxLength={17}
                     autoCapitalize="characters"
@@ -649,14 +658,14 @@ export default function OfferFlow() {
                 <div className="mt-6 grid grid-cols-1 gap-4">
                   <div>
                     <label className="label" htmlFor="year">Year</label>
-                    <select id="year" className="field" value={year} onChange={(e) => setYear(e.target.value)}>
+                    <select id="year" className="field" value={year} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_year_selected"); setYear(e.target.value); }}>
                       <option value="">Select year</option>
                       {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="label" htmlFor="make">Make</label>
-                    <select id="make" className="field" value={make} onChange={(e) => { setMake(e.target.value); setModel(""); setTrim(""); }}>
+                    <select id="make" className="field" value={make} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_make_selected"); setMake(e.target.value); setModel(""); setTrim(""); }}>
                       <option value="">Select make</option>
                       {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
@@ -668,7 +677,7 @@ export default function OfferFlow() {
                       className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                       value={model}
                       disabled={!make}
-                      onChange={(e) => { setModel(e.target.value); setTrim(""); }}
+                      onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_model_selected"); setModel(e.target.value); setTrim(""); }}
                     >
                       <option value="">{make ? "Select model" : "Select a make first"}</option>
                       {models.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -721,7 +730,7 @@ export default function OfferFlow() {
                     className="field disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                     value={trim}
                     disabled={trimsLoading}
-                    onChange={(e) => setTrim(e.target.value)}
+                    onChange={(e) => { if (e.target.value) once("details_trim_selected"); setTrim(e.target.value); }}
                   >
                     <option value="">{trimsLoading ? "Loading trims…" : "Select trim"}</option>
                     {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
@@ -735,7 +744,7 @@ export default function OfferFlow() {
                 </div>
                 <div>
                   <label className="label" htmlFor="km">Mileage (km)</label>
-                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => setKmv(e.target.value)} />
+                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => { if (e.target.value) once("details_mileage_entered"); setKmv(e.target.value); }} />
                   <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
                 </div>
               </div>
@@ -868,7 +877,7 @@ export default function OfferFlow() {
             <p className="mt-1 text-sm text-muted">
               Refer a friend and you each get ${site.referralReward} when they sell to {site.name}.
             </p>
-            <Link href="/referral" className="btn-primary mt-4 inline-flex px-5 py-2.5 text-sm">
+            <Link href="/referral" onClick={() => track("referral_cta_click", { location: "offer_success" })} className="btn-primary mt-4 inline-flex px-5 py-2.5 text-sm">
               Refer a friend &amp; earn ${site.referralReward}
             </Link>
           </div>

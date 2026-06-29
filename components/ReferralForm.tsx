@@ -1,11 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { Check, ArrowRight } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
+
+// Field key -> the granular funnel event fired the first time it's filled.
+const FIELD_EVENT: Record<string, string> = {
+  referrerName: "referral_name_entered",
+  referrerEmail: "referral_email_entered",
+  referrerPhone: "referral_phone_entered",
+  friendName: "referral_friend_name_entered",
+  friendPhone: "referral_friend_phone_entered",
+};
 
 export default function ReferralForm() {
   const [f, setF] = useState({
@@ -24,9 +33,26 @@ export default function ReferralForm() {
   // request / second non-deduped Lead before the disabled state commits.
   const sendingRef = useRef(false);
 
+  // Fire each granular funnel event at most once per mount (on first interaction).
+  const fired = useRef<Set<string>>(new Set());
+  function once(event: string) {
+    if (fired.current.has(event)) return;
+    fired.current.add(event);
+    track(event);
+  }
+
+  // "Reached referral page" — the form only renders on /referral.
+  useEffect(() => {
+    track("referral_page_view");
+  }, []);
+
   function set(k: keyof typeof f) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      once("referral_form_start");
+      const ev = FIELD_EVENT[k];
+      if (ev && e.target.value) once(ev);
       setF((prev) => ({ ...prev, [k]: e.target.value }));
+    };
   }
 
   async function submit(e: React.FormEvent) {

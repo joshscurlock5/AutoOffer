@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
-import { trackPhoneClick } from "@/lib/analytics";
+import { track, trackPhoneClick } from "@/lib/analytics";
 import { Phone, Menu, X, ArrowRight } from "./icons";
 import { GuideMegaMenu, GuideMobileAccordion } from "./GuideMegaMenu";
 import OfferCtaLink from "@/components/OfferCtaLink";
@@ -71,7 +71,12 @@ export default function Header() {
             ))}
             <GuideMegaMenu />
             {NAV_RIGHT.map((n) => (
-              <Link key={n.href} href={n.href} className={navLinkClass}>
+              <Link
+                key={n.href}
+                href={n.href}
+                onClick={() => { if (n.href === "/referral") track("referral_cta_click", { location: "header" }); }}
+                className={navLinkClass}
+              >
                 {n.label}
               </Link>
             ))}
@@ -134,7 +139,7 @@ export default function Header() {
                   <Link
                     key={n.href}
                     href={n.href}
-                    onClick={() => setOpen(false)}
+                    onClick={() => { if (n.href === "/referral") track("referral_cta_click", { location: "header_mobile" }); setOpen(false); }}
                     className="rounded-lg px-3 py-3 text-base font-medium text-navy hover:bg-slate-100"
                   >
                     {n.label}
