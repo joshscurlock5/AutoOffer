@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { telHref } from "@/lib/site-config";
 import { trackPhoneClick } from "@/lib/analytics";
 import { ArrowRight, Phone } from "./icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 /**
  * Mobile-only sticky bottom CTA bar (below lg — the desktop pill covers large
@@ -78,9 +78,9 @@ export default function StickyMobileBar() {
             Get My Estimate <ArrowRight className="h-4 w-4" />
           </a>
         ) : (
-          <Link href="/get-offer" className="btn-primary flex-1 py-3">
+          <OfferCtaLink location="sticky_mobile" className="btn-primary flex-1 py-3">
             Get My Estimate <ArrowRight className="h-4 w-4" />
-          </Link>
+          </OfferCtaLink>
         )}
         <a
           href={telHref}

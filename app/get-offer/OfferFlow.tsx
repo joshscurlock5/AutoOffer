@@ -6,7 +6,7 @@ import Link from "next/link";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
-import { track } from "@/lib/analytics";
+import { track, trackFunnel } from "@/lib/analytics";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
@@ -41,6 +41,10 @@ function formatPhone(v: string): string {
 
 export default function OfferFlow() {
   const sp = useSearchParams();
+  // Which entry CTA sent the user here (stamped as ?source= by <OfferCtaLink/>).
+  // Distinct from the widget/direct `source` dimension below — this is the
+  // specific button, threaded through to generate_lead for full attribution.
+  const ctaSource = sp.get("source") || "direct";
   // Arrived from the home form with a vehicle? Skip straight to the details step.
   const cameWithVehicle = Boolean(sp.get("year") && sp.get("make") && sp.get("model"));
   const [step, setStep] = useState<Step>(cameWithVehicle ? 2 : 1);
@@ -84,6 +88,11 @@ export default function OfferFlow() {
   const flowStarted = useRef(false);
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
+  // First real interaction with the contact form (a keystroke in name/email/phone),
+  // fired once per mount — the warm "started filling it out" signal, distinct from
+  // contact_started (form merely shown). Does not re-fire after an editVehicle()
+  // round-trip since the flow doesn't remount: one engagement per session.
+  const contactEngaged = useRef(false);
   // The id of the most recent /api/estimate lookup — sent with the lead so the
   // admin "API Calls" log can mark that lookup as converted.
   const lookupIdRef = useRef<string | null>(null);
@@ -120,7 +129,7 @@ export default function OfferFlow() {
   useEffect(() => {
     if (flowStarted.current) return;
     flowStarted.current = true;
-    track("offer_flow_start", { source: sp.get("make") ? "widget" : "direct" });
+    track("offer_flow_start", { source: sp.get("make") ? "widget" : "direct", cta_source: ctaSource });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -188,6 +197,18 @@ export default function OfferFlow() {
     if (!accepted.length) return;
     setPhotos((p) => [...p, ...accepted]);
     setPreviews((p) => [...p, ...accepted.map((f) => URL.createObjectURL(f))]);
+    track("photos_added", { count: accepted.length, total: photos.length + accepted.length });
+  }
+
+  /** Fire contact_engaged (+ Meta InitiateCheckout) once on first real field interaction. */
+  function markContactEngaged() {
+    if (contactEngaged.current) return;
+    contactEngaged.current = true;
+    trackFunnel(
+      "contact_engaged",
+      { unique: !!estimate?.unique },
+      { value: estimate?.mid ?? 0, currency: "CAD" },
+    );
   }
 
   function removePhoto(i: number) {
@@ -211,15 +232,20 @@ export default function OfferFlow() {
 
   function revealEstimate(est: OfferEstimate, ctx: { make: string; model: string; year: number }) {
     setEstimate(est);
-    track("estimate_viewed", {
-      make: ctx.make,
-      model: ctx.model,
-      year: ctx.year,
-      unique: !!est.unique,
-      source: est.source || "estimate",
-      comps: est.comps ?? 0,
-      reentry: estimateViews.current > 0,
-    });
+    trackFunnel(
+      "estimate_viewed",
+      {
+        make: ctx.make,
+        model: ctx.model,
+        year: ctx.year,
+        unique: !!est.unique,
+        source: est.source || "estimate",
+        comps: est.comps ?? 0,
+        reentry: estimateViews.current > 0,
+      },
+      // Meta ViewContent — the prime mid-funnel remarketing signal ("saw their value").
+      { value: est.mid ?? 0, currency: "CAD", content_name: `${ctx.year} ${ctx.make} ${ctx.model}` },
+    );
     estimateViews.current += 1;
     // Both paths (priced range + unique custom-offer) now show the contact form
     // inline on this same step, so the contact funnel begins right here.
@@ -233,6 +259,7 @@ export default function OfferFlow() {
     if (!vehicleValid) {
       setStep1Error(true);
       const firstMissing = !year ? "year" : !make ? "make" : "model";
+      track("form_error", { step: "vehicle", reason: `missing_${firstMissing}` });
       document.getElementById(firstMissing)?.focus();
       return;
     }
@@ -246,6 +273,7 @@ export default function OfferFlow() {
     e.preventDefault();
     if (!kmv) {
       setError("Please add your mileage to see your value.");
+      track("form_error", { step: "details", reason: "missing_mileage" });
       document.getElementById("km")?.scrollIntoView({ behavior: "smooth", block: "center" });
       document.getElementById("km")?.focus();
       return;
@@ -260,6 +288,9 @@ export default function OfferFlow() {
       const est = await fetchEstimate(year, make, model, Number(kmv));
       revealEstimate(est, { make, model, year: yr });
     } catch {
+      // The market lookup failed — we still show the custom-offer (unique) path,
+      // but record the failure so it's not invisible in the funnel.
+      track("estimate_error", { make, model, year: yr });
       revealEstimate(UNIQUE, { make, model, year: yr });
     } finally {
       setCalculating(false);
@@ -286,11 +317,13 @@ export default function OfferFlow() {
       });
       const data = await res.json();
       if (!data.ok || !data.vehicle) {
+        track("vin_failed", { reason: "decode_failed" });
         setVinError("We couldn't read that VIN. Double-check it, or switch to “Make & Model” above.");
         return;
       }
       setDecoded(data.vehicle as DecodedVehicle);
     } catch {
+      track("vin_failed", { reason: "network" });
       setVinError("Something went wrong. Please try again, or enter your details manually.");
     } finally {
       setDecoding(false);
@@ -323,6 +356,7 @@ export default function OfferFlow() {
   }
 
   function editVehicle() {
+    track("edit_vehicle", { from_step: step });
     setInputMode("manual");
     setStep(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -333,19 +367,23 @@ export default function OfferFlow() {
     if (submittingRef.current) return;
     setError("");
     if (!name.trim()) {
+      track("form_error", { step: "contact", reason: "missing_name" });
       setError("Please add your first name.");
       return;
     }
     if (contactMethod === "email") {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        track("form_error", { step: "contact", reason: "invalid_email" });
         setError("Please add a valid email address.");
         return;
       }
     } else if (phone.replace(/\D/g, "").length < 10) {
+      track("form_error", { step: "contact", reason: "invalid_phone" });
       setError("Please add a 10-digit phone number.");
       return;
     }
     if (turnstileEnabled && !tsToken) {
+      track("form_error", { step: "contact", reason: "missing_turnstile" });
       setError("Please complete the verification below, then submit.");
       return;
     }
@@ -381,6 +419,7 @@ export default function OfferFlow() {
         year: Number(year),
         contactMethod,
         unique: !!estimate?.unique,
+        cta_source: ctaSource,
       });
       trackMeta("Lead", { currency: "CAD", value: estimate?.mid ?? 0, content_name: `${year} ${make} ${model}` }, metaEventId);
       setStep(5);
@@ -455,7 +494,7 @@ export default function OfferFlow() {
         <div className="space-y-4">
         <div>
           <label className="label" htmlFor="name">First name</label>
-          <input id="name" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your first name" autoComplete="given-name" />
+          <input id="name" className="field" value={name} onChange={(e) => { markContactEngaged(); setName(e.target.value); }} placeholder="Your first name" autoComplete="given-name" />
         </div>
 
         <div>
@@ -483,12 +522,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone <span className="font-normal text-muted">(optional)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
           </>
@@ -496,12 +535,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
               <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>

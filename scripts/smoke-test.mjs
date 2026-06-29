@@ -50,6 +50,25 @@ async function main() {
     /Get My Estimate/.test(home) && /Call or text/.test(home),
   );
 
+  // --- funnel CTA source attribution (regression guard for OfferCtaLink's
+  //     query merge: ?source= must MERGE, not clobber an existing ?make=) ---
+  for (const q of ["?source=smoketest", "?make=Toyota", "?make=Toyota&source=footer_make"]) {
+    const r = await fetch(BASE + "/get-offer" + q);
+    ok(`GET /get-offer${q} -> 200`, r.status === 200, `(got ${r.status})`);
+  }
+  ok(
+    "footer make link merges source WITHOUT clobbering make",
+    /\/get-offer\?make=[^"&]+&(amp;)?source=footer_make/.test(home),
+  );
+  ok(
+    "no /get-offer link has a double '?' (broken merge)",
+    !/\/get-offer\?[^"]*\?/.test(home),
+  );
+  ok(
+    "header entry CTA stamps a source",
+    /\/get-offer\?source=header_(desktop|mobile)/.test(home),
+  );
+
   const admin = await (await fetch(BASE + "/admin")).text();
   ok("admin shows login gate", /Admin/.test(admin) && /Password/.test(admin));
 

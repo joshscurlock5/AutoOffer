@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import ContactForm from "@/components/ContactForm";
 import MapEmbed from "@/components/MapEmbed";
 import TelLink from "@/components/TelLink";
-import { site, fullAddress, mailHref } from "@/lib/site-config";
+import EmailLink from "@/components/EmailLink";
+import { site, fullAddress } from "@/lib/site-config";
 import { Phone, Mail, MapPin, Clock } from "@/components/icons";
 
 export const metadata: Metadata = {
@@ -62,13 +63,13 @@ export default function ContactPage() {
                   <span className="block text-lg font-bold text-navy">{site.phoneDisplay}</span>
                 </span>
               </TelLink>
-              <a href={mailHref} className="card flex items-center gap-4 p-5 transition hover:shadow-lift">
+              <EmailLink location="contact_card" className="card flex items-center gap-4 p-5 transition hover:shadow-lift">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand"><Mail className="h-6 w-6" /></span>
                 <span>
                   <span className="block text-sm text-muted">Email</span>
                   <span className="block text-lg font-bold text-navy">{site.email}</span>
                 </span>
-              </a>
+              </EmailLink>
               <div className="card flex items-center gap-4 p-5">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand"><MapPin className="h-6 w-6" /></span>
                 <span>

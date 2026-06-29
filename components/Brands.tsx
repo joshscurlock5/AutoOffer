@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Section } from "./Section";
 import { ArrowRight } from "./icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 const brands = [
   "Toyota", "Honda", "Ford", "Chevrolet", "GMC", "Ram", "Jeep", "Dodge",
@@ -20,24 +20,24 @@ export default function Brands() {
             Cars, trucks, SUVs and vans — financed, leased, or paid off. If it has
             four wheels, we want to make you an offer.
           </p>
-          <Link
-            href="/get-offer"
+          <OfferCtaLink
+            location="brands"
             className="mt-6 inline-flex items-center gap-2 font-semibold text-brand hover:gap-3"
           >
             Don&apos;t see yours? We still want it <ArrowRight className="h-4 w-4" />
-          </Link>
+          </OfferCtaLink>
         </div>
 
         <div className="card-outline p-7 sm:p-8">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3.5">
             {[...brands].sort((a, b) => a.localeCompare(b)).map((b) => (
-              <Link
+              <OfferCtaLink
                 key={b}
-                href="/get-offer"
+                location="brands"
                 className="font-display text-lg font-semibold text-navy/55 transition hover:text-brand sm:text-xl"
               >
                 {b}
-              </Link>
+              </OfferCtaLink>
             ))}
             <span className="font-display text-lg font-semibold text-accent-700 sm:text-xl">
               + more

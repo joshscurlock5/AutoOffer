@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { Section } from "./Section";
 import { ArrowRight, Phone } from "./icons";
-import { telHref } from "@/lib/site-config";
+import OfferCtaLink from "@/components/OfferCtaLink";
+import TelLink from "@/components/TelLink";
 
 export default function FinalCTA() {
   return (
@@ -12,16 +12,16 @@ export default function FinalCTA() {
           It takes about a minute — free, with no obligation.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link href="/get-offer" className="btn-primary px-8 py-4 text-lg">
+          <OfferCtaLink location="final_cta" className="btn-primary px-8 py-4 text-lg">
             Get My Free Estimate
             <ArrowRight className="h-5 w-5" />
-          </Link>
-          <a
-            href={telHref}
+          </OfferCtaLink>
+          <TelLink
+            location="final_cta"
             className="btn border-2 border-brand-600 bg-white px-8 py-4 text-lg text-brand-700 transition hover:-translate-y-0.5 hover:bg-brand-50"
           >
             <Phone className="h-5 w-5" /> Call for an instant estimate
-          </a>
+          </TelLink>
         </div>
       </div>
     </Section>

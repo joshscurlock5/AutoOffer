@@ -17,6 +17,8 @@ import {
 import { articleSchema, breadcrumbSchema, faqSchema } from "@/lib/seo";
 import { site } from "@/lib/site-config";
 import { Home, ChevronRight, ArrowRight, Check } from "@/components/icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
+import ScrollDepth from "@/components/ScrollDepth";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -79,6 +81,7 @@ export default async function GuideArticlePage({ params }: Params) {
 
   return (
     <article>
+      <ScrollDepth slug={slug} />
       <JsonLd data={schemas} />
 
       {/* Header */}
@@ -167,9 +170,9 @@ export default async function GuideArticlePage({ params }: Params) {
               <h2 className="text-xl font-bold">{GUIDE_CTA.title}</h2>
               <p className="mt-1.5 text-white/70">{GUIDE_CTA.text}</p>
             </div>
-            <Link href="/get-offer" className="btn-primary shrink-0 whitespace-nowrap">
+            <OfferCtaLink location="guide_article_inline" className="btn-primary shrink-0 whitespace-nowrap">
               {GUIDE_CTA.button} <ArrowRight className="h-4 w-4" />
-            </Link>
+            </OfferCtaLink>
           </div>
 
           {/* FAQ (fact-checked) — visible content matches the FAQPage schema */}

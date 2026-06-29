@@ -8,6 +8,7 @@ import { collectionSchema, breadcrumbSchema } from "@/lib/seo";
 import { site } from "@/lib/site-config";
 import { formatDate } from "@/lib/format";
 import { Car, Banknote, MapPin, Tag, ArrowRight } from "@/components/icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 const HUB_DESCRIPTION = `Free guides on selling your car in Alberta — pricing, paperwork, payment, scams, and area-by-area tips from ${site.name}.`;
 
@@ -55,9 +56,9 @@ export default function CarSellingGuidePage() {
             Written and kept current by {GUIDE_AUTHOR.name} · Updated {formatDate(GUIDE_DEFAULT_UPDATED)}
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/get-offer" className="btn-primary">
+            <OfferCtaLink location="guide_hub" className="btn-primary">
               Get My Offer <ArrowRight className="h-4 w-4" />
-            </Link>
+            </OfferCtaLink>
             <PhoneButton variant="ghost" />
           </div>
 
@@ -122,10 +123,10 @@ export default function CarSellingGuidePage() {
             <p className="mx-auto mt-3 max-w-xl text-lg text-white/85">{GUIDE_CTA.text}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link href="/get-offer" className="btn bg-white px-7 py-3.5 text-brand hover:bg-brand-50">
+            <OfferCtaLink location="guide_hub_closing" className="btn bg-white px-7 py-3.5 text-brand hover:bg-brand-50">
               {GUIDE_CTA.button} <ArrowRight className="h-5 w-5" />
-            </Link>
-            <PhoneButton variant="dark" />
+            </OfferCtaLink>
+            <PhoneButton variant="dark" location="guide_hub_closing" />
           </div>
         </div>
       </section>

@@ -68,7 +68,10 @@ export default function ExitIntent() {
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
       <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white p-7 text-center shadow-lift">
         <button
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            track("exit_intent_dismissed");
+            setOpen(false);
+          }}
           aria-label="Close"
           className="icon-btn absolute right-3 top-3 h-9 w-9 text-muted hover:bg-slate-100"
         >
@@ -80,7 +83,7 @@ export default function ExitIntent() {
           Get your free estimate in under 2 minutes.
         </h2>
         <Link
-          href="/get-offer"
+          href="/get-offer?source=exit_intent"
           onClick={() => {
             track("exit_intent_clicked");
             setOpen(false);

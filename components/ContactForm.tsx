@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Check, ArrowRight, Shield } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
+import { track } from "@/lib/analytics";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
@@ -24,11 +25,13 @@ export default function ContactForm() {
     if (!name || !email || !phone) {
       setErrMsg("Please add your name, email and phone (or just call us).");
       setState("error");
+      track("contact_form_error", { reason: "missing_fields" });
       return;
     }
     if (turnstileEnabled && !tsToken) {
       setErrMsg("Please complete the verification below, then send.");
       setState("error");
+      track("contact_form_error", { reason: "missing_turnstile" });
       return;
     }
     sendingRef.current = true;
@@ -46,9 +49,11 @@ export default function ContactForm() {
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       setState("done");
+      track("contact_form_submitted", {});
       trackMeta("Lead", { currency: "CAD", value: 0 }, metaEventId);
     } catch {
       setState("error");
+      track("contact_form_error", { reason: "network" });
     } finally {
       sendingRef.current = false;
     }

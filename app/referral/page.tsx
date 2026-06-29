@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import ReferralForm from "@/components/ReferralForm";
 import { Section, SectionHeading } from "@/components/Section";
 import PhoneButton from "@/components/PhoneButton";
+import FaqItem from "@/components/FaqItem";
 import { site } from "@/lib/site-config";
-import { Check, Phone, ChevronDown } from "@/components/icons";
+import { Check, Phone } from "@/components/icons";
 
 export const metadata: Metadata = {
   title: `Refer & Earn $${site.referralReward}`,
@@ -119,20 +120,14 @@ export default function ReferralPage() {
           />
           <div className="space-y-3">
             {faqs.map((f) => (
-              <details
+              <FaqItem
                 key={f.q}
-                className="card group overflow-hidden p-0 [&_summary::-webkit-details-marker]:hidden"
-              >
-                <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 text-base font-semibold text-navy sm:text-lg">
-                  {f.q}
-                  <ChevronDown className="h-5 w-5 shrink-0 text-brand-600 transition duration-300 group-open:rotate-180" />
-                </summary>
-                <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-open:grid-rows-[1fr]">
-                  <div className="overflow-hidden">
-                    <p className="max-w-[60ch] px-5 pb-5 text-muted">{f.a}</p>
-                  </div>
-                </div>
-              </details>
+                q={f.q}
+                a={f.a}
+                summaryClassName="flex cursor-pointer items-center justify-between gap-4 p-5 text-base font-semibold text-navy sm:text-lg"
+                chevronClassName="h-5 w-5 shrink-0 text-brand-600 transition duration-300 group-open:rotate-180"
+                answerClassName="max-w-[60ch] px-5 pb-5 text-muted"
+              />
             ))}
           </div>
         </div>

@@ -7,6 +7,7 @@ import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/type
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead } from "@/lib/metaCapi";
+import { sendGa4Lead } from "@/lib/ga4Mp";
 import { sendLeadConfirmation, scheduleLeadDrip } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -211,6 +212,22 @@ export async function POST(req: NextRequest) {
         ...(vehicle ? { content_name: `${vehicle.year} ${vehicle.make} ${vehicle.model}` } : {}),
       },
     });
+    // GA4 Measurement Protocol "generate_lead" (server-side; best-effort). Mirrors
+    // the browser generate_lead for vehicle leads so the conversion still counts
+    // when gtag is blocked. Reads _ga to stitch to the user's GA session. Tagged
+    // transport:"server" — choose one of browser/server as the canonical
+    // conversion in GA4 since they aren't auto-deduped.
+    if (kind === "vehicle") {
+      await sendGa4Lead({
+        gaCookie: req.cookies.get("_ga")?.value,
+        params: {
+          currency: "CAD",
+          value: estimate && !estimate.unique ? estimate.mid : 0,
+          ...(vehicle ? { make: vehicle.make, model: vehicle.model, year: Number(vehicle.year) || 0 } : {}),
+          contact_method: contactMethod,
+        },
+      });
+    }
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("POST /api/leads failed", err);

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { site } from "@/lib/site-config";
 import { ArrowRight } from "./icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 export default function ReferralBanner() {
   return (
@@ -32,15 +32,16 @@ export default function ReferralBanner() {
               it, you get ${site.referralReward}.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Link href="/referral" className="btn-primary">
+              <OfferCtaLink href="/referral" location="referral_banner" className="btn-primary">
                 Refer Someone <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
+              </OfferCtaLink>
+              <OfferCtaLink
                 href="/referral"
+                location="referral_banner_how"
                 className="hidden font-semibold text-white underline underline-offset-4 hover:text-white/80 min-[860px]:inline-flex"
               >
                 How it works
-              </Link>
+              </OfferCtaLink>
             </div>
           </div>
         </div>

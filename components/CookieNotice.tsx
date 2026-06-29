@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 
 const KEY = "ao_cookie_notice";
 
@@ -50,6 +51,7 @@ export default function CookieNotice() {
     } catch {
       /* ignore */
     }
+    track("cookie_accepted");
     setShow(false);
   }
 

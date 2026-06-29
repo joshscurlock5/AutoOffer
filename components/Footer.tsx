@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { site, fullAddress, mailHref } from "@/lib/site-config";
 import TelLink from "./TelLink";
+import OfferCtaLink from "@/components/OfferCtaLink";
 import { Phone, Mail, MapPin, Clock, Facebook, Instagram, TikTok, MapleLeaf } from "./icons";
 
 const makes = [
@@ -47,9 +48,9 @@ export default function Footer() {
             <ul className="mt-4 space-y-2.5 text-sm">
               {makes.map((m) => (
                 <li key={m}>
-                  <Link href={`/get-offer?make=${encodeURIComponent(m)}`} className={linkClass}>
+                  <OfferCtaLink href={`/get-offer?make=${encodeURIComponent(m)}`} location="footer_make" className={linkClass}>
                     {m}
-                  </Link>
+                  </OfferCtaLink>
                 </li>
               ))}
             </ul>
@@ -60,7 +61,7 @@ export default function Footer() {
             <ul className="mt-4 space-y-2.5 text-sm">
               {types.map((t) => (
                 <li key={t}>
-                  <Link href="/get-offer" className={linkClass}>{t}</Link>
+                  <OfferCtaLink location="footer_type" className={linkClass}>{t}</OfferCtaLink>
                 </li>
               ))}
             </ul>
@@ -71,7 +72,7 @@ export default function Footer() {
             <ul className="mt-4 space-y-2.5 text-sm">
               {cities.map((c) => (
                 <li key={c}>
-                  <Link href="/get-offer" className={linkClass}>{c}</Link>
+                  <OfferCtaLink location="footer_city" className={linkClass}>{c}</OfferCtaLink>
                 </li>
               ))}
             </ul>

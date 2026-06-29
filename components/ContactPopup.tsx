@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { site, telHref, mailHref } from "@/lib/site-config";
-import { trackPhoneClick } from "@/lib/analytics";
+import { track, trackPhoneClick } from "@/lib/analytics";
 import { Phone, Mail, X } from "./icons";
 
 export default function ContactPopup() {
@@ -24,7 +24,14 @@ export default function ContactPopup() {
   return (
     <div className="mt-12 text-center">
       <h3 className="font-display text-2xl font-bold text-navy">Still have questions?</h3>
-      <button type="button" onClick={() => setOpen(true)} className="btn-dark mt-5">
+      <button
+        type="button"
+        onClick={() => {
+          track("contact_popup_opened");
+          setOpen(true);
+        }}
+        className="btn-dark mt-5"
+      >
         Contact us
       </button>
 
@@ -66,6 +73,7 @@ export default function ContactPopup() {
               </a>
               <a
                 href={mailHref}
+                onClick={() => track("email_click", { location: "faq_contact" })}
                 className="mt-3 flex items-center justify-center gap-2 text-sm font-medium text-muted hover:text-brand"
               >
                 <Mail className="h-4 w-4" /> {site.email}

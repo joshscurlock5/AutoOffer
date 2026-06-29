@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { site, telHref } from "@/lib/site-config";
+import { track, trackPhoneClick } from "@/lib/analytics";
+import OfferCtaLink from "@/components/OfferCtaLink";
 import type { ChatMessage } from "@/lib/types";
 import { Chat, Send, X, ChevronLeft, ChevronDown, ArrowRight, Phone, Home } from "./icons";
 
@@ -55,6 +56,7 @@ export default function ChatWidget() {
   const [phoneError, setPhoneError] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
+  const messageSent = useRef(false); // fire chat_message_sent only on the first send
 
   // Restore an existing conversation id (returning visitor).
   useEffect(() => {
@@ -108,6 +110,10 @@ export default function ChatWidget() {
     setPhoneError(false);
     const text = input.trim();
     if (!text) return;
+    if (!messageSent.current) {
+      messageSent.current = true;
+      track("chat_message_sent", {});
+    }
     setSending(true);
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -126,6 +132,7 @@ export default function ChatWidget() {
       });
       const d = await r.json();
       if (d.conversationId) {
+        if (!convId) track("chat_conversation_started", {});
         setConvId(d.conversationId);
         try {
           localStorage.setItem(KEY, d.conversationId);
@@ -167,7 +174,12 @@ export default function ChatWidget() {
     <>
       {/* Launcher (stays visible; flips to a chevron while open) */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() =>
+          setOpen((o) => {
+            if (!o) track("chat_opened", {});
+            return !o;
+          })
+        }
         aria-label={open ? "Close chat" : "Chat with us"}
         className="chat-fab fixed right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-lift hover:-translate-y-0.5 hover:bg-brand-700 lg:right-5"
       >
@@ -199,20 +211,20 @@ export default function ChatWidget() {
                   </span>
                   <ArrowRight className="h-5 w-5 shrink-0 text-brand-700" />
                 </button>
-                <a href={telHref} className={rowClass}>
+                <a href={telHref} onClick={() => trackPhoneClick("chat_widget")} className={rowClass}>
                   <span>
                     <span className="block font-bold text-navy">Call or text us</span>
                     <span className="block text-sm text-muted">{site.phoneDisplay}</span>
                   </span>
                   <Phone className="h-5 w-5 shrink-0 text-brand-700" />
                 </a>
-                <Link href="/get-offer" onClick={() => setOpen(false)} className={rowClass}>
+                <OfferCtaLink location="chat_widget" onClick={() => setOpen(false)} className={rowClass}>
                   <span>
                     <span className="block font-bold text-navy">Get my free estimate</span>
                     <span className="block text-sm text-muted">See what your car is worth.</span>
                   </span>
                   <ArrowRight className="h-5 w-5 shrink-0 text-brand-700" />
-                </Link>
+                </OfferCtaLink>
               </div>
 
               {bottomNav}

@@ -7,6 +7,7 @@ import { site, telHref } from "@/lib/site-config";
 import { trackPhoneClick } from "@/lib/analytics";
 import { Phone, Menu, X, ArrowRight } from "./icons";
 import { GuideMegaMenu, GuideMobileAccordion } from "./GuideMegaMenu";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 // Top-nav links flanking the Car Selling Guide mega menu (rendered between them).
 // "Sell My Car" leads with the action; About/Contact now live in the guide menu's
@@ -94,10 +95,10 @@ export default function Header() {
             </span>
           </a>
           {!isAdmin && (
-            <Link href="/get-offer" className="btn-primary">
+            <OfferCtaLink location="header_desktop" className="btn-primary">
               Get My Estimate
               <ArrowRight className="h-4 w-4" />
-            </Link>
+            </OfferCtaLink>
           )}
         </div>
 
@@ -147,10 +148,10 @@ export default function Header() {
                 {site.phoneDisplay}
               </a>
               {!isAdmin && (
-                <Link href="/get-offer" className="btn-primary w-full">
+                <OfferCtaLink location="header_mobile" className="btn-primary w-full">
                   Get My Estimate
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </OfferCtaLink>
               )}
             </div>
           </div>

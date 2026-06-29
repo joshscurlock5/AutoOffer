@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import { track } from "@/lib/analytics";
+import { trackFunnel } from "@/lib/analytics";
 import { site } from "@/lib/site-config";
 import { ArrowRight, Car, GoogleG, Star } from "./icons";
 
@@ -31,8 +31,8 @@ export default function ValueWidget() {
         document.getElementById("vw-vin")?.focus();
         return;
       }
-      track("widget_submit", { mode: "vin" });
-      const q = new URLSearchParams({ mode: "vin", vin: vin.trim().toUpperCase() });
+      trackFunnel("widget_submit", { mode: "vin" });
+      const q = new URLSearchParams({ mode: "vin", vin: vin.trim().toUpperCase(), source: "widget" });
       router.push(`/get-offer?${q.toString()}`);
       return;
     }
@@ -43,8 +43,8 @@ export default function ValueWidget() {
       document.getElementById(firstMissing)?.focus();
       return;
     }
-    track("widget_submit", { make, model, year: Number(year) });
-    const q = new URLSearchParams({ year, make, model });
+    trackFunnel("widget_submit", { make, model, year: Number(year) });
+    const q = new URLSearchParams({ year, make, model, source: "widget" });
     router.push(`/get-offer?${q.toString()}`);
   }
 

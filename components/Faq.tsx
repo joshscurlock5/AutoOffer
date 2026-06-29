@@ -1,7 +1,7 @@
 import { Section } from "./Section";
-import { ChevronDown } from "./icons";
 import { site } from "@/lib/site-config";
 import ContactPopup from "./ContactPopup";
+import FaqItem from "./FaqItem";
 
 const faqs = [
   {
@@ -40,20 +40,7 @@ export default function Faq() {
       <h2 className="h-section">FAQ</h2>
       <div className="mt-6 space-y-3">
         {faqs.map((f) => (
-          <details
-            key={f.q}
-            className="card group overflow-hidden p-0 [&_summary::-webkit-details-marker]:hidden"
-          >
-            <summary className="flex cursor-pointer items-center justify-between gap-4 p-6 text-base font-semibold text-navy sm:text-lg">
-              {f.q}
-              <ChevronDown className="h-5 w-5 shrink-0 text-navy transition duration-300 group-open:rotate-180" />
-            </summary>
-            <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-open:grid-rows-[1fr]">
-              <div className="overflow-hidden">
-                <p className="max-w-[70ch] px-6 pb-6 text-muted">{f.a}</p>
-              </div>
-            </div>
-          </details>
+          <FaqItem key={f.q} q={f.q} a={f.a} />
         ))}
       </div>
 

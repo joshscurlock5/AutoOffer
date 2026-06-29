@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { site, telHref } from "@/lib/site-config";
 import { trackPhoneClick } from "@/lib/analytics";
 import { ArrowRight, Phone } from "./icons";
+import OfferCtaLink from "@/components/OfferCtaLink";
 
 /**
  * Floating desktop pill (lg+ only — the mobile sticky bar covers small screens,
@@ -74,12 +74,12 @@ export default function StickyCTA() {
         <p className="text-base font-semibold text-navy">
           DriveOffer will buy your car right now
         </p>
-        <Link
-          href="/get-offer"
+        <OfferCtaLink
+          location="sticky_desktop"
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-2.5 text-base font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-700"
         >
           Get my free estimate <ArrowRight className="h-4 w-4" />
-        </Link>
+        </OfferCtaLink>
         <a
           href={telHref}
           onClick={() => trackPhoneClick("sticky_desktop")}
