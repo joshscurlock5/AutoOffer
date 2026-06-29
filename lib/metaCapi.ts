@@ -16,6 +16,9 @@ import crypto from "crypto";
 
 const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || process.env.META_PIXEL_ID || "";
 const TOKEN = process.env.META_CAPI_TOKEN || "";
+// Set META_TEST_EVENT_CODE (from Events Manager → Test Events) to route server
+// events to the Test Events tab for verification, then unset it for production.
+const TEST_EVENT_CODE = process.env.META_TEST_EVENT_CODE || "";
 const API_VERSION = "v21.0";
 
 function sha256(v: string): string {
@@ -86,6 +89,9 @@ export async function sendCapiLead(opts: {
           ...(opts.customData ? { custom_data: opts.customData } : {}),
         },
       ],
+      // Routes the event to Events Manager → Test Events when set (verification
+      // only). Top-level field per Meta's CAPI spec; omitted in production.
+      ...(TEST_EVENT_CODE ? { test_event_code: TEST_EVENT_CODE } : {}),
     };
 
     const res = await fetch(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ArrowRight, Shield } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
@@ -13,9 +13,14 @@ export default function ContactForm() {
   const [tsToken, setTsToken] = useState("");
   const [errMsg, setErrMsg] = useState("Please add your name, email and phone (or just call us).");
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  // Synchronous in-flight lock — prevents a double-click / double-submit from
+  // firing a second request (and a second, non-deduped Lead) before React
+  // commits the disabled state.
+  const sendingRef = useRef(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (sendingRef.current) return;
     if (!name || !email || !phone) {
       setErrMsg("Please add your name, email and phone (or just call us).");
       setState("error");
@@ -26,6 +31,7 @@ export default function ContactForm() {
       setState("error");
       return;
     }
+    sendingRef.current = true;
     setState("sending");
     const metaEventId = newEventId();
     try {
@@ -43,6 +49,8 @@ export default function ContactForm() {
       trackMeta("Lead", { currency: "CAD", value: 0 }, metaEventId);
     } catch {
       setState("error");
+    } finally {
+      sendingRef.current = false;
     }
   }
 

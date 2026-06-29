@@ -1,7 +1,7 @@
 "use client";
 
 import { site, telHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { trackPhoneClick } from "@/lib/analytics";
 import { Phone } from "./icons";
 
 /** A click-to-call button. Variants match the global button styles. */
@@ -31,7 +31,7 @@ export default function PhoneButton({
     <a
       href={telHref}
       className={`${map[variant]} ${className}`}
-      onClick={() => track("phone_click", { location })}
+      onClick={() => trackPhoneClick(location)}
     >
       <Phone className="h-5 w-5" />
       {showLabel ? <span>{label ?? site.phoneDisplay}</span> : null}

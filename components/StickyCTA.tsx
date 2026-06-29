@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { site, telHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { trackPhoneClick } from "@/lib/analytics";
 import { ArrowRight, Phone } from "./icons";
 
 /**
@@ -67,7 +67,7 @@ export default function StickyCTA() {
         </Link>
         <a
           href={telHref}
-          onClick={() => track("phone_click", { location: "sticky_desktop" })}
+          onClick={() => trackPhoneClick("sticky_desktop")}
           className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-300 px-5 py-2.5 text-base font-semibold text-navy transition hover:border-navy"
         >
           <Phone className="h-4 w-4" /> Call or text {site.phoneDisplay}

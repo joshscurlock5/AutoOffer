@@ -31,5 +31,19 @@ export default function Analytics() {
     }
   }, [pathname, searchParams]);
 
+  // Capture the Meta click id (fbclid) into a first-party _fbc cookie when the
+  // Pixel hasn't already set one. This preserves the strongest CAPI match signal
+  // even for Safari/iOS/ad-blocked visitors where fbevents.js never runs — the
+  // server reads this cookie when sending the Conversions API Lead.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    const fbclid = searchParams?.get("fbclid");
+    if (!fbclid) return;
+    if (document.cookie.split("; ").some((c) => c.startsWith("_fbc="))) return;
+    const fbc = `fb.1.${Date.now()}.${fbclid}`;
+    // 90-day first-party cookie (matches Meta's _fbc lifetime).
+    document.cookie = `_fbc=${fbc}; path=/; max-age=7776000; SameSite=Lax`;
+  }, [searchParams]);
+
   return null;
 }

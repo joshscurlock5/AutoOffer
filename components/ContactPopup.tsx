@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { site, telHref, mailHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { trackPhoneClick } from "@/lib/analytics";
 import { Phone, Mail, X } from "./icons";
 
 export default function ContactPopup() {
@@ -59,7 +59,7 @@ export default function ContactPopup() {
               <p className="text-sm text-muted">Call or text our team — a real person answers, 24/7.</p>
               <a
                 href={telHref}
-                onClick={() => track("phone_click", { location: "faq_contact" })}
+                onClick={() => trackPhoneClick("faq_contact")}
                 className="btn-primary mt-4 w-full"
               >
                 <Phone className="h-5 w-5" /> {site.phoneDisplay}

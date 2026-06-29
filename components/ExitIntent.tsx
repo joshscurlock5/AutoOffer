@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { track, trackPhoneClick } from "@/lib/analytics";
 import { X, ArrowRight, Phone, Hand } from "./icons";
 
 /**
@@ -94,7 +94,7 @@ export default function ExitIntent() {
         </Link>
         <a
           href={telHref}
-          onClick={() => track("phone_click", { location: "exit_intent" })}
+          onClick={() => trackPhoneClick("exit_intent")}
           className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-brand hover:underline"
         >
           <Phone className="h-4 w-4" /> Or call / text {site.phoneDisplay}

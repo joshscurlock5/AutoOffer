@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
@@ -20,6 +20,9 @@ export default function ReferralForm() {
   const [tsToken, setTsToken] = useState("");
   const [errMsg, setErrMsg] = useState("Please enter at least your name and email.");
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  // Synchronous in-flight lock — blocks a double-submit from firing a second
+  // request / second non-deduped Lead before the disabled state commits.
+  const sendingRef = useRef(false);
 
   function set(k: keyof typeof f) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -28,6 +31,7 @@ export default function ReferralForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (sendingRef.current) return;
     if (!f.referrerName || !f.referrerEmail) {
       setErrMsg("Please enter at least your name and email.");
       setState("error");
@@ -38,6 +42,7 @@ export default function ReferralForm() {
       setState("error");
       return;
     }
+    sendingRef.current = true;
     setState("sending");
     const metaEventId = newEventId();
     try {
@@ -53,6 +58,8 @@ export default function ReferralForm() {
     } catch {
       track("referral_error");
       setState("error");
+    } finally {
+      sendingRef.current = false;
     }
   }
 

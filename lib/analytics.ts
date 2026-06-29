@@ -5,6 +5,8 @@
 //  - Call track("event_name", { ... }) anywhere on the client to fire an event.
 // ===========================================================================
 
+import { trackMeta } from "./metaPixel";
+
 declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
@@ -20,4 +22,14 @@ export function track(event: string, params: Params = {}): void {
   if (typeof window === "undefined") return;
   if (typeof window.gtag !== "function") return;
   window.gtag("event", event, params);
+}
+
+/**
+ * Click-to-call tracking. Fires the existing GA4 `phone_click` event AND a Meta
+ * Pixel `Contact` event so phone calls are measured independently from website
+ * Lead submissions. Single helper so no tel: link can be missed.
+ */
+export function trackPhoneClick(location: string): void {
+  track("phone_click", { location });
+  trackMeta("Contact");
 }

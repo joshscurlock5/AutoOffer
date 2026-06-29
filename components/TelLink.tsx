@@ -1,7 +1,7 @@
 "use client";
 
 import { telHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { trackPhoneClick } from "@/lib/analytics";
 
 /**
  * A click-to-call <a> that fires a GA4 `phone_click` event with a `location`
@@ -24,7 +24,7 @@ export default function TelLink({
       href={telHref}
       aria-label={ariaLabel}
       className={className}
-      onClick={() => track("phone_click", { location })}
+      onClick={() => trackPhoneClick(location)}
     >
       {children}
     </a>

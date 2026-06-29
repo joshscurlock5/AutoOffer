@@ -87,6 +87,10 @@ export default function OfferFlow() {
   // The id of the most recent /api/estimate lookup — sent with the lead so the
   // admin "API Calls" log can mark that lookup as converted.
   const lookupIdRef = useRef<string | null>(null);
+  // Synchronous in-flight lock for the lead submit — stops a double-click from
+  // firing a second request and a second, non-deduped Meta Lead before the
+  // disabled state commits.
+  const submittingRef = useRef(false);
 
   // Load the real trims for the chosen year/make/model.
   useEffect(() => {
@@ -326,6 +330,7 @@ export default function OfferFlow() {
 
   async function submitLead(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError("");
     if (!name.trim()) {
       setError("Please add your first name.");
@@ -344,6 +349,7 @@ export default function OfferFlow() {
       setError("Please complete the verification below, then submit.");
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     const metaEventId = newEventId();
     try {
@@ -383,6 +389,7 @@ export default function OfferFlow() {
       track("lead_error", { contactMethod });
       setError("Something went wrong submitting your request. Please try again or call us.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

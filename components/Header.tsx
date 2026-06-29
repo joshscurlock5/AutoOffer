@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
-import { track } from "@/lib/analytics";
+import { trackPhoneClick } from "@/lib/analytics";
 import { Phone, Menu, X, ArrowRight } from "./icons";
 import { GuideMegaMenu, GuideMobileAccordion } from "./GuideMegaMenu";
 
@@ -80,7 +80,7 @@ export default function Header() {
         <div className="hidden items-center gap-3 xl:flex">
           <a
             href={telHref}
-            onClick={() => track("phone_click", { location: "header_desktop" })}
+            onClick={() => trackPhoneClick("header_desktop")}
             className="group flex items-center gap-2 rounded-full px-3 py-2 text-navy transition hover:text-navy-700"
           >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-navy transition group-hover:bg-slate-200">
@@ -142,7 +142,7 @@ export default function Header() {
               </>
             )}
             <div className="mt-3 flex flex-col gap-2">
-              <a href={telHref} onClick={() => track("phone_click", { location: "header_mobile" })} className="btn-dark w-full">
+              <a href={telHref} onClick={() => trackPhoneClick("header_mobile")} className="btn-dark w-full">
                 <Phone className="h-5 w-5" />
                 {site.phoneDisplay}
               </a>
