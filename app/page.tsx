@@ -5,7 +5,6 @@ import Compare from "@/components/Compare";
 import ReferralBanner from "@/components/ReferralBanner";
 import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
-import StickyCTA from "@/components/StickyCTA";
 import { site } from "@/lib/site-config";
 import { GoogleG, Star, Lock } from "@/components/icons";
 
@@ -67,8 +66,6 @@ export default function HomePage() {
       <Promise />
       <Faq />
       <ReferralBanner />
-
-      <StickyCTA />
     </>
   );
 }

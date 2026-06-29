@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { site, telHref } from "@/lib/site-config";
 import { trackPhoneClick } from "@/lib/analytics";
 import { ArrowRight, Phone } from "./icons";
@@ -12,10 +13,16 @@ import { ArrowRight, Phone } from "./icons";
  * visitor scrolls past the How It Works section (#how).
  */
 export default function StickyCTA() {
+  const pathname = usePathname();
   const [show, setShow] = useState(false);
   const pillRef = useRef<HTMLDivElement>(null);
+  const hideBar = pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer");
 
   useEffect(() => {
+    if (hideBar) {
+      setShow(false);
+      return;
+    }
     const form = document.getElementById("estimate");
     if (!form) {
       // Pages without the estimate form (referral, guides, etc.): show the pill
@@ -30,7 +37,7 @@ export default function StickyCTA() {
     );
     io.observe(form);
     return () => io.disconnect();
-  }, []);
+  }, [pathname, hideBar]);
 
   // Publish the pill's centerline (distance from the viewport bottom) so the
   // floating chat button can line up with it on desktop. Uses offsetHeight (not a
@@ -53,6 +60,8 @@ export default function StickyCTA() {
       clear();
     };
   }, [show]);
+
+  if (hideBar) return null;
 
   return (
     <div

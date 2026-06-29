@@ -6,6 +6,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import StickyMobileBar from "@/components/StickyMobileBar";
+import StickyCTA from "@/components/StickyCTA";
 import ExitIntent from "@/components/ExitIntent";
 import Analytics from "@/components/Analytics";
 import CookieNotice from "@/components/CookieNotice";
@@ -103,6 +104,7 @@ export default function RootLayout({
         <main className="flex-1">{children}</main>
         <Footer />
         <StickyMobileBar />
+        <StickyCTA />
         <ExitIntent />
         <CookieNotice />
         <ChatWidget />
