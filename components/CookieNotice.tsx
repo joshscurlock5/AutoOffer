@@ -59,10 +59,10 @@ export default function CookieNotice() {
         scrolled ? "lg:bottom-24" : "lg:bottom-6"
       }`}
     >
-      <div className="mx-auto flex max-w-4xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] leading-snug text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
+      <div className="mx-auto flex max-w-4xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 text-[13px] leading-snug text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
         <p className="min-w-0 flex-1 text-center">
           We use cookies and Google Analytics to understand how the site is used.{" "}
-          <Link href="/privacy" className="hidden font-semibold text-brand hover:underline sm:inline">
+          <Link href="/privacy" className="font-semibold text-brand hover:underline">
             See our Privacy Policy
           </Link>
         </p>

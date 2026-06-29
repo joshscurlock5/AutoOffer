@@ -17,7 +17,13 @@ export default function StickyCTA() {
 
   useEffect(() => {
     const form = document.getElementById("estimate");
-    if (!form) return;
+    if (!form) {
+      // Pages without the estimate form (referral, guides, etc.): show the pill
+      // immediately, mirroring the mobile bar — so the lifted cookie notice has
+      // the CTA beneath it instead of a gap.
+      setShow(true);
+      return;
+    }
     const io = new IntersectionObserver(
       ([e]) => setShow(!e.isIntersecting && e.boundingClientRect.top < 0),
       { threshold: 0 }

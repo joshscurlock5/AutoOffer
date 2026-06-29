@@ -72,14 +72,14 @@ export default function ReferralPage() {
               </p>
 
               {/* prefer-to-refer-by-phone card */}
-              <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-white p-4 text-navy shadow-card sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-5 flex flex-col items-center gap-3 rounded-2xl bg-white p-4 text-navy shadow-card sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
                     <Phone className="h-5 w-5" />
                   </span>
                   <p className="font-semibold leading-snug">Prefer to refer by phone?</p>
                 </div>
-                <PhoneButton variant="primary" className="shrink-0 self-start sm:self-auto" location="referral_hero" />
+                <PhoneButton variant="primary" className="shrink-0 self-center sm:self-auto" location="referral_hero" />
               </div>
             </div>
           </div>
