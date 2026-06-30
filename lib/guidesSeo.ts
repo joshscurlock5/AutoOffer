@@ -80,7 +80,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       "Private sale typically earns the most money but takes the most time, effort, and personal risk (ads, no-shows, test drives, payment safety).",
       "Alberta has no PST, so you don't get the PST-style trade-in break that Ontario or BC buyers do — but the federal 5% GST still applies to a dealer deal, charged only on the price after your trade-in, so a trade-in does lower your GST a little.",
       "Private vehicle sales between individuals in Alberta are not subject to GST; the price you agree on is the final price, with no sales tax for the buyer.",
-      "An instant offer (like DriveOffer) aims for close to private-sale money without the work or risk, with on-site inspection and payment and help with the paperwork."
+      "A direct offer (like DriveOffer) aims for close to private-sale money without the work or risk, with on-site inspection and payment and help with the paperwork."
     ],
     "faqs": [
       {
@@ -93,14 +93,14 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       },
       {
         "q": "Is selling privately worth the extra effort in Edmonton?",
-        "a": "It can be if your priority is the highest possible price and you have time to manage the process. You'll handle photos, ads, fielding messages, no-shows, test drives with strangers, and collecting payment securely (verify a bank draft directly with the issuing bank before handing over the car). If the extra money doesn't justify that work and risk for you, a trade-in or an instant offer trades some of that value for a much faster, simpler sale."
+        "a": "It can be if your priority is the highest possible price and you have time to manage the process. You'll handle photos, ads, fielding messages, no-shows, test drives with strangers, and collecting payment securely (verify a bank draft directly with the issuing bank before handing over the car). If the extra money doesn't justify that work and risk for you, a trade-in or a direct offer trades some of that value for a much faster, simpler sale."
       },
       {
         "q": "How do I get private-sale money without the hassle of a private sale?",
-        "a": "An instant-offer service is built for exactly this gap. DriveOffer provides a data-backed number, comes to you in the Edmonton area to inspect and pay, and helps with the paperwork. You skip the ads, strangers, and payment risk while aiming for a figure closer to private-sale value than a typical dealer trade-in. Note that in Alberta the buyer completes the registration transfer at a registry agent, and your licence plates stay with you."
+        "a": "A direct-offer service is built for exactly this gap. DriveOffer provides a data-backed offer, comes to you in the Edmonton area to inspect and pay, and helps with the paperwork. You skip the ads, strangers, and payment risk while aiming for a figure closer to private-sale value than a typical dealer trade-in. Note that in Alberta the buyer completes the registration transfer at a registry agent, and your licence plates stay with you."
       }
     ],
-    "experienceSignal": "As an Edmonton-based buyer, we handle Alberta registry transfers and the GST/no-PST details on local sales as a matter of routine, so we know exactly where trade-in, private-sale, and instant-offer numbers really differ for sellers here.",
+    "experienceSignal": "As an Edmonton-based buyer, we handle Alberta registry transfers and the GST/no-PST details on local sales as a matter of routine, so we know exactly where trade-in, private-sale, and direct-offer numbers really differ for sellers here.",
     "relatedSlugs": [
       "how-to-sell-a-car-in-alberta",
       "sell-without-meeting-strangers",
@@ -156,7 +156,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
   "how-driveoffer-works": {
     "published": "2026-06-22",
     "updated": "2026-06-22",
-    "metaDescription": "See how DriveOffer works in Alberta: get a free online car estimate, book a local inspection, and get paid by bank draft, often the same day.",
+    "metaDescription": "See how DriveOffer works in Alberta: get a free, no-obligation offer, book a local inspection, and get paid by bank draft, often the same day.",
     "primaryKeyword": "how DriveOffer works",
     "keywords": [
       "how DriveOffer works",
@@ -168,8 +168,8 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       "sell car without listing Alberta"
     ],
     "keyTakeaways": [
-      "DriveOffer is a three-step process: get a free online estimate, confirm the offer at a local inspection, and get paid, often the same day.",
-      "Your estimate takes about a minute using your year/make/model or VIN plus a few condition details, and it's free with no obligation.",
+      "DriveOffer is a three-step process: get a free, no-obligation offer, confirm it at a local inspection, and get paid, often the same day.",
+      "Telling us about your car takes about a minute using your year/make/model or VIN plus a few condition details, and your offer is free with no obligation.",
       "The inspection comes to you, at your driveway or workplace, where DriveOffer verifies the car matches your details before finalizing the offer.",
       "Payment is made by bank draft and DriveOffer handles the buyer-side ownership transfer; verify the draft with the issuing bank and keep a copy of your signed bill of sale.",
       "If your car is financed, the sale completes once the lender payout is settled and the lien is cleared so ownership can transfer.",
@@ -177,8 +177,8 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
     ],
     "faqs": [
       {
-        "q": "Is the online estimate the same as my final offer?",
-        "a": "No. The online estimate is a market-based starting point generated from the year, make, model, or VIN and the condition details you enter. The final offer is confirmed in person after DriveOffer inspects the car and verifies it matches what you described. If the car is financed, the confirmed offer and the sale are completed once your lender's payout amount is settled and the lien is cleared, so ownership can transfer."
+        "q": "How does DriveOffer decide my final offer?",
+        "a": "Your offer is based on the year, make, model, or VIN and the condition details you provide, combined with current market data. It's then confirmed in person after DriveOffer inspects the car and verifies it matches what you described. If the car is financed, the confirmed offer and the sale are completed once your lender's payout amount is settled and the lien is cleared, so ownership can transfer."
       },
       {
         "q": "Do I keep my licence plate when DriveOffer buys my car?",
@@ -190,7 +190,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       },
       {
         "q": "Where does the inspection happen and how long does it take?",
-        "a": "DriveOffer arranges the inspection at a time and place that works for you, such as your driveway or workplace. It's a quick check to confirm the vehicle's condition and details against your estimate before the offer is finalized. (This is DriveOffer's own verification; Alberta does not require a separate safety inspection to sell an already-registered in-province vehicle privately.)"
+        "a": "DriveOffer arranges the inspection at a time and place that works for you, such as your driveway or workplace. It's a quick check to confirm the vehicle's condition and details against what you described before the offer is finalized. (This is DriveOffer's own verification; Alberta does not require a separate safety inspection to sell an already-registered in-province vehicle privately.)"
       }
     ],
     "experienceSignal": "Working with sellers across Edmonton, Sherwood Park, St. Albert, and Leduc, we handle Alberta registry transfers and bill-of-sale paperwork as part of our everyday routine, so the ownership side is sorted without you visiting a registry.",
@@ -391,7 +391,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
   "sell-my-car-edmonton": {
     "published": "2026-06-22",
     "updated": "2026-06-22",
-    "metaDescription": "Sell your car in Edmonton fast. DriveOffer brings a fair market offer to your home or work citywide and pays on the spot by bank draft. Free quote in a minute.",
+    "metaDescription": "Sell your car in Edmonton fast. DriveOffer brings a fair market offer to your home or work citywide and pays on the spot by bank draft. Free, no-obligation quote.",
     "primaryKeyword": "sell my car Edmonton",
     "keywords": [
       "sell my car Edmonton",
@@ -403,7 +403,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       "sell financed car Edmonton"
     ],
     "keyTakeaways": [
-      "DriveOffer gives Edmonton sellers a free, no-obligation, market-based offer in about a minute, then comes to you anywhere in the city, from downtown to Mill Woods, Windermere, the west end, or north Edmonton.",
+      "DriveOffer gives Edmonton sellers a free, no-obligation, market-based offer, then comes to you anywhere in the city, from downtown to Mill Woods, Windermere, the west end, or north Edmonton.",
       "Payment is made on the spot by secure bank draft, usually the same day, so there is no waiting on a buyer's financing or e-transfer limits.",
       "DriveOffer buys financed and high-kilometre vehicles and can pay the loan balance directly to your lender to clear the lien; leased vehicles are case-by-case because the leasing company owns the car, so confirm your lease can be bought out first.",
       "There is no listing, no strangers in your driveway, and no haggling; DriveOffer handles the bill of sale and pickup, and in Alberta your licence plates stay with you.",
@@ -412,7 +412,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
     "faqs": [
       {
         "q": "How fast can I actually sell my car in Edmonton with DriveOffer?",
-        "a": "You can get an offer online in about a minute, and once you accept, DriveOffer arranges a pickup at your home or workplace anywhere in the city. In most cases the vehicle is paid for and picked up the same day, so there is no multi-week Kijiji process."
+        "a": "You can request your free offer online in about a minute. Once you accept, DriveOffer arranges a pickup at your home or workplace anywhere in the city. In most cases the vehicle is paid for and picked up the same day, so there is no multi-week Kijiji process."
       },
       {
         "q": "Do I pay any tax when I sell my car privately in Edmonton?",
@@ -532,7 +532,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
   "sell-my-car-leduc": {
     "published": "2026-06-22",
     "updated": "2026-06-22",
-    "metaDescription": "Sell your car in Leduc, Beaumont, or Nisku without driving to Edmonton. Free DriveOffer in about a minute and secure same-day bank draft payment.",
+    "metaDescription": "Sell your car in Leduc, Beaumont, or Nisku without driving to Edmonton. Free, no-obligation DriveOffer and secure same-day bank draft payment.",
     "primaryKeyword": "sell my car Leduc",
     "keywords": [
       "sell my car Leduc",
@@ -546,7 +546,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
     ],
     "keyTakeaways": [
       "DriveOffer buys cars throughout Leduc, Beaumont, Nisku, and the area south of Edmonton, so you don't have to drive into the city.",
-      "Get a free, no-obligation offer in about a minute, with no haggling and no posting your car to strangers.",
+      "Get a free, no-obligation offer, with no haggling and no posting your car to strangers.",
       "DriveOffer comes to you at home or work anywhere in Leduc and area for the inspection and handover.",
       "Payment is made the same day by secure bank draft, which you can confirm with the issuing bank before handing over the keys.",
       "Financed, leased, and well-used vehicles are all welcome; any loan or lease balance is paid out and the lien must clear before transfer."
@@ -644,7 +644,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       "Appraisers grade condition in tiers (clean / average / rough); over-stating it backfires because the actual condition is confirmed at appraisal and the offer gets revised.",
       "Trim level and factory options can swing value by thousands of dollars, and the gap shows up most on the equipment buyers actually want.",
       "In Alberta, winter-friendly features like AWD and remote start carry extra local demand and can add to your value.",
-      "Be honest about mileage and condition up front so your final offer matches the initial estimate with no surprises."
+      "Be honest about mileage and condition up front so your final offer matches what you described with no surprises."
     ],
     "faqs": [
       {
@@ -661,7 +661,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       },
       {
         "q": "Why does my final offer change if I describe my car's condition too generously?",
-        "a": "Because the actual condition is confirmed when the car is appraised before the sale completes, an over-stated description simply leads to a revised offer once the real condition is seen. Describing mileage, wear, and any issues accurately up front keeps the final number aligned with the estimate. Honest details save a step and avoid disappointment. (This appraisal check is separate from any government inspection, which Alberta does not require to privately sell an already-registered in-province vehicle.)"
+        "a": "Because the actual condition is confirmed when the car is appraised before the sale completes, an over-stated description simply leads to a revised offer once the real condition is seen. Describing mileage, wear, and any issues accurately up front keeps the final number aligned with your description. Honest details save a step and avoid disappointment. (This appraisal check is separate from any government inspection, which Alberta does not require to privately sell an already-registered in-province vehicle.)"
       }
     ],
     "experienceSignal": "Buying vehicles across the Edmonton area, we appraise mileage, condition, and trim the same way local registries and inspections verify them, so the offer you see reflects how Alberta buyers actually value a car.",
@@ -720,7 +720,7 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
   "how-online-car-offers-are-calculated": {
     "published": "2026-06-22",
     "updated": "2026-06-22",
-    "metaDescription": "See how online car offers are calculated: live market data plus your VIN, mileage, condition, and local Alberta demand form your instant DriveOffer price.",
+    "metaDescription": "See how car offers are calculated: live market data plus your VIN, mileage, condition, and local Alberta demand shape your DriveOffer price.",
     "primaryKeyword": "how online car offers are calculated",
     "keywords": [
       "how online car offers are calculated",
@@ -732,27 +732,27 @@ export const ENRICHMENT: Record<string, GuideSeo> = {
       "instant cash offer for car Edmonton"
     ],
     "keyTakeaways": [
-      "An instant online offer is built from live wholesale and retail market data for your exact year, make, model, and trim — not a national average or a rough guess.",
+      "A fair offer is built from live wholesale and retail market data for your exact year, make, model, and trim — not a national average or a rough guess.",
       "Your mileage, condition, and regional Alberta demand directly shift the number, so honest inputs produce a more accurate offer.",
       "Entering your VIN pins down the precise trim and factory options, which removes guesswork and tightens the figure.",
-      "The online price is preliminary; a quick in-person inspection confirms condition before you're paid.",
-      "Because the market moves, an online offer reflects current conditions and is best acted on while it's fresh."
+      "Your offer is preliminary; a quick in-person inspection confirms condition before you're paid.",
+      "Because the market moves, your offer reflects current conditions and is best acted on while it's fresh."
     ],
     "faqs": [
       {
-        "q": "Why is the online offer different from what I saw on a national pricing site?",
-        "a": "National tools usually show a blended average across the whole country, while an instant offer reflects what your specific vehicle is worth in your local Alberta market right now. Regional demand, the mix of vehicles popular here, and current wholesale conditions can all push the local number above or below a national estimate."
+        "q": "Why is my offer different from what I saw on a national pricing site?",
+        "a": "National tools usually show a blended average across the whole country, while a local offer reflects what your specific vehicle is worth in your Alberta market right now. Regional demand, the mix of vehicles popular here, and current wholesale conditions can all push the local number above or below a national average."
       },
       {
-        "q": "Will my online offer change after the inspection?",
-        "a": "The online figure is preliminary and based on the details you provide. A quick inspection confirms mileage, options, and condition; if everything matches what you described, the offer normally stands as given. Undisclosed damage or discrepancies could change it, and because the market moves, a quote is most reliable when acted on while it's fresh."
+        "q": "Will my offer change after the inspection?",
+        "a": "Your offer is preliminary and based on the details you provide. A quick inspection confirms mileage, options, and condition; if everything matches what you described, the offer normally stands as given. Undisclosed damage or discrepancies could change it, and because the market moves, a quote is most reliable when acted on while it's fresh."
       },
       {
         "q": "How does my VIN make the offer more accurate?",
         "a": "The VIN identifies the exact trim, engine, and factory-installed options, which can mean a meaningful price difference between two cars that look identical from the outside. Decoding it removes guesswork about packages and equipment, so the valuation reflects what your car actually has rather than a base assumption."
       },
       {
-        "q": "How long is an instant online car offer valid in Alberta?",
+        "q": "How long is a car offer valid in Alberta?",
         "a": "Offers are tied to live market data, which shifts with wholesale auctions and seasonal demand, so any quote reflects conditions at the moment it's generated. It's best to treat the figure as current rather than indefinite and to move forward while the market data behind it is still fresh."
       }
     ],

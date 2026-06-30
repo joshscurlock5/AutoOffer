@@ -88,7 +88,7 @@ export const guideCategories: GuideCategory[] = [
           {
             h: "1. Find out what your car is worth",
             p: [
-              "Start with a realistic number based on live market data for your exact year, make, model, trim, and mileage — not a sticker price you remember from years ago. A free online estimate takes about a minute and gives you a fair starting point.",
+              "Start with a realistic number based on live market data for your exact year, make, model, trim, and mileage — not a sticker price you remember from years ago. Knowing a fair range before you sell makes it easy to recognize a good offer when you get one.",
             ],
           },
           {
@@ -104,7 +104,7 @@ export const guideCategories: GuideCategory[] = [
           {
             h: "3. Choose how to sell",
             p: [
-              "You have three realistic options: trade it in at a dealership (fast, lowest price), sell it privately (highest price, most hassle and risk), or take an instant offer from a buyer like DriveOffer (fast and fair, and we come to you).",
+              "You have three realistic options: trade it in at a dealership (fast, lowest price), sell it privately (highest price, most hassle and risk), or get a direct offer from a buyer like DriveOffer (fast and fair, and we come to you).",
             ],
           },
           {
@@ -119,7 +119,7 @@ export const guideCategories: GuideCategory[] = [
         slug: "trade-in-vs-private-sale",
         title: "Trade-In vs Private Sale",
         blurb:
-          "Trade-in, private sale, or instant offer? Compare what each option really nets you — and the Alberta tax angle.",
+          "Trade-in, private sale, or a direct offer? Compare what each option really nets you — and the Alberta tax angle.",
         body: [
           {
             p: [
@@ -143,9 +143,9 @@ export const guideCategories: GuideCategory[] = [
             ],
           },
           {
-            h: "Instant offer (DriveOffer)",
+            h: "Direct offer (DriveOffer)",
             p: [
-              "An instant offer aims for the sweet spot — close to private-sale money without the work or the risk. You get a fair, data-backed number, we come to you to inspect and pay, and we handle the paperwork. No listings, no strangers, no waiting.",
+              "A direct offer aims for the sweet spot — close to private-sale money without the work or the risk. You get a fair, data-backed offer, we come to you to inspect and pay, and we handle the paperwork. No listings, no strangers, no waiting.",
             ],
           },
         ],
@@ -371,7 +371,7 @@ export const guideCategories: GuideCategory[] = [
           {
             h: "Why Edmonton sellers choose DriveOffer",
             ul: [
-              "A free, no-obligation offer in about a minute",
+              "A free, no-obligation offer with no haggling",
               "We come to your home or workplace anywhere in the city",
               "Paid on the spot by secure bank draft — same day in most cases",
               "We buy financed, leased, and high-kilometre cars too",
@@ -379,7 +379,7 @@ export const guideCategories: GuideCategory[] = [
           },
           {
             p: [
-              "No listings, no strangers in your driveway, no haggling. Get your Edmonton car estimate and we'll handle the rest, including the paperwork and pickup.",
+              "No listings, no strangers in your driveway, no haggling. Get your free Edmonton offer and we'll handle the rest, including the paperwork and pickup.",
             ],
           },
         ],
@@ -405,7 +405,7 @@ export const guideCategories: GuideCategory[] = [
           },
           {
             p: [
-              "Skip the private-sale runaround. Get your Sherwood Park estimate and we'll come to you to inspect, pay, and take care of the paperwork.",
+              "Skip the private-sale runaround. Get your free Sherwood Park offer and we'll come to you to inspect, pay, and take care of the paperwork.",
             ],
           },
         ],
@@ -431,7 +431,7 @@ export const guideCategories: GuideCategory[] = [
           },
           {
             p: [
-              "No ads, no test-drive risk, no waiting around. Get your St. Albert estimate and we'll do the heavy lifting.",
+              "No ads, no test-drive risk, no waiting around. Get your free St. Albert offer and we'll do the heavy lifting.",
             ],
           },
         ],
@@ -449,7 +449,7 @@ export const guideCategories: GuideCategory[] = [
           {
             h: "Why Leduc sellers choose DriveOffer",
             ul: [
-              "A free, fair offer in about a minute",
+              "A free, fair offer with no obligation",
               "We meet you at home or work anywhere in Leduc and area",
               "Secure same-day payment by bank draft",
               "Financed, leased, and well-used cars are all welcome",
@@ -457,7 +457,7 @@ export const guideCategories: GuideCategory[] = [
           },
           {
             p: [
-              "Get your Leduc car estimate and we'll come to inspect, pay you, and handle every bit of the paperwork.",
+              "Get your free Leduc offer and we'll come to inspect, pay you, and handle every bit of the paperwork.",
             ],
           },
         ],
@@ -553,13 +553,13 @@ export const guideCategories: GuideCategory[] = [
       },
       {
         slug: "how-online-car-offers-are-calculated",
-        title: "How Online Car Offers Are Calculated",
+        title: "How Car Offers Are Calculated",
         blurb:
-          "What's behind an instant online car offer — market data, your details, and how to get the most accurate number.",
+          "What's behind a fair car offer — market data, your car's details, and how to get the most accurate number.",
         body: [
           {
             p: [
-              "An instant online offer isn't a guess. It combines real market data with the specifics of your car to produce a fair, current number.",
+              "A fair offer isn't a guess. It combines real market data with the specifics of your car to produce a fair, current number.",
             ],
           },
           {
@@ -574,7 +574,7 @@ export const guideCategories: GuideCategory[] = [
           {
             h: "Getting the most accurate offer",
             p: [
-              "Accurate inputs produce an accurate offer, so enter your mileage and condition honestly and use your VIN when you can — it pins down the exact trim and options. The online figure is then confirmed with a quick inspection before you're paid.",
+              "Accurate details produce an accurate offer, so share your mileage and condition honestly and have your VIN handy when you can — it pins down the exact trim and options. Your offer is then confirmed with a quick inspection before you're paid.",
             ],
           },
         ],
