@@ -25,7 +25,7 @@ export default function SecurePayment({ showCta = true }: { showCta?: boolean })
               </p>
               {showCta && (
                 <OfferCtaLink location="secure_payment" className="btn-primary mt-7 px-8 py-4 text-lg">
-                  Get Your Instant Offer <ArrowRight className="h-5 w-5" />
+                  Get a Free Offer <ArrowRight className="h-5 w-5" />
                 </OfferCtaLink>
               )}
             </div>

@@ -78,7 +78,7 @@ export default function AboutPage() {
               </p>
             </div>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <OfferCtaLink location="about_story" className="btn-primary">Get My Offer <ArrowRight className="h-4 w-4" /></OfferCtaLink>
+              <OfferCtaLink location="about_story" className="btn-primary">Get a Free Offer <ArrowRight className="h-4 w-4" /></OfferCtaLink>
               <PhoneButton variant="ghost" />
             </div>
           </div>
@@ -146,7 +146,7 @@ export default function AboutPage() {
         <div className="container-x flex flex-col items-center gap-6 py-12 text-center">
           <h2 className="font-display text-3xl font-extrabold text-white sm:text-4xl">Ready to see your offer?</h2>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <OfferCtaLink location="about_closing" className="btn bg-white px-7 py-3.5 text-brand hover:bg-brand-50">Get My Instant Estimate <ArrowRight className="h-5 w-5" /></OfferCtaLink>
+            <OfferCtaLink location="about_closing" className="btn bg-white px-7 py-3.5 text-brand hover:bg-brand-50">Get a Free Offer <ArrowRight className="h-5 w-5" /></OfferCtaLink>
             <PhoneButton variant="dark" />
           </div>
         </div>

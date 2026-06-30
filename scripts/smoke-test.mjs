@@ -44,10 +44,10 @@ async function main() {
   const home = await (await fetch(BASE + "/")).text();
   ok("home headline present", /Sell your car today/.test(home));
   ok("home phone number present", /\(780\) 952-4504/.test(home));
-  ok("home value widget present", /See What Your Car Is Worth/.test(home));
+  ok("home value widget present", /Enter VIN/.test(home));
   ok(
-    "home shows two CTAs (estimate + call)",
-    /Get My Estimate/.test(home) && /Call or text/.test(home),
+    "home shows two CTAs (offer + call)",
+    /Get a Free Offer/.test(home) && /Call or text/.test(home),
   );
 
   // --- funnel CTA source attribution (regression guard for OfferCtaLink's
@@ -151,7 +151,7 @@ async function main() {
   const found = (aj.leads || []).find((l) => l.id === leadId);
   ok("submitted lead is visible in admin", !!found, `leadCount=${(aj.leads || []).length}`);
   if (found) {
-    ok("lead has server-computed estimate", !!found.estimate && (found.estimate.low > 0 || found.estimate.unique === true), JSON.stringify(found.estimate));
+    ok("lead saved with NO estimate (instant estimate removed)", !found.estimate, JSON.stringify(found.estimate));
     ok("lead retained uploaded photo", Array.isArray(found.photos) && found.photos.length >= 1, `photos=${found.photos?.length}`);
     ok("lead vehicle data correct", found.vehicle?.make === "Dodge" && found.vehicle?.model === "Challenger");
     ok("lead referral code captured", found.referralCode === "FRIEND-AB12");

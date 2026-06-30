@@ -6,7 +6,7 @@ import { GetOfferSkeleton } from "@/components/Skeleton";
 export const metadata: Metadata = {
   title: "Get Your Free Offer",
   description:
-    "Enter your vehicle details and photos to get a fast, fair estimated offer. Accept and a specialist confirms your firm offer by phone or email.",
+    "Enter your vehicle details and photos and a specialist will prepare your free, no-obligation offer and reach out by phone or email.",
 };
 
 export default function GetOfferPage() {

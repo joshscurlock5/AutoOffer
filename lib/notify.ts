@@ -50,7 +50,7 @@ function buildText(lead: Lead): string {
   if (lead.estimate && !lead.estimate.unique) {
     lines.push(`Est. ${money(lead.estimate.low)}–${money(lead.estimate.high)}`);
   } else if (lead.kind === "vehicle") {
-    lines.push("Custom offer (no instant price)");
+    lines.push("Needs quote");
   }
 
   lines.push("", `Prefers: ${reach}`);

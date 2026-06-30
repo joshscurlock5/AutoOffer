@@ -80,7 +80,7 @@ export default function ExitIntent() {
         <div className="text-5xl leading-none" role="img" aria-label="Waving hand">👋</div>
         <p className="mt-4 text-sm font-medium text-muted">Before you go…</p>
         <h2 className="mt-1 font-display text-2xl font-bold text-navy">
-          Get your free estimate in under 2 minutes.
+          Get your free, no-obligation offer.
         </h2>
         <Link
           href="/get-offer?source=exit_intent"
@@ -90,7 +90,7 @@ export default function ExitIntent() {
           }}
           className="btn-primary mt-5 w-full text-lg"
         >
-          Get My Estimate <ArrowRight className="h-5 w-5" />
+          Get a Free Offer <ArrowRight className="h-5 w-5" />
         </Link>
         <a
           href={telHref}

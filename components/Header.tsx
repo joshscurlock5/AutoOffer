@@ -101,7 +101,7 @@ export default function Header() {
           </a>
           {!isAdmin && (
             <OfferCtaLink location="header_desktop" className="btn-primary">
-              Get My Estimate
+              Get a Free Offer
               <ArrowRight className="h-4 w-4" />
             </OfferCtaLink>
           )}

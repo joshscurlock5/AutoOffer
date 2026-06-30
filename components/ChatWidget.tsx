@@ -220,8 +220,8 @@ export default function ChatWidget() {
                 </a>
                 <OfferCtaLink location="chat_widget" onClick={() => setOpen(false)} className={rowClass}>
                   <span>
-                    <span className="block font-bold text-navy">Get my free estimate</span>
-                    <span className="block text-sm text-muted">See what your car is worth.</span>
+                    <span className="block font-bold text-navy">Get a free offer</span>
+                    <span className="block text-sm text-muted">Tell us about your car.</span>
                   </span>
                   <ArrowRight className="h-5 w-5 shrink-0 text-brand-700" />
                 </OfferCtaLink>

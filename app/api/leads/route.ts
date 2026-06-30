@@ -12,6 +12,12 @@ import { sendLeadConfirmation, scheduleLeadDrip } from "@/lib/email";
 
 export const runtime = "nodejs";
 
+// Server-side valuation is OFF (mirrors SHOW_INSTANT_ESTIMATE in OfferFlow) — the
+// MarketCheck prices were inaccurate, so leads are saved WITHOUT an estimate and a
+// specialist quotes manually. getEstimate()/parseShownEstimate are kept and gated
+// here for a future, more accurate API swap; flip to true to re-enable.
+const COMPUTE_ESTIMATE = false;
+
 // Hard caps on uploaded photos — bound S3 cost / server memory against abuse.
 const MAX_PHOTOS = 12;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB per file
@@ -117,15 +123,17 @@ export async function POST(req: NextRequest) {
       const mileageKm = Number(str(form.get("mileageKm"))) || 0;
 
       vehicle = { year, make, model, trim: trim || undefined, mileageKm };
-      // Re-derive the estimate server-side. Normally a warm-cache hit (the user
-      // just viewed it), so usually no extra MarketCheck call; on a cold/expired
-      // cache it may spend one budget-gated call (and fails closed to "unique").
-      estimate = await getEstimate({ year, make, model, mileageKm, trim: trim || undefined });
-      // If we couldn't re-price it but the customer was already shown a concrete
-      // range, store what they actually saw so the lead matches the screen.
-      if (estimate.unique) {
-        const shown = parseShownEstimate(str(form.get("estimateJson")));
-        if (shown) estimate = shown;
+      if (COMPUTE_ESTIMATE) {
+        // Re-derive the estimate server-side. Normally a warm-cache hit (the user
+        // just viewed it), so usually no extra MarketCheck call; on a cold/expired
+        // cache it may spend one budget-gated call (and fails closed to "unique").
+        estimate = await getEstimate({ year, make, model, mileageKm, trim: trim || undefined });
+        // If we couldn't re-price it but the customer was already shown a concrete
+        // range, store what they actually saw so the lead matches the screen.
+        if (estimate.unique) {
+          const shown = parseShownEstimate(str(form.get("estimateJson")));
+          if (shown) estimate = shown;
+        }
       }
 
       const files = form

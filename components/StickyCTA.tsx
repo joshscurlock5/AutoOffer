@@ -72,13 +72,13 @@ export default function StickyCTA() {
     >
       <div ref={pillRef} className="flex items-center gap-3 rounded-full border border-slate-200 bg-white py-2 pl-7 pr-2 shadow-lift">
         <p className="text-base font-semibold text-navy">
-          DriveOffer will buy your car right now
+          DriveOffer will buy your car
         </p>
         <OfferCtaLink
           location="sticky_desktop"
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-2.5 text-base font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-700"
         >
-          Get my free estimate <ArrowRight className="h-4 w-4" />
+          Get a Free Offer <ArrowRight className="h-4 w-4" />
         </OfferCtaLink>
         <a
           href={telHref}

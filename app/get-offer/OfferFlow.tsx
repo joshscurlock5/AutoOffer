@@ -31,6 +31,13 @@ const UNIQUE: OfferEstimate = { low: 0, high: 0, mid: 0, currency: "CAD", unique
 // sent (estimate / lead) or displayed.
 const TRIM_UNSURE = "__unsure__";
 
+// The instant on-screen estimate is OFF — the MarketCheck prices were inaccurate,
+// so every lead now goes straight to the "a specialist will contact you" contact
+// form. ALL valuation code below is kept and gated on this flag so a future, more
+// accurate API (e.g. Kelley Blue Book) can be wired into fetchEstimate and this
+// flipped back to true. (Server side has a matching COMPUTE_ESTIMATE flag.)
+const SHOW_INSTANT_ESTIMATE = false;
+
 /** Live-format a phone number to (XXX) XXX-XXXX as the user types. */
 function formatPhone(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 10);
@@ -277,11 +284,12 @@ export default function OfferFlow() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // STEP 2 -> value step (calculate the estimate now that we have mileage).
+  // STEP 2 -> step 3. With the instant estimate off, this goes straight to the
+  // contact form; with it on, it calculates and reveals the estimate.
   async function goToValue(e: React.FormEvent) {
     e.preventDefault();
     if (!kmv) {
-      setError("Please add your mileage to see your value.");
+      setError("Please add your mileage to continue.");
       track("form_error", { step: "details", reason: "missing_mileage" });
       document.getElementById("km")?.scrollIntoView({ behavior: "smooth", block: "center" });
       document.getElementById("km")?.focus();
@@ -291,8 +299,14 @@ export default function OfferFlow() {
     const yr = Number(year);
     track("details_submitted", { make, model, year: yr, hasPhotos: photos.length > 0 });
     setStep(3);
-    setCalculating(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!SHOW_INSTANT_ESTIMATE) {
+      // No on-screen estimate — the contact form shows immediately on step 3.
+      track("contact_started", { unique: true, reentry: contactStarts.current > 0 });
+      contactStarts.current += 1;
+      return;
+    }
+    setCalculating(true);
     try {
       const est = await fetchEstimate(year, make, model, Number(kmv));
       revealEstimate(est, { make, model, year: yr });
@@ -569,12 +583,12 @@ export default function OfferFlow() {
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
-          {submitting ? "Sending…" : "Get My Offer"}
+          {submitting ? "Sending…" : "Get My Free Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-1 text-center text-sm text-muted">
           <span className="flex items-center gap-2">
-            <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+            <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
           </span>
           <TurnstileBox onToken={setTsToken} />
         </div>
@@ -584,7 +598,7 @@ export default function OfferFlow() {
 
   // Always 3 steps now — both the priced and the unique (custom-offer) paths
   // collect contact details inline on the same final step.
-  const stepperLabels = ["Vehicle", "Details", "Your offer"];
+  const stepperLabels = ["Vehicle", "Details", "Contact"];
 
   return (
     <>
@@ -699,7 +713,7 @@ export default function OfferFlow() {
             )}
 
             <p className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 pt-4 text-center text-base text-navy">
-              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
             </p>
           </div>
         </div>
@@ -753,7 +767,7 @@ export default function OfferFlow() {
 
               <div className="mt-8">
                 <button type="submit" className="btn-primary w-full py-4 text-lg">
-                  See My Value <ArrowRight className="h-5 w-5" />
+                  Continue <ArrowRight className="h-5 w-5" />
                 </button>
                 {error && (
                   <p role="alert" aria-live="polite" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-red-600">{error}</p>
@@ -764,10 +778,10 @@ export default function OfferFlow() {
         </div>
       )}
 
-      {/* -------------------- STEP 3: value / estimate -------------------- */}
+      {/* -------------------- STEP 3: contact (instant estimate off) -------------------- */}
       {step === 3 && (
         <div className="mt-8 animate-fade-up">
-          {calculating ? (
+          {SHOW_INSTANT_ESTIMATE && calculating ? (
             <div className="animate-fade-up">
               <div className="mb-6 flex items-center justify-center gap-3 text-navy">
                 <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
@@ -775,12 +789,12 @@ export default function OfferFlow() {
               </div>
               <OfferSkeleton />
             </div>
-          ) : !estimate ? null : isUnique ? (
+          ) : !SHOW_INSTANT_ESTIMATE || !estimate || isUnique ? (
             <div className="animate-fade-up">
               <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
               <div className="card mt-6 p-6 sm:p-9 lg:p-10">
                 <h1 className="font-display text-2xl font-bold text-navy">
-                  Your vehicle is unique
+                  Get your free offer
                 </h1>
                 <p className="mt-2 text-muted">
                   Please fill in your information and a specialist will contact you shortly.

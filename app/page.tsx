@@ -23,7 +23,7 @@ export default function HomePage() {
               </h1>
               <div className="mt-8 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 wide:justify-center lg:mt-10">
                 <p className="text-[1.375rem] text-navy wide:text-[1.75rem]">
-                  Get a free offer in 2 minutes. No obligation. Same-day payment.
+                  Get a free, no-obligation offer. We come to you. Same-day payment.
                 </p>
                 {(site.reviewsUrl as string) && (
                   <a
@@ -51,7 +51,7 @@ export default function HomePage() {
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-2 text-sm text-muted">
-              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your vehicle estimate.
+              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
             </p>
           </div>
         </div>

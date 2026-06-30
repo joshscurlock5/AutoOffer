@@ -75,11 +75,11 @@ export default function StickyMobileBar() {
       <div className="mx-auto flex max-w-md items-center gap-2.5">
         {onHome ? (
           <a href="#estimate" className="btn-primary flex-1 py-3">
-            Get My Estimate <ArrowRight className="h-4 w-4" />
+            Get a Free Offer <ArrowRight className="h-4 w-4" />
           </a>
         ) : (
           <OfferCtaLink location="sticky_mobile" className="btn-primary flex-1 py-3">
-            Get My Estimate <ArrowRight className="h-4 w-4" />
+            Get a Free Offer <ArrowRight className="h-4 w-4" />
           </OfferCtaLink>
         )}
         <a

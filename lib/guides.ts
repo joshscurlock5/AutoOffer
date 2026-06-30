@@ -45,8 +45,8 @@ export type GuideCategory = {
 // so every article ends with a consistent, on-brand call to action).
 export const GUIDE_CTA = {
   title: "Ready to skip the hassle?",
-  text: `Get a free ${site.name} estimate in under a minute — no obligation, no haggling.`,
-  button: "Get My Offer",
+  text: `Tell us about your car and a ${site.name} specialist will prepare your free offer — no obligation, no haggling.`,
+  button: "Get a Free Offer",
 };
 
 // Editorial byline/author for the guide articles (E-E-A-T). A named, credentialed
@@ -190,9 +190,9 @@ export const guideCategories: GuideCategory[] = [
             ],
           },
           {
-            h: "1. Get your estimate",
+            h: "1. Tell us about your car",
             p: [
-              "Enter your car's year, make, and model (or just your VIN) and a few details about its condition. You'll get a fair, market-based estimate in about a minute, free and with no obligation.",
+              "Enter your car's year, make, and model (or just your VIN) and a few details about its condition. A specialist reviews it and prepares your fair, no-obligation offer — then reaches out by phone or email.",
             ],
           },
           {

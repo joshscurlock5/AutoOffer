@@ -527,6 +527,7 @@ function LeadCard({
                     </>
                   )}
                   {lead.estimate?.unique && <> · <span className="font-semibold text-amber-600">Unique — needs manual quote</span></>}
+                  {!lead.estimate && <> · <span className="font-semibold text-amber-600">Needs quote</span></>}
                 </div>
               </div>
             </div>

@@ -10,7 +10,7 @@ const faqs = [
   },
   {
     q: "How do you decide on a price?",
-    a: "We look at recent local sales and listings for your exact year, make, model, trim and mileage, then adjust for condition. The online number is an estimated range; we confirm a firm offer by phone or email.",
+    a: "We look at recent local sales and listings for your exact year, make, model, trim and mileage, then adjust for condition. A specialist puts together your offer and confirms it with you by phone or email.",
   },
   {
     q: "How and when do I get paid?",
@@ -25,8 +25,8 @@ const faqs = [
     a: "Yes. We pay your bank or lease company directly for the payout amount and send you the difference. Just bring your most recent statement.",
   },
   {
-    q: "What if my firm offer is lower than the online estimate?",
-    a: "It can happen if the car's condition differs from what you entered. We'll show you exactly which items changed the number — and you're free to walk away, no pressure.",
+    q: "Can the offer change after you inspect the car?",
+    a: "Our offer is based on the details you give us. If the car's condition differs once we see it in person, we'll show you exactly what changed — and you're free to walk away, no pressure.",
   },
   {
     q: "What if my vehicle isn't listed online?",
