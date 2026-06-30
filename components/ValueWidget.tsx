@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track, trackFunnel } from "@/lib/analytics";
 import { site } from "@/lib/site-config";
-import { ArrowRight, Car, GoogleG, Star } from "./icons";
+import { ArrowRight, Car, GoogleG, Star, Lock } from "./icons";
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 
@@ -151,6 +151,9 @@ export default function ValueWidget() {
         Get a Free Offer
         <ArrowRight className="h-5 w-5" />
       </button>
+      <p className="mt-3 flex items-center justify-center gap-2 text-sm text-muted">
+        <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
+      </p>
       {showError && ((inputMode === "vin" && !vinReady) || (inputMode === "manual" && !ready)) && (
         <p role="alert" aria-live="polite" className="mt-2 text-center text-sm font-medium text-red-600">
           {inputMode === "vin"

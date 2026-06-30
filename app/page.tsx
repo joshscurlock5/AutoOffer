@@ -6,7 +6,7 @@ import ReferralBanner from "@/components/ReferralBanner";
 import Promise from "@/components/Testimonials";
 import Faq from "@/components/Faq";
 import { site } from "@/lib/site-config";
-import { GoogleG, Star, Lock } from "@/components/icons";
+import { GoogleG, Star } from "@/components/icons";
 
 export default function HomePage() {
   return (
@@ -49,10 +49,6 @@ export default function HomePage() {
             <div id="estimate" className="mt-14 animate-fade-up scroll-mt-24 sm:mt-20">
               <ValueWidget />
             </div>
-
-            <p className="mt-4 flex items-center justify-center gap-2 text-sm text-muted">
-              <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
-            </p>
           </div>
         </div>
       </section>
