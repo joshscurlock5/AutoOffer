@@ -154,7 +154,7 @@ export default function Header() {
               </a>
               {!isAdmin && (
                 <OfferCtaLink location="header_mobile" className="btn-primary w-full">
-                  Get My Estimate
+                  Get a Free Offer
                   <ArrowRight className="h-4 w-4" />
                 </OfferCtaLink>
               )}
