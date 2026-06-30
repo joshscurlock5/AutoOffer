@@ -110,17 +110,23 @@ async function sendPhotos(photos: NotifyPhoto[], caption: string): Promise<void>
 export async function notifyNewLead(lead: Lead, photos: NotifyPhoto[] = []): Promise<void> {
   if (!BOT_TOKEN || !CHAT_ID) return;
   const text = buildText(lead);
+  const sid = lead.id.split("-")[0];
   try {
+    let sentAlbum = false;
     if (photos.length > 0) {
       try {
         await sendPhotos(photos, text);
-        return;
+        sentAlbum = true;
       } catch (e) {
         // Photos failed (too big, bad format, etc.) — still deliver the text.
         console.error("[notify] photo album failed, sending text only:", e);
       }
     }
-    await sendText(text);
+    if (!sentAlbum) await sendText(text);
+    // Second message: the bare short ID only — no emoji, no label, nothing else —
+    // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
+    // only (the /offer, /confirm, /cancel command replies never send it).
+    await sendText(sid);
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
