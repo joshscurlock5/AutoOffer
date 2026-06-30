@@ -55,6 +55,13 @@ export const metadata: Metadata = {
     description: site.description,
     images: ["/og-image.jpg"],
   },
+  // Meta (Facebook) Business — domain verification. Rendered server-side into
+  // <head> (NOT JS-injected), which is what Meta's crawler requires.
+  verification: {
+    other: {
+      "facebook-domain-verification": "p7987a4h02blae0wxyq1jw6lt5b6g5",
+    },
+  },
 };
 
 export default function RootLayout({
