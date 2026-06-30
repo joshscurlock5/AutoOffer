@@ -23,7 +23,7 @@ export default function HomePage() {
               </h1>
               <div className="mt-8 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 wide:justify-center lg:mt-10">
                 <p className="text-[1.375rem] text-navy wide:text-[1.75rem]">
-                  Get a free, no-obligation offer. We come to you. Same-day payment.
+                  Free offer. No pressure. We handle pickup, payment, and paperwork.
                 </p>
                 {(site.reviewsUrl as string) && (
                   <a
