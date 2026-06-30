@@ -20,8 +20,21 @@ const REPLY_TO = process.env.EMAIL_REPLY_TO || site.email;
 const API = "https://api.resend.com/emails";
 const DAY = 86400000;
 
+function money(n: number): string {
+  return `$${Math.round(n).toLocaleString("en-CA")}`;
+}
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+/** Plain "year make model trim" for subject lines — control-char-stripped,
+ * whitespace-collapsed, and length-clamped (the vehicle fields come from the
+ * public form, so the subject header gets hygiene even though the body is esc()'d). */
+function carPlain(lead: Lead): string {
+  const v = lead.vehicle;
+  if (!v) return "";
+  const raw = `${v.year} ${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ""}`;
+  const printable = Array.from(raw).map((ch) => { const c = ch.charCodeAt(0); return c < 32 || c === 127 ? " " : ch; }).join("");
+  return printable.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 function validEmail(lead: Lead): string {
   const to = (lead.contact.email || "").trim();
@@ -150,6 +163,37 @@ function referralConfirmationEmail(ref: Referral): Email {
   };
 }
 
+// The customized offer the owner sends from Telegram (/offer -> /confirm). The
+// number is whatever the owner decided; we present it and note it's confirmed
+// at a quick, no-obligation inspection. Signed by the owner from site-config.
+function offerEmail(lead: Lead, low: number, high: number): Email {
+  const first = firstName(lead);
+  const car = carLine(lead); // escaped, for HTML
+  const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
+  const intbefore = car
+    ? `Hi ${first}, thanks for sending over your <strong>${car}</strong>. Based on the details you shared, your evaluation is ready &mdash; here's our offer.`
+    : `Hi ${first}, thanks for the details on your vehicle. Your evaluation is ready &mdash; here's our offer.`;
+  const offerBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#EAF5EF;border-radius:12px;padding:20px 18px;margin-bottom:20px;text-align:center;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your ${esc(site.name)} offer</div>
+      <div style="font-size:30px;font-weight:800;color:#0f5132;margin-top:6px;">${priceText}</div>
+      <div style="font-size:13px;color:#5b6b63;margin-top:8px;">Confirmed at a quick, no-obligation inspection &mdash; we come to you, and we handle pickup, payment, and the paperwork.</div>
+    </div></td></tr>`;
+  const respond = `<tr><td style="padding:0 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
+    Ready to move forward or have a question? Just reply to this email, or call or text <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>, and we'll set up a time that works for you.
+  </td></tr>`;
+  const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
+    Talk soon,<br/>
+    <strong>${esc(site.owner)}</strong><br/>
+    ${esc(site.name)}<br/>
+    <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; <a href="mailto:${esc(site.email)}" style="color:#1A7F54;text-decoration:none;">${esc(site.email)}</a>
+  </td></tr>`;
+  return {
+    subject: carPlain(lead) ? `Your offer for your ${carPlain(lead)} — ${site.name}` : `Your offer is ready — ${site.name}`,
+    html: shell(intro(`Your evaluation is ready, ${first}`, intbefore) + offerBox + respond + signoff),
+  };
+}
+
 // ---- Resend transport -----------------------------------------------------
 
 /** POST one email (optionally scheduled). Returns its id, or "" on any failure. */
@@ -193,6 +237,23 @@ export async function sendReferralConfirmation(ref: Referral): Promise<void> {
   const to = (ref.referrer.email || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return;
   await postEmail(to, referralConfirmationEmail(ref));
+}
+
+/**
+ * Send the owner's customized offer to a lead. Unlike the fire-and-forget
+ * helpers above, this returns a result so the Telegram /confirm reply can tell
+ * the owner exactly what happened. Not gated to "new" leads — the owner decides.
+ */
+export async function sendOfferEmail(
+  lead: Lead,
+  low: number,
+  high: number,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
+  const to = validEmail(lead);
+  if (!to) return { ok: false, reason: "this lead has no valid email address" };
+  const id = await postEmail(to, offerEmail(lead, low, high));
+  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
 /**

@@ -40,6 +40,23 @@ export async function updateLead(
   return updated;
 }
 
+/**
+ * Find a lead by the short ID shown in the Telegram alert (the first block of
+ * its UUID, e.g. "a1b2c3d4") — or by the full id if pasted. Lead volume is
+ * modest, so a scan + match is fine. Reports `multiple` on the rare collision.
+ */
+export async function getLeadByShortId(
+  code: string,
+): Promise<{ lead: Lead | null; multiple: boolean }> {
+  const norm = code.trim().toLowerCase();
+  if (!norm) return { lead: null, multiple: false };
+  const leads = await getLeads();
+  const matches = leads.filter(
+    (l) => l.id.toLowerCase() === norm || l.id.split("-")[0].toLowerCase() === norm,
+  );
+  return { lead: matches[0] || null, multiple: matches.length > 1 };
+}
+
 export async function deleteLead(id: string): Promise<void> {
   await ddb.send(new DeleteCommand({ TableName: LEADS_TABLE, Key: { id } }));
   // Best-effort cleanup of the lead's photos.

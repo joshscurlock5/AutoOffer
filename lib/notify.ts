@@ -59,6 +59,11 @@ function buildText(lead: Lead): string {
   if (c.bestTime) lines.push(`🕒 Best time: ${c.bestTime}`);
   if (lead.message) lines.push("", `"${lead.message.slice(0, 200)}"`);
 
+  // Short ID + ready-to-copy command for emailing a custom offer.
+  const sid = lead.id.split("-")[0];
+  lines.push("", `🆔 ${sid}`);
+  if (c.email) lines.push(`Send offer → /offer ${sid} 8500-9000`);
+
   return lines.join("\n");
 }
 

@@ -92,6 +92,10 @@ export interface Lead {
   bookmarked?: boolean;
   /** Final price the vehicle was purchased for (CAD). */
   purchasePrice?: number;
+  /** Offer emailed to the customer via the /offer Telegram command (CAD). */
+  offer?: { low: number; high: number; sentAt: string };
+  /** A drafted offer awaiting /confirm in Telegram; cleared on confirm or cancel. */
+  pendingOffer?: { low: number; high: number; at: string };
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   source: string;
