@@ -95,7 +95,10 @@ export default function ChatWidget() {
     if (open && view === "conversation") scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, open, view]);
 
-  if (pathname?.startsWith("/admin") || pathname?.startsWith("/get-offer")) return null;
+  // Hidden only on the admin panel. It stays visible on /get-offer (all form
+  // steps) so visitors can always reach us mid-flow; the sticky CTA bars stay
+  // hidden there, so there's nothing for the launcher to overlap.
+  if (pathname?.startsWith("/admin")) return null;
 
   async function send(e?: React.FormEvent) {
     e?.preventDefault();
