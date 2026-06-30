@@ -100,9 +100,10 @@ export default function ValueWidget() {
           <p className="mt-1.5 text-sm text-muted">On your registration, insurance card, or driver-side door jamb.</p>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-3">
-          {/* Year, make and model are all shown at once. Model unlocks once a make
-              is chosen (its options depend on the make). */}
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* Year, make and model: stacked on phones, side by side in one
+              compact row on larger screens. Model unlocks once a make is
+              chosen (its options depend on the make). */}
           <div>
             <label className="label" htmlFor="vw-year">Year</label>
             <select id="vw-year" className="field" value={year} onChange={(e) => { once("home_form_start"); if (e.target.value) once("home_year_selected"); setYear(e.target.value); }}>
