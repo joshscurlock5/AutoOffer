@@ -1,5 +1,5 @@
 import "server-only";
-import type { Lead } from "./types";
+import type { Lead, Referral } from "./types";
 import { site } from "./site-config";
 
 // ===========================================================================
@@ -20,9 +20,6 @@ const REPLY_TO = process.env.EMAIL_REPLY_TO || site.email;
 const API = "https://api.resend.com/emails";
 const DAY = 86400000;
 
-function money(n: number): string {
-  return `$${Math.round(n).toLocaleString("en-CA")}`;
-}
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -50,13 +47,16 @@ function intro(heading: string, paragraphHtml: string): string {
     <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#3a4654;">${paragraphHtml}</p>
   </td></tr>`;
 }
-function estimateBox(lead: Lead): string {
-  if (!(lead.vehicle && lead.estimate && !lead.estimate.unique)) return "";
+// "What happens next" reassurance box for vehicle leads. (Replaced the old
+// instant "estimated range" box — there is no on-screen number anymore; a
+// specialist prepares the offer and reaches out. To re-introduce an emailed
+// estimate later, add a box here keyed off lead.estimate.)
+function nextStepsBox(lead: Lead): string {
+  if (!lead.vehicle) return "";
   return `<tr><td style="padding:0 28px;">
     <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your estimated range</div>
-      <div style="font-size:24px;font-weight:800;color:#0f5132;margin-top:2px;">${money(lead.estimate.low)} &ndash; ${money(lead.estimate.high)}</div>
-      <div style="font-size:13px;color:#5b6b63;margin-top:4px;">This is an estimate &mdash; we'll confirm your firm offer when we ${reachVerb(lead)}.</div>
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">What happens next</div>
+      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:4px;">A ${esc(site.name)} specialist will ${reachVerb(lead)} with your offer. There's no obligation &mdash; and if it's a fit, we handle pickup, payment, and the paperwork.</div>
     </div></td></tr>`;
 }
 function ctaBox(): string {
@@ -64,7 +64,10 @@ function ctaBox(): string {
     <a href="tel:${site.phoneE164}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">Call or text ${esc(site.phoneDisplay)}</a>
   </td></tr>`;
 }
-function shell(innerRows: string): string {
+function shell(
+  innerRows: string,
+  footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
+): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 12px;">
@@ -78,7 +81,7 @@ function shell(innerRows: string): string {
           <div style="border-top:1px solid #eceef1;padding-top:16px;font-size:13px;line-height:1.6;color:#7b8794;">
             AMVIC Licensed Wholesaler &middot; We come to you &middot; Paid the same visit.<br/>
             ${site.name} &middot; <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; ${esc(site.email)}<br/>
-            You're receiving this because you requested an offer at driveoffer.ca.
+            ${footerNote}
           </div>
         </td></tr>
       </table>
@@ -95,11 +98,11 @@ function confirmationEmail(lead: Lead): Email {
   const first = firstName(lead);
   const v = lead.vehicle;
   const body = v
-    ? `Thanks, ${first}! We've received your request for your <strong>${carLine(lead)}</strong>, and a member of our team will <strong>${reachVerb(lead)}</strong> shortly to confirm your firm offer.`
+    ? `Thanks, ${first}! We've got the details for your <strong>${carLine(lead)}</strong>. One of our specialists will <strong>${reachVerb(lead)}</strong> shortly with your offer.`
     : `Thanks, ${first}! We've received your message and a member of our team will be in touch shortly.`;
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    html: shell(intro(`You're all set, ${first}`, body) + estimateBox(lead) + ctaBox()),
+    html: shell(intro(`You're all set, ${first}`, body) + nextStepsBox(lead) + ctaBox()),
   };
 }
 
@@ -107,10 +110,10 @@ function drip1Email(lead: Lead): Email {
   const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your <strong>${carLine(lead)}</strong>` : "your car";
-  const body = `Just checking in, ${first} — your offer for ${carRef} is still ready whenever you are. It only takes a couple of minutes on the phone to lock in your firm number.`;
+  const body = `Just checking in, ${first} — we'd still love to make you an offer on ${carRef}. It only takes a couple of minutes: call or text and a specialist will get you your offer.`;
   return {
-    subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
-    html: shell(intro(`Still thinking it over, ${first}?`, body) + estimateBox(lead) + ctaBox()),
+    subject: v ? `Still want an offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
+    html: shell(intro(`Still thinking it over, ${first}?`, body) + nextStepsBox(lead) + ctaBox()),
   };
 }
 
@@ -118,10 +121,32 @@ function drip2Email(lead: Lead): Email {
   const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Last check-in, ${first} — we'd still love to buy ${carRef}. No pressure at all, but your offer is on the table whenever you want it. Just call or text and we'll take care of the rest.`;
+  const body = `Last check-in, ${first} — we'd still love to buy ${carRef}. No pressure at all. Whenever you're ready, just call or text and a specialist will sort out your offer and handle the rest.`;
   return {
-    subject: `Your ${site.name} offer is still available`,
-    html: shell(intro("Your offer's still on the table", body) + ctaBox()),
+    subject: `Ready when you are — ${site.name}`,
+    html: shell(intro("Still here when you're ready", body) + ctaBox()),
+  };
+}
+
+// Sent to the person who refers a friend (the referrer). The friend themselves
+// isn't emailed — only the owner alert + this thank-you to the referrer.
+function referralConfirmationEmail(ref: Referral): Email {
+  const first = esc((ref.referrer.name || "there").trim().split(" ")[0] || "there");
+  const friend = ref.friend?.name ? esc(ref.friend.name.trim().split(" ")[0]) : "";
+  const who = friend || "your friend";
+  const body = `Thanks for spreading the word, ${first}! We've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon. When ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
+  const codeBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your referral code</div>
+      <div style="font-size:24px;font-weight:800;color:#0f5132;margin-top:2px;letter-spacing:.02em;">${esc(ref.code)}</div>
+      <div style="font-size:13px;color:#5b6b63;margin-top:4px;">Ask ${who} to mention this code so we know the referral came from you.</div>
+    </div></td></tr>`;
+  return {
+    subject: `Thanks for referring ${friend || "a friend"} — ${site.name}`,
+    html: shell(
+      intro(`Thanks, ${first}!`, body) + codeBox + ctaBox(),
+      "You're receiving this because you referred a friend at driveoffer.ca.",
+    ),
   };
 }
 
@@ -160,6 +185,14 @@ export async function sendLeadConfirmation(lead: Lead): Promise<void> {
   const to = validEmail(lead);
   if (!to) return;
   await postEmail(to, confirmationEmail(lead));
+}
+
+/** Thank-you confirmation to the referrer. Best-effort; no-op without a config/email. */
+export async function sendReferralConfirmation(ref: Referral): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = (ref.referrer.email || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return;
+  await postEmail(to, referralConfirmationEmail(ref));
 }
 
 /**

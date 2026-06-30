@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addReferral } from "@/lib/store";
 import { notifyNewReferral } from "@/lib/notify";
+import { sendReferralConfirmation } from "@/lib/email";
 import type { Referral } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
     await addReferral(ref);
     // Telegram alert (best-effort; awaited so the Lambda doesn't freeze first).
     await notifyNewReferral(ref);
+    // Thank-you email to the referrer (best-effort; no-op without RESEND config).
+    await sendReferralConfirmation(ref);
     // Meta Conversions API "Lead" event (best-effort; after the referral is saved).
     await sendCapiLead({
       eventId: String(body.metaEventId || "") || crypto.randomUUID(),
