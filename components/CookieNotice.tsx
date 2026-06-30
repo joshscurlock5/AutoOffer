@@ -63,7 +63,7 @@ export default function CookieNotice() {
     >
       <div className="mx-auto flex max-w-4xl flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 text-[13px] leading-snug text-muted shadow-lift backdrop-blur sm:gap-3 sm:px-4 sm:py-3 sm:text-sm">
         <p className="min-w-0 flex-1 text-center">
-          We use cookies and Google Analytics to understand how the site is used.{" "}
+          We use cookies, Google Analytics and the Meta Pixel to understand how the site is used and to measure our ads.{" "}
           <Link href="/privacy" className="font-semibold text-brand hover:underline">
             See our Privacy Policy
           </Link>

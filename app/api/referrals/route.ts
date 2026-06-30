@@ -6,7 +6,7 @@ import { sendReferralConfirmation } from "@/lib/email";
 import type { Referral } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
-import { sendCapiLead } from "@/lib/metaCapi";
+import { sendCapiLead, splitName } from "@/lib/metaCapi";
 
 export const runtime = "nodejs";
 
@@ -78,7 +78,9 @@ export async function POST(req: NextRequest) {
       user: {
         email: referrerEmail,
         phone: ref.referrer.phone,
-        firstName: referrerName,
+        ...splitName(referrerName),
+        externalId: ref.id,
+        country: "ca",
         clientIp: ip,
         userAgent: req.headers.get("user-agent"),
         fbp: req.cookies.get("_fbp")?.value,

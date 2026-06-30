@@ -41,6 +41,48 @@ export async function updateLead(
 }
 
 /**
+ * Atomically claim the one-time "offline Purchase sent to Meta" flag for a lead.
+ * Returns true ONLY for the caller that wins the claim (conditional on the flag
+ * being unset), so concurrent admin edits can never double-fire the Purchase
+ * conversion. Uses an atomic conditional UpdateCommand (same pattern as
+ * addChatMessage / markLookupConverted) rather than the clobbering whole-item
+ * Put in updateLead, which would let a stale-snapshot writer erase the flag.
+ */
+export async function claimPurchaseSync(id: string): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "SET purchaseSyncedAt = :now",
+        ConditionExpression: "attribute_exists(id) AND attribute_not_exists(purchaseSyncedAt)",
+        ExpressionAttributeValues: { ":now": new Date().toISOString() },
+      }),
+    );
+    return true;
+  } catch {
+    // Condition failed (already claimed) or the lead is gone — do not fire again.
+    return false;
+  }
+}
+
+/** Release a Purchase-sync claim so a later edit retries it (used when the CAPI send failed). */
+export async function releasePurchaseSync(id: string): Promise<void> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "REMOVE purchaseSyncedAt",
+        ConditionExpression: "attribute_exists(id)",
+      }),
+    );
+  } catch {
+    /* best-effort: leaving the claim set just means we won't retry — never throws */
+  }
+}
+
+/**
  * Find a lead by the short ID shown in the Telegram alert (the first block of
  * its UUID, e.g. "a1b2c3d4") — or by the full id if pasted. Lead volume is
  * modest, so a scan + match is fine. Reports `multiple` on the rare collision.

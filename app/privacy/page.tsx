@@ -32,9 +32,18 @@ export default function PrivacyPage() {
       ],
     },
     {
+      h: "Advertising (Meta Pixel & Conversions API)",
+      p: [
+        "We advertise on Facebook and Instagram, and we use the Meta Pixel and Meta Conversions API (services provided by Meta Platforms, Inc.) to measure how those ads perform and to show relevant ads to people like you. The Pixel sets cookies in your browser (such as _fbp and _fbc).",
+        "To match a conversion to an ad interaction, we share limited information with Meta: a securely hashed (irreversibly scrambled) version of your email address, phone number and name, together with your IP address, browser and device information, and the Meta cookie identifiers above. We do not send Meta your name, email address or phone number in readable form — those identifiers are hashed before they ever leave our systems, and Meta uses them only for matching.",
+        "If you ask us to sell your car and we complete a purchase, we may also send Meta a hashed record of that conversion (and its value) so we can measure which ads lead to real sales. This contains the same hashed identifiers — never your readable contact details.",
+        "Meta processes this information on servers that may be located outside Canada, including in the United States. You can manage ad personalization in your Facebook and Instagram settings, and limit or clear cookies in your browser. Learn more in Meta's Privacy Policy at https://www.facebook.com/privacy/policy.",
+      ],
+    },
+    {
       h: "How we share your information",
       p: [
-        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing and the analytics provider described in “Analytics & cookies” above) and only as needed to deliver our service, or where required by law.",
+        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics provider described in “Analytics & cookies”, and the advertising provider described in “Advertising” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
       ],
     },
     {
@@ -63,7 +72,7 @@ export default function PrivacyPage() {
       <section className="bg-gradient-to-b from-brand-50 to-white">
         <div className="container-x py-14 sm:py-16">
           <h1 className="font-display text-4xl font-extrabold text-navy sm:text-5xl">Privacy Policy</h1>
-          <p className="mt-3 text-muted">Last updated: June 15, 2026</p>
+          <p className="mt-3 text-muted">Last updated: June 30, 2026</p>
         </div>
       </section>
 

@@ -6,7 +6,7 @@ import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
-import { sendCapiLead } from "@/lib/metaCapi";
+import { sendCapiLead, splitName } from "@/lib/metaCapi";
 import { sendGa4Lead } from "@/lib/ga4Mp";
 import { sendLeadConfirmation, scheduleLeadDrip } from "@/lib/email";
 
@@ -167,6 +167,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Meta ad-match keys. metaEventId is shared with the browser Pixel "Lead" so
+    // Meta dedupes; fbc/fbp/ip/ua are persisted on the lead so a later offline
+    // "Purchase" conversion can be attributed back to the originating ad click.
+    const rawMetaEventId = str(form.get("metaEventId"));
+    if (!rawMetaEventId) {
+      console.warn("[leads] metaEventId missing — browser/server dedup will not match for this lead");
+    }
+    const metaEventId = rawMetaEventId || crypto.randomUUID();
+    const fbp = req.cookies.get("_fbp")?.value;
+    const fbc = req.cookies.get("_fbc")?.value;
+    const userAgent = req.headers.get("user-agent") || undefined;
+
     const lead: Lead = {
       id,
       kind,
@@ -178,6 +190,7 @@ export async function POST(req: NextRequest) {
       photos,
       message: str(form.get("message")) || undefined,
       referralCode: str(form.get("referralCode")) || undefined,
+      meta: { fbc, fbp, eventId: metaEventId, clientIp: ip, userAgent },
       source: "web",
     };
 
@@ -202,17 +215,21 @@ export async function POST(req: NextRequest) {
     // Meta Conversions API "Lead" event (server-side; best-effort, after the lead
     // is saved — can never affect it). Shares metaEventId with the browser Pixel
     // event so Meta dedupes; PII is hashed inside sendCapiLead.
+    const { firstName, lastName } = splitName(name);
     await sendCapiLead({
-      eventId: str(form.get("metaEventId")) || crypto.randomUUID(),
+      eventId: metaEventId,
       eventSourceUrl: req.headers.get("referer"),
       user: {
         email,
         phone,
-        firstName: name,
+        firstName,
+        lastName,
+        externalId: id,
+        country: "ca",
         clientIp: ip,
-        userAgent: req.headers.get("user-agent"),
-        fbp: req.cookies.get("_fbp")?.value,
-        fbc: req.cookies.get("_fbc")?.value,
+        userAgent,
+        fbp,
+        fbc,
       },
       customData: {
         currency: "CAD",

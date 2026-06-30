@@ -6,8 +6,11 @@ import {
   updateLead,
   deleteLead,
   updateReferral,
+  claimPurchaseSync,
+  releasePurchaseSync,
 } from "@/lib/store";
 import { cancelScheduledEmails } from "@/lib/email";
+import { sendCapiPurchase, splitName } from "@/lib/metaCapi";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,6 +45,45 @@ export async function PATCH(req: NextRequest) {
     if (ids && ids.length) {
       await cancelScheduledEmails(ids);
       await updateLead(id, { dripEmailIds: [] });
+    }
+  }
+
+  // Offline-conversion loop: when a deal actually closes (status "closed" with a
+  // real purchase price), tell Meta via a server-side "Purchase" event with the
+  // true sale value, matched to the originating ad click by the fbc/fbp/hashed
+  // email captured on the lead at creation. This lets Meta optimize for real
+  // sellers, not just form-fills. Fired once (purchaseSyncedAt guards re-sends;
+  // a stable eventId also lets Meta dedupe). Best-effort — never fails the PATCH.
+  if (type !== "referral") {
+    const lead = item as Lead;
+    const isSale =
+      lead.status === "closed" && typeof lead.purchasePrice === "number" && lead.purchasePrice > 0;
+    // Cheap pre-check skips the common already-synced case; claimPurchaseSync is
+    // the authoritative atomic guard (conditional write) that prevents two
+    // concurrent edits from both firing — last-writer-wins on updateLead can't be
+    // trusted for a once-only side effect.
+    if (isSale && !lead.purchaseSyncedAt && (await claimPurchaseSync(lead.id))) {
+      const ok = await sendCapiPurchase({
+        eventId: `purchase-${lead.id}`,
+        value: lead.purchasePrice as number,
+        user: {
+          email: lead.contact.email,
+          phone: lead.contact.phone,
+          ...splitName(lead.contact.name),
+          externalId: lead.id,
+          country: "ca",
+          fbc: lead.meta?.fbc,
+          fbp: lead.meta?.fbp,
+          clientIp: lead.meta?.clientIp,
+          userAgent: lead.meta?.userAgent,
+        },
+        customData: lead.vehicle
+          ? { content_name: `${lead.vehicle.year} ${lead.vehicle.make} ${lead.vehicle.model}` }
+          : undefined,
+      });
+      // Roll back the claim if the send failed so a later edit retries it (the
+      // stable eventId also lets Meta dedupe should a retry overlap).
+      if (!ok) await releasePurchaseSync(lead.id);
     }
   }
   return NextResponse.json({ ok: true, item });

@@ -92,6 +92,21 @@ export interface Lead {
   bookmarked?: boolean;
   /** Final price the vehicle was purchased for (CAD). */
   purchasePrice?: number;
+  /**
+   * Meta ad-match keys captured at lead creation, kept so a later offline
+   * "Purchase" conversion can be attributed back to the originating ad click
+   * (the cookies are long gone by the time a deal closes).
+   */
+  meta?: {
+    fbc?: string;
+    fbp?: string;
+    /** The "Lead" event_id (shared with the browser Pixel for dedup). */
+    eventId?: string;
+    clientIp?: string;
+    userAgent?: string;
+  };
+  /** ISO timestamp set once the offline "Purchase" conversion was sent to Meta (idempotency guard). */
+  purchaseSyncedAt?: string;
   /** Offer emailed to the customer via the /offer Telegram command (CAD). */
   offer?: { low: number; high: number; sentAt: string };
   /** A drafted offer awaiting /confirm in Telegram; cleared on confirm or cancel. */
