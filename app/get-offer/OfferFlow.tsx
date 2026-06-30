@@ -582,15 +582,17 @@ export default function OfferFlow() {
         <div className="mt-6 space-y-4">
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
+        <div className="flex justify-center">
+          <TurnstileBox onToken={setTsToken} />
+        </div>
         <button type="submit" disabled={submitting} className="btn-primary w-full py-4 text-lg disabled:opacity-60">
           {submitting ? "Sending…" : "Get My Free Offer"}
           {!submitting && <ArrowRight className="h-5 w-5" />}
         </button>
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-1 text-center text-sm text-muted">
-          <span className="flex items-center gap-2">
+        <div className="pt-1 text-center text-sm text-muted">
+          <span className="inline-flex items-center gap-2">
             <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
           </span>
-          <TurnstileBox onToken={setTsToken} />
         </div>
         </div>
       </form>
