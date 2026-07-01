@@ -20,6 +20,12 @@ const REPLY_TO = process.env.EMAIL_REPLY_TO || site.email;
 const API = "https://api.resend.com/emails";
 const DAY = 86400000;
 
+// Small inline "icons" for the offer email, built from codepoints so they
+// survive the build + JSON transport intact (literal emoji can arrive escaped).
+const ICON_CHECK = String.fromCodePoint(0x2713); // ✓
+const ICON_FAST = String.fromCodePoint(0x26a1); //  ⚡
+const ICON_MAIL = String.fromCodePoint(0x2709); //  ✉
+
 function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
 }
@@ -169,18 +175,34 @@ function referralConfirmationEmail(ref: Referral): Email {
 function offerEmail(lead: Lead, low: number, high: number): Email {
   const first = firstName(lead);
   const car = carLine(lead); // escaped, for HTML
+  const owner = esc((site.owner || "").trim().split(" ")[0] || site.name); // "Samir"
   const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
-  const intbefore = car
-    ? `Hi ${first}, thanks for sending over your <strong>${car}</strong>. Based on the details you shared, your evaluation is ready &mdash; here's our offer.`
-    : `Hi ${first}, thanks for the details on your vehicle. Your evaluation is ready &mdash; here's our offer.`;
-  const offerBox = `<tr><td style="padding:0 28px;">
-    <div style="background:#EAF5EF;border-radius:12px;padding:20px 18px;margin-bottom:20px;text-align:center;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your ${esc(site.name)} offer</div>
-      <div style="font-size:30px;font-weight:800;color:#0f5132;margin-top:6px;">${priceText}</div>
-      <div style="font-size:13px;color:#5b6b63;margin-top:8px;">Confirmed at a quick, no-obligation inspection &mdash; we come to you, and we handle pickup, payment, and the paperwork.</div>
+  const leadIn = car
+    ? `Thanks for sending over your <strong>${car}</strong>. Based on the basics, here's our range:`
+    : `Thanks for the details on your vehicle. Based on the basics, here's our range:`;
+
+  const rangeBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#EAF5EF;border:1px solid #cfe6da;border-radius:12px;padding:20px 18px;margin-bottom:18px;text-align:center;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5b6b63;font-weight:600;">Your offer range</div>
+      <div style="font-size:32px;font-weight:800;color:#0f5132;margin-top:6px;line-height:1.1;">${priceText}</div>
+      <div style="font-size:13px;color:#5b6b63;margin-top:8px;">A quick estimate from the details so far.</div>
     </div></td></tr>`;
-  const respond = `<tr><td style="padding:0 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
-    Ready to move forward or have a question? Just reply to this email, or call or text <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>, and we'll set up a time that works for you.
+
+  const phone = `<a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>`;
+  const actionBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#f3f6f8;border:1px solid #e4e9ed;border-radius:12px;padding:18px;margin-bottom:18px;">
+      <div style="font-size:15px;line-height:1.5;color:#3a4654;margin-bottom:12px;">For your exact number, ${owner} just needs two things:</div>
+      <div style="font-size:15px;line-height:1.5;color:#1f2a36;margin-bottom:8px;"><span style="color:#1A7F54;font-weight:700;">${ICON_CHECK}</span>&nbsp;&nbsp;Your vehicle's <strong>VIN</strong> <span style="color:#7b8794;">(if you haven't already sent it)</span></div>
+      <div style="font-size:15px;line-height:1.5;color:#1f2a36;"><span style="color:#1A7F54;font-weight:700;">${ICON_CHECK}</span>&nbsp;&nbsp;Any <strong>damage</strong> worth noting</div>
+      <div style="border-top:1px solid #e4e9ed;margin:16px 0;"></div>
+      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_FAST} Fastest way &mdash; text or call</div>
+      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0 0 14px;padding-left:22px;">Reach ${owner} at ${phone} and he'll send your exact offer back in minutes.</div>
+      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_MAIL} Not a phone person?</div>
+      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0;padding-left:22px;">Just reply to this email and you'll have it within the hour.</div>
+    </div></td></tr>`;
+
+  const noPressure = `<tr><td style="padding:0 28px 4px;font-size:15px;line-height:1.6;color:#3a4654;">
+    No pressure &mdash; once you see it, it's your call. If it's a yes, we come to you and pay on the spot.
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Talk soon,<br/>
@@ -189,8 +211,8 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
     <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; <a href="mailto:${esc(site.email)}" style="color:#1A7F54;text-decoration:none;">${esc(site.email)}</a>
   </td></tr>`;
   return {
-    subject: carPlain(lead) ? `Your offer for your ${carPlain(lead)} — ${site.name}` : `Your offer is ready — ${site.name}`,
-    html: shell(intro(`Your evaluation is ready, ${first}`, intbefore) + offerBox + respond + signoff),
+    subject: carPlain(lead) ? `Your offer range for your ${carPlain(lead)} — ${site.name}` : `Your offer range is ready — ${site.name}`,
+    html: shell(intro(`Your offer range is ready, ${first}`, leadIn) + rangeBox + actionBox + noPressure + signoff),
   };
 }
 
