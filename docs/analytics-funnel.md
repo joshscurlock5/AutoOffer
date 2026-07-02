@@ -62,8 +62,10 @@ and stamps `?source=<location>` on the URL, which surfaces as `cta_source` on
 (interaction, +Meta InitiateCheckout), `edit_vehicle`, `generate_lead`
 (+Meta Lead +server CAPI +server GA4 MP), `lead_error`, `form_error`.
 **Engagement:** `chat_opened`, `chat_message_sent`, `chat_conversation_started`,
-`exit_intent_shown/clicked/dismissed`, `contact_popup_opened`, `email_click`,
-`faq_opened`, `scroll_depth` (`percent`, `slug`).
+`exit_intent_shown/clicked/dismissed/email_captured`, `contact_popup_opened`,
+`email_click`, `faq_opened`, `scroll_depth` (`percent`, `slug`).
+**Recovery:** `partial_captured` (abandoned-cart beacon on the contact step),
+`resume_shown/clicked` (returning-visitor banner).
 **Secondary conversions:** `referral_submitted` (+Meta Lead), `referral_error`,
 `contact_form_submitted` (+Meta Lead), `contact_form_error`.
 
@@ -121,15 +123,55 @@ events are browser-Pixel only — fine for audience membership.
 | `NEXT_PUBLIC_META_PIXEL_ID` | Meta Pixel (browser) |
 | `META_CAPI_TOKEN` | Meta Conversions API (server `Lead`) |
 | `META_TEST_EVENT_CODE` | route server CAPI to Events Manager → Test Events; unset in prod |
+| `CRON_SECRET` | bearer token the scheduled worker (`/api/cron`) requires; also gates the ops/cadence layer |
 
 Everything is a **safe no-op** until its keys are set — nothing breaks if a
 channel isn't configured yet.
 
+## Post-submission cadence & ops layer (email + Telegram, no SMS)
+
+Automated communication *after* a lead submits, plus the owner-facing ops layer.
+The hourly worker at **`/api/cron`** (triggered by an AWS EventBridge Scheduler
+rule with `Authorization: Bearer ${CRON_SECRET}`) drives all the timed work. Every
+send is gated/best-effort. Customer emails require a valid email; phone-only leads
+are covered by the owner Telegram alerts. **The flow assumes we can usually quote,
+so a new lead gets NO automatic "still want an offer?" drip** — the owner drives it.
+
+**Customer (email), keyed on `nurtureStage`:**
+- **Submit →** instant confirmation only (method-aware copy). No drip.
+- **`/moreinfo` or `/ask` → `awaiting_info`:** reminders at **+2d / +5d** from
+  `moreInfoSentAt` ("still want your offer? call/text is fastest"), then stop.
+- **`/offer`→`/confirm` → `offer_sent`:** offer reminders at **+2d / +5d / +10d**
+  from `offerSentAt` (each restates the offer, pushes call/text, includes the
+  booking link), then stop.
+- **`lost`:** a single **Day-21 win-back**. **`partial`:** one abandoned-cart recovery.
+- **Booked:** booking confirmation (on booking) + a **day-of morning reminder**
+  with a one-tap Confirm button.
+
+**Owner (Telegram):** stale-lead SLA alerts (~30m/2h/12h) for unworked "new"
+leads; a daily **needs-action digest** (8am MT); **T-2h** inspection ping
+(owner-only); a **weekly scoreboard** (Mon 8am MT). Commands: `/offer`→`/confirm`
+(send offer + mint booking link), **`/moreinfo <id>`**, **`/ask <id> <question>`**,
+`/schedule <id> <YYYY-MM-DD HH:MM>` (Mountain Time), `/cancel`, `/usage`.
+
+**Customer self-booking:** the offer email + reminders link to `/book/<token>`
+(unguessable token minted on `/confirm`). The page shows the car/offer and 45-min
+slots within the shop's hours (Mon/Tue 8–3:30, Wed/Thu 8–6:30, Fri 8–4:30, Sat
+8–2:30; 14 days out, ≥3h notice, multiple bookings allowed per slot). Availability
+lives in `lib/availability.ts` (+ MT helpers in `lib/time.ts`); booking API is
+`app/api/book` (+ `/api/book/confirm`).
+
+**Back-half metrics** come from lifecycle timestamps stamped on transitions
+(`firstTouchAt`, `contactedAt`, `offerSentAt`, `scheduledAt`, `closedAt`): first-
+response latency, offer-sent rate, and lead→close feed the weekly scoreboard and
+the existing offline **Purchase** CAPI.
+
 ## Verifying
 
 - **Regression:** `node scripts/smoke-test.mjs` against a local `npm run dev`
-  (checks pages render, lead/referral POST, admin gating, photos, and that the
-  `OfferCtaLink` source-merge didn't break `?make=` deep-links).
+  (checks pages render, lead/referral POST, admin gating, damage/condition capture,
+  the abandoned-cart partial route, cron auth, and that the `OfferCtaLink`
+  source-merge didn't break `?make=` deep-links).
 - **GA4 events:** set a debug `NEXT_PUBLIC_GA_ID` and watch **GA4 → Admin →
   DebugView** while clicking through the funnel; confirm `cta_click.location`
   values and that `?make=Toyota` still pre-fills the vehicle.

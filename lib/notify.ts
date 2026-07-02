@@ -90,6 +90,29 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
   }
 }
 
+/** Generic owner Telegram message (gated, best-effort, never throws). Used by the
+ * scheduled cron for stale-lead SLA alerts, the daily "needs action" digest,
+ * appointment reminders, and the weekly scoreboard. Caller should await it. */
+export async function notifyOwner(text: string): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  try {
+    await sendText(text);
+  } catch (e) {
+    console.error("[notify] owner message failed:", e);
+  }
+}
+
+/** Compact one-line lead summary for digests/alerts (name · vehicle · contact · short id). */
+export function leadLine(lead: Lead): string {
+  const c = lead.contact;
+  const v = lead.vehicle;
+  const car = v ? `${v.year} ${v.make} ${v.model}` : lead.kind === "inquiry" ? "Inquiry" : "Vehicle";
+  const reach = c.contactMethod ?? "call";
+  const contact = c.phone || c.email || "(no contact info)";
+  const sid = lead.id.split("-")[0];
+  return `${c.name || "(no name)"} · ${car} · ${reach} ${contact} · 🆔 ${sid}`;
+}
+
 /**
  * Alert the owner about a new visitor chat message. Fires on every visitor
  * message. No-op if the bot isn't configured; never throws (the message is

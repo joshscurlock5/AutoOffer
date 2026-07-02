@@ -1,0 +1,95 @@
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import { getLeads, addLead, updateLead } from "@/lib/store";
+import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
+import type { Lead, VehicleInfo } from "@/lib/types";
+
+export const runtime = "nodejs";
+
+// ===========================================================================
+//  Abandoned-cart capture. The contact step's fields fire navigator.sendBeacon()
+//  here the moment a valid phone/email is typed — BEFORE the customer submits —
+//  so a high-intent abandoner is reachable. We persist a status:"partial" lead;
+//  the scheduled cron sends ONE recovery touch later (email if present, else an
+//  owner "call this abandoner" alert), and only if they never fully converted.
+//
+//  This endpoint only stores data the user already typed — it never messages the
+//  customer itself. Deduped against real leads (never resurrects a converted one)
+//  and against an existing partial (refreshes rather than duplicates).
+// ===========================================================================
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const digits = (s: string) => s.replace(/\D/g, "");
+
+export async function POST(req: NextRequest) {
+  try {
+    const ip = clientIpFrom(req);
+    if (!(await allowRequest(ip, "partial", 20, 3600))) {
+      return NextResponse.json({ ok: false }, { status: 429 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const email = str(body.email);
+    const phone = str(body.phone);
+    const validEmail = EMAIL_RE.test(email);
+    const validPhone = digits(phone).length >= 10;
+    // Nothing reachable typed yet — ignore (this fires on every field blur).
+    if (!validEmail && !validPhone) {
+      return NextResponse.json({ ok: true, skipped: "no contact" });
+    }
+
+    const name = str(body.name);
+    const year = str(body.year);
+    const make = str(body.make);
+    const model = str(body.model);
+    const trim = str(body.trim);
+    const mileageKm = Number(str(body.mileageKm)) || 0;
+    const cmRaw = str(body.contactMethod);
+    const contactMethod = (["call", "text", "email"].includes(cmRaw) ? cmRaw : "call") as
+      | "call"
+      | "text"
+      | "email";
+    const vehicle: VehicleInfo | undefined =
+      year || make || model ? { year, make, model, trim: trim || undefined, mileageKm } : undefined;
+
+    // Dedupe against existing leads by email/phone (volume is small; a scan is cheap).
+    const leads = await getLeads();
+    const eKey = validEmail ? email.toLowerCase() : "";
+    const pKey = validPhone ? digits(phone) : "";
+    const match = leads.find((l) => {
+      const le = (l.contact.email || "").toLowerCase();
+      const lp = digits(l.contact.phone || "");
+      return (eKey && le === eKey) || (pKey && lp === pKey);
+    });
+
+    // A real (submitted) lead already exists — they converted or are in-flight. Do nothing.
+    if (match && match.status !== "partial") {
+      return NextResponse.json({ ok: true, deduped: true });
+    }
+    // An earlier partial exists — refresh it instead of creating a duplicate.
+    if (match && match.status === "partial") {
+      await updateLead(match.id, { contact: { name, email, phone, contactMethod }, vehicle });
+      return NextResponse.json({ ok: true, updated: true });
+    }
+
+    const lead: Lead = {
+      id: crypto.randomUUID(),
+      kind: "vehicle",
+      createdAt: new Date().toISOString(),
+      status: "partial",
+      contact: { name, email, phone, contactMethod },
+      vehicle,
+      photos: [],
+      source: "web-partial",
+    };
+    await addLead(lead);
+    return NextResponse.json({ ok: true, created: true });
+  } catch (e) {
+    console.error("POST /api/leads/partial failed", e);
+    // Never surface an error to the beacon caller.
+    return NextResponse.json({ ok: false }, { status: 200 });
+  }
+}

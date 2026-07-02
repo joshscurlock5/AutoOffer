@@ -7,26 +7,27 @@ import { track, trackPhoneClick } from "@/lib/analytics";
 import { X, ArrowRight, Phone } from "./icons";
 
 /**
- * Subtle exit-intent reminder. Shown once per browser session on deeper pages
- * (NOT the homepage — the estimate form already lives there — nor the admin
- * panel or the offer flow itself). Desktop only: fires when the cursor leaves
- * toward the top of the window. We intentionally do NOT fire on a mobile
- * scroll-up gesture — that's normal browsing, not an exit signal.
+ * Exit-intent reminder. Shown once per browser session on deeper pages (NOT the
+ * homepage — the estimate form already lives there — nor the admin panel or the
+ * offer flow). Desktop fires on a top-edge cursor exit; touch devices fire on a
+ * fast scroll back toward the top after the visitor has scrolled down (a leaving
+ * signal). Besides the CTA + phone, it captures an EMAIL so a hesitant visitor is
+ * reachable — the address is beaconed to /api/leads/partial as an abandoned cart.
  *
  * Preview it any time by adding ?exitpreview=1 to any URL.
  */
 export default function ExitIntent() {
   const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Preview override — shows it immediately on any page, every time.
     if (new URLSearchParams(window.location.search).has("exitpreview")) {
       setOpen(true);
       return;
     }
-
     if (sessionStorage.getItem("ao_exit_shown")) return;
 
     let done = false;
@@ -43,24 +44,54 @@ export default function ExitIntent() {
       cleanup();
     };
 
-    // Don't fire in the first moment after load.
     let armed = false;
     const arm = setTimeout(() => {
       armed = true;
     }, 1200);
 
-    // Desktop only: cursor leaves the window via the top edge.
+    // Desktop: cursor leaves the window via the top edge.
     const onMouseOut = (e: MouseEvent) => {
       if (armed && e.clientY <= 0 && !e.relatedTarget) fire();
     };
     document.addEventListener("mouseout", onMouseOut);
 
+    // Touch: scrolled down meaningfully, then jumps back toward the top (leaving).
+    const isTouch = window.matchMedia?.("(pointer: coarse)").matches;
+    let lastY = window.scrollY;
+    let maxY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      maxY = Math.max(maxY, y);
+      if (armed && maxY > 500 && y < 120 && lastY - y > 40) fire();
+      lastY = y;
+    };
+    if (isTouch) window.addEventListener("scroll", onScroll, { passive: true });
+
     function cleanup() {
       clearTimeout(arm);
       document.removeEventListener("mouseout", onMouseOut);
+      window.removeEventListener("scroll", onScroll);
     }
     return cleanup;
   }, []);
+
+  function submitEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const value = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return;
+    setSent(true);
+    track("exit_intent_email_captured");
+    try {
+      fetch("/api/leads/partial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: value, contactMethod: "email" }),
+        keepalive: true,
+      }).catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (!open) return null;
 
@@ -82,6 +113,7 @@ export default function ExitIntent() {
         <h2 className="mt-1 font-display text-2xl font-bold text-navy">
           Get your free, no-obligation offer.
         </h2>
+
         <Link
           href="/get-offer?source=exit_intent"
           onClick={() => {
@@ -92,6 +124,33 @@ export default function ExitIntent() {
         >
           Get a Free Offer <ArrowRight className="h-5 w-5" />
         </Link>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          {sent ? (
+            <p className="text-sm font-semibold text-emerald-700">
+              Thanks! We&apos;ll email your offer shortly.
+            </p>
+          ) : (
+            <form onSubmit={submitEmail}>
+              <p className="mb-2 text-sm text-muted">Prefer we email it to you?</p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  autoComplete="email"
+                  className="field flex-1"
+                />
+                <button type="submit" className="btn-primary shrink-0 px-4">
+                  Send
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
         <a
           href={telHref}
           onClick={() => trackPhoneClick("exit_intent")}

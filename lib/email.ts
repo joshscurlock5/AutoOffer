@@ -1,6 +1,6 @@
 import "server-only";
 import type { Lead, Referral } from "./types";
-import { site } from "./site-config";
+import { site, amvicLicence } from "./site-config";
 
 // ===========================================================================
 //  Customer emails via Resend's REST API (no SDK, like notify.ts):
@@ -82,6 +82,35 @@ function ctaBox(): string {
     <a href="tel:${site.phoneE164}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">Call or text ${esc(site.phoneDisplay)}</a>
   </td></tr>`;
 }
+
+// Social-proof strip for the nurture emails — pulls straight from site-config so
+// the numbers never drift. Reused by the drip / win-back / follow-up templates.
+function proofBox(): string {
+  const bits = [
+    `<a href="${site.reviewsUrl}" style="color:#1A7F54;text-decoration:none;">&#9733;&#9733;&#9733;&#9733;&#9733; top-rated on Google</a>`,
+    `${site.carsBought.toLocaleString("en-CA")}+ cars bought`,
+    amvicLicence,
+    "paid on the spot",
+  ].filter(Boolean).join(" &middot; ");
+  return `<tr><td style="padding:0 28px 4px;">
+    <div style="border-top:1px solid #eceef1;padding-top:12px;font-size:13px;line-height:1.6;color:#5b6b63;">${bits}</div>
+  </td></tr>`;
+}
+
+/** The customer's self-booking link — empty until an offer is sent + a token minted. */
+export function bookingLink(lead: Lead): string {
+  return lead.bookingToken ? `${site.url}/book/${lead.bookingToken}` : "";
+}
+/** Green "Book your pickup" button — only rendered once the lead has a booking token.
+ * Framed as OPTIONAL: a quick call or text is the fastest way to finalize. */
+function bookingBox(lead: Lead): string {
+  const url = bookingLink(lead);
+  if (!url) return "";
+  return `<tr><td style="padding:0 28px 8px;">
+    <a href="${url}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">Book your pickup &rarr;</a>
+    <div style="font-size:13px;line-height:1.5;color:#7b8794;margin-top:8px;">Booking a time is optional — the fastest way to finalize is a quick <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:600;">call or text to ${esc(site.phoneDisplay)}</a>. No need to pick a time here unless you'd prefer to.</div>
+  </td></tr>`;
+}
 function shell(
   innerRows: string,
   footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
@@ -128,10 +157,10 @@ function drip1Email(lead: Lead): Email {
   const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your <strong>${carLine(lead)}</strong>` : "your car";
-  const body = `Just checking in, ${first} — we'd still love to make you an offer on ${carRef}. It only takes a couple of minutes: call or text and a specialist will get you your offer.`;
+  const body = `Just checking in, ${first} — we'd still love to make you an offer on ${carRef}. Used-car values shift week to week, so it's worth locking in this week's number. It only takes a minute: call or text and we'll get you your offer.`;
   return {
     subject: v ? `Still want an offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
-    html: shell(intro(`Still thinking it over, ${first}?`, body) + nextStepsBox(lead) + ctaBox()),
+    html: shell(intro(`Still thinking it over, ${first}?`, body) + nextStepsBox(lead) + ctaBox() + proofBox()),
   };
 }
 
@@ -139,10 +168,184 @@ function drip2Email(lead: Lead): Email {
   const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Last check-in, ${first} — we'd still love to buy ${carRef}. No pressure at all. Whenever you're ready, just call or text and a specialist will sort out your offer and handle the rest.`;
+  const body = `Last check-in, ${first} — we'd still love to buy ${carRef}, and we come to you and pay on the spot (e-transfer or bank draft). No pressure at all — whenever you're ready, just call or text and we'll handle the rest.`;
   return {
     subject: `Ready when you are — ${site.name}`,
-    html: shell(intro("Still here when you're ready", body) + ctaBox()),
+    html: shell(intro("Still here when you're ready", body) + ctaBox() + proofBox()),
+  };
+}
+
+// Post-offer reminders (cron-driven off offerSentAt): a written offer with no
+// booking yet. steps 0/1/2 = +2 / +5 / +10 days. Each pushes call/text as the
+// fastest path and offers the self-booking link.
+function postOfferFollowupEmail(lead: Lead, step: number): Email {
+  const first = firstName(lead);
+  const car = carLine(lead) || "your car";
+  const plain = carPlain(lead) || "your car";
+  const priceText = lead.offer
+    ? lead.offer.low === lead.offer.high
+      ? money(lead.offer.low)
+      : `${money(lead.offer.low)} &ndash; ${money(lead.offer.high)}`
+    : "your offer";
+  const bodies = [
+    `Hi ${first} — just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you. The fastest way to lock it in is a quick call or text — we can often confirm on the spot. Ready to go? Book a time below and we'll come to you and pay on the spot.`,
+    `Hi ${first} — your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands. Used values shift week to week, so it's worth locking in this week's number. Call or text for the quickest answer, or book your pickup below.`,
+    `Hi ${first} — last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>. Whenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
+  ];
+  const subjects = [
+    `Any questions about your ${plain} offer?`,
+    `Your offer still stands — ${site.name}`,
+    `Last reminder — your offer for ${plain}`,
+  ];
+  const headings = [`Your offer's ready, ${first}`, "Still good to go?", "Still here when you're ready"];
+  const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
+  return {
+    subject: subjects[i],
+    html: shell(intro(headings[i], bodies[i]) + bookingBox(lead) + ctaBox() + proofBox()),
+  };
+}
+
+// Sent by /moreinfo — we need a bit more detail before quoting. Call/text first.
+function moreInfoEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
+  const body = `Hi ${first} — thanks for sending over ${carRef}! To get you an accurate offer, we just need a couple more details about the car. The fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then. Prefer email? No problem — just reply to this message and we'll take it from there.`;
+  return {
+    subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
+    html: shell(intro(`Almost there, ${first}`, body) + ctaBox() + proofBox()),
+  };
+}
+
+// Sent by /ask — a specific question about the vehicle. Call/text first.
+function askEmail(lead: Lead, question: string): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
+  const q = esc(question);
+  const body = `Hi ${first} — quick question about ${carRef} so we can finalize your offer:<br/><br/><strong>${q}</strong><br/><br/>The fastest way to answer is a quick <strong>call or text</strong> — we can often wrap up your offer on the spot. Or just reply to this email, whatever's easiest.`;
+  return {
+    subject: v ? `Quick question about your ${v.make} ${v.model}` : `Quick question about your vehicle — ${site.name}`,
+    html: shell(intro(`One quick thing, ${first}`, body) + ctaBox() + proofBox()),
+  };
+}
+
+// Cron reminder while we're awaiting the customer's info (after /moreinfo or /ask).
+function awaitingInfoReminderEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const body = `Hi ${first} — we're ready to send your offer on ${carRef} as soon as we get the last detail or two. The fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot. Prefer email? Just reply and we'll take it from there.`;
+  return {
+    subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
+    html: shell(intro(`Let's finish your offer, ${first}`, body) + ctaBox() + proofBox()),
+  };
+}
+
+// Confirmation after the customer self-books an inspection.
+function bookingConfirmationEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const when = lead.appointmentAt
+    ? new Date(lead.appointmentAt).toLocaleString("en-CA", {
+        timeZone: "America/Edmonton",
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "your selected time";
+  const where = lead.appointmentLocation ? esc(lead.appointmentLocation) : "the address you gave us";
+  const detailBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#EAF5EF;border:1px solid #cfe6da;border-radius:12px;padding:18px;margin-bottom:18px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#5b6b63;font-weight:600;">Your inspection</div>
+      <div style="font-size:18px;font-weight:800;color:#0f5132;margin-top:6px;">${when}</div>
+      <div style="font-size:15px;color:#1f2a36;margin-top:6px;">&#128205; ${where}</div>
+    </div></td></tr>`;
+  const body = `You're booked, ${first}! A ${esc(site.name)} rep will come to ${carRef} at the time and place below, confirm your offer on the spot, and — if it's a yes — pay you right there (e-transfer or bank draft). Need to change it? Just call or text.`;
+  return {
+    subject: `Booked — your ${site.name} inspection`,
+    html: shell(intro("You're booked!", body) + detailBox + ctaBox() + proofBox()),
+  };
+}
+
+// Morning-of reminder with a one-tap "Confirm I'll be there" button.
+function bookingDayOfEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const time = lead.appointmentAt
+    ? new Date(lead.appointmentAt).toLocaleString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" })
+    : "today";
+  const where = lead.appointmentLocation ? esc(lead.appointmentLocation) : "your address";
+  const confirmBtn = lead.bookingToken
+    ? `<tr><td style="padding:0 28px 8px;">
+        <a href="${site.url}/api/book/confirm?token=${lead.bookingToken}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">&#10003; Confirm I'll be there</a>
+      </td></tr>`
+    : "";
+  const body = `Hi ${first} — quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot if it's a yes. Tap below to confirm you'll be there — or call/text us if anything's changed.`;
+  return {
+    subject: `Today: your ${site.name} inspection at ${time}`,
+    html: shell(intro("See you today!", body) + confirmBtn + ctaBox()),
+  };
+}
+
+// Day-10 extended nurture for a lead still sitting in "new" (cron-driven).
+function extendedNurtureEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const body = `Hi ${first} — still thinking about selling ${carRef}? No rush, but used-car values move week to week, so this week's number may be better than you'd expect. Call or text and we'll get you a firm offer — we come to you and pay on the spot.`;
+  return {
+    subject: v ? `A quick offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
+    html: shell(intro(`Still open to an offer, ${first}?`, body) + ctaBox() + proofBox()),
+  };
+}
+
+// Day-21 win-back for a lead marked "lost" (declined / went cold), cron-driven, once.
+function winbackEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const body = `Hi ${first} — still have ${carRef}? Prices have moved since we last talked, and we'd be glad to take another look and re-quote — no obligation at all. If you've already sold it, no worries; just ignore this.`;
+  return {
+    subject: v ? `Still have your ${v.make} ${v.model}? Happy to re-quote` : `Happy to re-quote — ${site.name}`,
+    html: shell(intro(`Want a fresh offer, ${first}?`, body) + ctaBox() + proofBox()),
+  };
+}
+
+// Customer reminder before a booked inspection (cron-driven off appointmentAt).
+function appointmentReminderEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const when = lead.appointmentAt
+    ? new Date(lead.appointmentAt).toLocaleString("en-CA", {
+        timeZone: "America/Edmonton",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "soon";
+  const body = `Hi ${first} — quick reminder that we're set to look at ${carRef} on <strong>${when}</strong>. We'll confirm the offer on the spot and, if it's a yes, pay you right there (e-transfer or bank draft). Need to reschedule? Just call or text.`;
+  return {
+    subject: `Reminder: your ${site.name} inspection ${when}`,
+    html: shell(intro("See you soon", body) + ctaBox()),
+  };
+}
+
+// Abandoned-cart recovery: a single, transactional nudge to someone who typed
+// their contact but never submitted (cron-driven off a "partial" lead).
+function partialRecoveryEmail(lead: Lead): Email {
+  const first = firstName(lead);
+  const v = lead.vehicle;
+  const carRef = v ? `your ${carLine(lead)}` : "your car";
+  const body = `Hi ${first} — looks like you started getting an offer for ${carRef} but didn't finish. Want us to pick it up? It takes about a minute — reply, call, or text and we'll get you a firm, no-obligation number. We come to you and pay on the spot.`;
+  return {
+    subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Want us to finish your offer? — ${site.name}`,
+    html: shell(intro(`Your offer's almost ready, ${first}`, body) + ctaBox() + proofBox()),
   };
 }
 
@@ -206,7 +409,7 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   </td></tr>`;
   return {
     subject: carPlain(lead) ? `Your offer range for your ${carPlain(lead)} — ${site.name}` : `Your offer range is ready — ${site.name}`,
-    html: shell(intro(`Your offer range is ready, ${first}`, leadIn) + rangeBox + actionBox + noPressure + signoff),
+    html: shell(intro(`Your offer range is ready, ${first}`, leadIn) + rangeBox + actionBox + bookingBox(lead) + noPressure + signoff),
   };
 }
 
@@ -270,6 +473,93 @@ export async function sendOfferEmail(
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
   const id = await postEmail(to, offerEmail(lead, low, high));
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
+}
+
+// ---- Cron-driven cadence sends (best-effort; no-op without config/email) ----
+// These are called by app/api/cron on a schedule the cron computes from lead
+// timestamps. Each is gated and never throws, mirroring sendLeadConfirmation.
+
+/** Post-offer follow-up to a lead who received an offer but hasn't replied. step 0=+1d, 1=+4d. */
+export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, postOfferFollowupEmail(lead, step));
+}
+
+/** Day-10 extended nurture for a lead still in "new". */
+export async function sendExtendedNurture(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, extendedNurtureEmail(lead));
+}
+
+/** Day-21 win-back for a lead marked "lost". */
+export async function sendWinback(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, winbackEmail(lead));
+}
+
+/** Reminder to the customer before a booked inspection. */
+export async function sendAppointmentReminder(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, appointmentReminderEmail(lead));
+}
+
+/** One-time abandoned-cart recovery to a "partial" lead that left an email. */
+export async function sendPartialRecovery(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, partialRecoveryEmail(lead));
+}
+
+/** Reminder while awaiting the customer's info (cron, after /moreinfo or /ask). */
+export async function sendAwaitingInfoReminder(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, awaitingInfoReminderEmail(lead));
+}
+
+/** /moreinfo — email the customer that we need a bit more detail. Returns a result
+ * so the Telegram reply can tell Samir what happened (mirrors sendOfferEmail). */
+export async function sendMoreInfo(lead: Lead): Promise<{ ok: boolean; reason?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
+  const to = validEmail(lead);
+  if (!to) return { ok: false, reason: "this lead has no valid email address" };
+  const id = await postEmail(to, moreInfoEmail(lead));
+  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
+}
+
+/** /ask <question> — email the customer a specific question. Returns a result. */
+export async function sendAsk(lead: Lead, question: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
+  const to = validEmail(lead);
+  if (!to) return { ok: false, reason: "this lead has no valid email address" };
+  const id = await postEmail(to, askEmail(lead, question));
+  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
+}
+
+/** Confirmation after the customer self-books an inspection. */
+export async function sendBookingConfirmation(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, bookingConfirmationEmail(lead));
+}
+
+/** Morning-of inspection reminder with a confirm button (cron-driven). */
+export async function sendBookingDayOf(lead: Lead): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const to = validEmail(lead);
+  if (!to) return;
+  await postEmail(to, bookingDayOfEmail(lead));
 }
 
 /**

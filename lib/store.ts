@@ -98,6 +98,14 @@ export async function getLeadByShortId(
   return { lead: matches[0] || null, multiple: matches.length > 1 };
 }
 
+/** Find a lead by its unguessable self-booking token (used by /book/<token>). */
+export async function getLeadByBookingToken(token: string): Promise<Lead | null> {
+  const norm = (token || "").trim();
+  if (!norm) return null;
+  const leads = await getLeads();
+  return leads.find((l) => l.bookingToken === norm) || null;
+}
+
 export async function deleteLead(id: string): Promise<void> {
   await ddb.send(new DeleteCommand({ TableName: LEADS_TABLE, Key: { id } }));
   // Best-effort cleanup of the lead's photos.

@@ -537,6 +537,23 @@ function LeadCard({
                     </span>
                   </div>
                 ) : null}
+                {lead.appointmentAt ? (
+                  <div className="mt-1 text-sm font-semibold text-brand-700">
+                    📅 Inspection:{" "}
+                    {new Date(lead.appointmentAt).toLocaleString("en-CA", {
+                      timeZone: "America/Edmonton",
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                    {lead.appointmentConfirmedAt ? " ✅" : ""}
+                    {lead.appointmentLocation ? (
+                      <span className="font-normal text-muted"> · 📍 {lead.appointmentLocation}</span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (

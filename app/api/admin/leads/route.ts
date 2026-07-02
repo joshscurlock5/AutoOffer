@@ -48,6 +48,22 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Stamp lifecycle timestamps on status transitions — these drive the cron
+  // cadence (post-offer follow-ups, win-back, digest) and the back-half metrics.
+  // Each is set once. The cron gates customer nurture on status directly, so it
+  // keeps working after a lead leaves "new" (only closed/spam get nothing; "lost"
+  // still gets the single Day-21 win-back).
+  if (type !== "referral" && patch.status) {
+    const lead = item as Lead;
+    const nowISO = new Date().toISOString();
+    const ts: Partial<Lead> = {};
+    if (patch.status !== "new" && patch.status !== "partial" && !lead.firstTouchAt) ts.firstTouchAt = nowISO;
+    if (patch.status === "contacted" && !lead.contactedAt) ts.contactedAt = nowISO;
+    if (patch.status === "scheduled" && !lead.scheduledAt) ts.scheduledAt = nowISO;
+    if (patch.status === "closed" && !lead.closedAt) ts.closedAt = nowISO;
+    if (Object.keys(ts).length) await updateLead(id, ts);
+  }
+
   // Offline-conversion loop: when a deal actually closes (status "closed" with a
   // real purchase price), tell Meta via a server-side "Purchase" event with the
   // true sale value, matched to the originating ad click by the fbc/fbp/hashed

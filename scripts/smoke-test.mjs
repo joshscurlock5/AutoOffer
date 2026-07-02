@@ -106,6 +106,19 @@ async function main() {
   const elj = await elr.json().catch(() => ({}));
   ok("POST email-only lead (no phone) -> ok", elr.status === 200 && elj.ok === true, JSON.stringify(elj));
 
+  // --- no-name lead (first name was removed from the form) must still save ---
+  const nfd = new FormData();
+  nfd.append("kind", "vehicle");
+  nfd.append("year", "2021");
+  nfd.append("make", "Mazda");
+  nfd.append("model", "Mazda3");
+  nfd.append("mileageKm", "40000");
+  nfd.append("phone", "(780) 555-7777");
+  nfd.append("contactMethod", "call");
+  const nlr = await fetch(BASE + "/api/leads", { method: "POST", body: nfd });
+  const nlj = await nlr.json().catch(() => ({}));
+  ok("POST lead with NO name -> ok", nlr.status === 200 && nlj.ok === true, JSON.stringify(nlj));
+
   // --- referral ---
   const rr = await fetch(BASE + "/api/referrals", {
     method: "POST",
@@ -120,6 +133,26 @@ async function main() {
   });
   const rj = await rr.json().catch(() => ({}));
   ok("POST /api/referrals -> ok with code", rr.status === 200 && rj.ok === true && !!rj.code, JSON.stringify(rj));
+
+  // --- abandoned-cart beacon (partial lead) ---
+  const pfr = await fetch(BASE + "/api/leads/partial", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "partial-test@example.com", make: "Mazda", model: "CX-5", year: "2020", contactMethod: "email" }),
+  });
+  const pfj = await pfr.json().catch(() => ({}));
+  ok("POST /api/leads/partial -> ok", pfr.status === 200 && pfj.ok === true, JSON.stringify(pfj));
+
+  // --- booking route wiring (full booking needs a lead with a bookingToken) ---
+  ok("book without token -> 400", (await fetch(BASE + "/api/book")).status === 400);
+  ok("book unknown token -> 404", (await fetch(BASE + "/api/book?token=nope-not-real")).status === 404);
+
+  // --- cron auth ---
+  ok("cron without secret -> 401", (await fetch(BASE + "/api/cron")).status === 401);
+  if (process.env.CRON_SECRET) {
+    const cr = await fetch(BASE + "/api/cron", { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    ok("cron with secret -> 200", cr.status === 200, `(got ${cr.status})`);
+  }
 
   // --- auth gating ---
   ok("admin leads without cookie -> 401", (await fetch(BASE + "/api/admin/leads")).status === 401);
@@ -159,6 +192,10 @@ async function main() {
     ok("lead defaults to status 'new'", found.status === "new");
   }
   ok("referral visible in admin", (aj.referrals || []).some((r) => r.referrer?.email === "jane@example.com"));
+  ok(
+    "partial lead captured in admin",
+    (aj.leads || []).some((l) => l.status === "partial" && l.contact?.email === "partial-test@example.com"),
+  );
 
   // --- gated uploads route still protected (used for historical leads' photos) ---
   ok(

@@ -114,6 +114,8 @@ export default function OfferFlow() {
   // firing a second request and a second, non-deduped Meta Lead before the
   // disabled state commits.
   const submittingRef = useRef(false);
+  // Fire the abandoned-cart beacon at most once per session.
+  const partialSentRef = useRef(false);
 
   // Load the real trims for the chosen year/make/model.
   useEffect(() => {
@@ -227,6 +229,34 @@ export default function OfferFlow() {
     if (fired.current.has(event)) return;
     fired.current.add(event);
     track(event);
+  }
+
+  // Abandoned-cart capture: the instant a valid phone/email is typed on the contact
+  // step, quietly beacon the already-typed data so we can recover the lead if they
+  // leave without submitting. At most once per session; no UI, no new field.
+  function sendPartialBeacon() {
+    if (partialSentRef.current) return;
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    const validPhone = phone.replace(/\D/g, "").length >= 10;
+    if (!validEmail && !validPhone) return;
+    partialSentRef.current = true;
+    try {
+      const payload = JSON.stringify({
+        name,
+        email,
+        phone,
+        contactMethod,
+        year,
+        make,
+        model,
+        trim: trim === TRIM_UNSURE ? "" : trim,
+        mileageKm: kmv,
+      });
+      navigator.sendBeacon("/api/leads/partial", new Blob([payload], { type: "application/json" }));
+      track("partial_captured", {});
+    } catch {
+      /* ignore — never disrupt the form */
+    }
   }
 
   /** Fire contact_engaged (+ Meta InitiateCheckout) once on first real field interaction. */
@@ -396,11 +426,6 @@ export default function OfferFlow() {
     e.preventDefault();
     if (submittingRef.current) return;
     setError("");
-    if (!name.trim()) {
-      track("form_error", { step: "contact", reason: "missing_name" });
-      setError("Please add your first name.");
-      return;
-    }
     if (contactMethod === "email") {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
         track("form_error", { step: "contact", reason: "invalid_email" });
@@ -506,54 +531,67 @@ export default function OfferFlow() {
     <form onSubmit={submitLead} className="mt-6">
         <div className="space-y-4">
         <div>
-          <label className="label" htmlFor="name">First name</label>
-          <input id="name" className="field" value={name} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_name_entered"); setName(e.target.value); }} placeholder="Your first name" autoComplete="given-name" />
-        </div>
-
-        <div>
           <span className="label">How should we reach you?</span>
           <div className="grid grid-cols-3 gap-2">
-            {(["call", "text", "email"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setContactMethod(m)}
-                aria-pressed={contactMethod === m}
-                className={`rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize transition ${
-                  contactMethod === m
-                    ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-slate-200 bg-white text-navy hover:border-brand-600"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
+            {(["call", "text", "email"] as const).map((m) => {
+              const active = contactMethod === m;
+              const preferred = m === "call" || m === "text";
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setContactMethod(m)}
+                  aria-pressed={active}
+                  className={`flex w-full items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-sm font-semibold capitalize transition ${
+                    active
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : preferred
+                        ? "border-brand-600/40 bg-brand-600/5 text-navy hover:border-brand-600"
+                        : "border-slate-200 bg-white text-muted hover:border-brand-600"
+                  }`}
+                >
+                  {m}
+                  {m === "call" && (
+                    <span
+                      className={`whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                        active ? "bg-white/25 text-white" : "bg-emerald-600 text-white"
+                      }`}
+                    >
+                      ⚡ Fastest
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          <p className="mt-2 text-xs text-muted">
+            Call or text is fastest — we can often give your offer on the spot.
+          </p>
         </div>
 
         {contactMethod === "email" ? (
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onBlur={sendPartialBeacon} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
-              <label className="label" htmlFor="cphone">Mobile phone <span className="font-normal text-muted">(optional)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
-              <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
+              <label className="label" htmlFor="cphone">Mobile phone <span className="font-semibold text-emerald-700">(recommended)</span></label>
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onBlur={sendPartialBeacon} placeholder="(___) ___-____" autoComplete="tel" />
+              <p className="mt-1.5 text-xs text-muted">Recommended — sometimes we need a quick detail to finalize an accurate offer, and a call or text is the fastest way to get it.</p>
             </div>
           </>
         ) : (
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onBlur={sendPartialBeacon} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
               <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onBlur={sendPartialBeacon} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
@@ -849,10 +887,12 @@ export default function OfferFlow() {
             <Check className="h-10 w-10" />
           </span>
           <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">
-            Thanks{name.trim() ? `, ${name.trim()}` : ""} — we got it!
+            Thanks — we got it!
           </h1>
           <p className="mt-3 text-lg text-muted">
-            Check your email for a confirmation. Here&apos;s what happens next:
+            {email.trim()
+              ? "Check your email for a confirmation. Here's what happens next:"
+              : `We'll ${contactMethod === "text" ? "text" : "call"} you shortly${phone ? ` at ${phone}` : ""}. Here's what happens next:`}
           </p>
           <ol className="mx-auto mt-5 max-w-md space-y-2.5 text-left text-sm text-navy">
             <li className="flex gap-2.5">

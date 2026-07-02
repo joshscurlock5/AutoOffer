@@ -8,7 +8,7 @@ import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead, splitName } from "@/lib/metaCapi";
 import { sendGa4Lead } from "@/lib/ga4Mp";
-import { sendLeadConfirmation, scheduleLeadDrip } from "@/lib/email";
+import { sendLeadConfirmation } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -97,17 +97,12 @@ export async function POST(req: NextRequest) {
       | "email";
     const bestTime = str(form.get("bestTime")) || undefined;
 
-    // Require a name plus the contact channel that matches the chosen method.
-    // (Email-preference leads have no phone — they were silently rejected before.)
+    // Require the contact channel that matches the chosen method. (First name was
+    // removed from the form, so it's no longer required.)
     const missingChannel = contactMethod === "email" ? !email : !phone;
-    if (!name || missingChannel) {
+    if (missingChannel) {
       return NextResponse.json(
-        {
-          error:
-            contactMethod === "email"
-              ? "Name and email are required."
-              : "Name and phone are required.",
-        },
+        { error: contactMethod === "email" ? "An email is required." : "A phone number is required." },
         { status: 400 },
       );
     }
@@ -183,10 +178,10 @@ export async function POST(req: NextRequest) {
     // they gave an email — phone-only call/text leads have none). Never blocks
     // or fails the lead.
     await sendLeadConfirmation(lead);
-    // Schedule the reminder drip (Day 2 + Day 5) and store the ids so they can be
-    // cancelled when the lead leaves "new". Best-effort; never affects the lead.
-    const dripIds = await scheduleLeadDrip(lead);
-    if (dripIds.length) await updateLead(id, { dripEmailIds: dripIds });
+    // NOTE: no automatic "still want an offer?" drip on submit. The flow now
+    // assumes we have enough to quote — the owner drives follow-up from Telegram
+    // (/offer sends the offer, /moreinfo requests detail), and the scheduled cron
+    // sends the matching customer reminders based on nurtureStage.
     // Link this lead back to the price-lookup it came from (admin "API Calls"
     // conversion tracking). Strictly after the lead is saved + alerted, and
     // best-effort (markLookupConverted swallows its own errors), so it can never

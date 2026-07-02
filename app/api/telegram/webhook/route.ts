@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead } from "@/lib/store";
-import { sendOfferEmail, cancelScheduledEmails } from "@/lib/email";
+import { sendOfferEmail, sendMoreInfo, sendAsk, cancelScheduledEmails } from "@/lib/email";
+import { parseEdmonton } from "@/lib/time";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -35,6 +37,7 @@ function carText(lead: Lead): string {
   const v = lead.vehicle;
   return v ? `${v.year} ${v.make} ${v.model}` : "their vehicle";
 }
+
 
 // ---------------------------------------------------------------------------
 //  Inbound Telegram webhook — the ONLY place the bot receives messages.
@@ -157,14 +160,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const { low, high } = lead.pendingOffer;
+      // Mint the self-booking token BEFORE sending so the offer email's Book button works.
+      const bookingToken = lead.bookingToken || crypto.randomUUID().replace(/-/g, "");
+      lead.bookingToken = bookingToken;
       const res = await sendOfferEmail(lead, low, high);
       if (!res.ok) {
         await reply(fromChat, `Couldn't send — ${res.reason}. The draft is still saved; fix it and try /confirm ${code} again.`);
         return NextResponse.json({ ok: true });
       }
       if (lead.dripEmailIds?.length) await cancelScheduledEmails(lead.dripEmailIds);
+      const nowISO = new Date().toISOString();
       await updateLead(lead.id, {
-        offer: { low, high, sentAt: new Date().toISOString() },
+        offer: { low, high, sentAt: nowISO },
+        bookingToken,
+        // Enroll in the cron-driven offer-reminder track (+2/+5/+10 days).
+        nurtureStage: "offer_sent",
+        offerSentAt: nowISO,
+        moreInfoSentAt: undefined, // leave any awaiting-info track
+        lastNurtureAt: undefined, // restart the reminder sequence cleanly
+        firstTouchAt: lead.firstTouchAt || nowISO,
+        contactedAt: lead.contactedAt || nowISO,
         pendingOffer: undefined,
         dripEmailIds: [],
         status: lead.status === "new" ? "contacted" : lead.status,
@@ -192,6 +207,122 @@ export async function POST(req: NextRequest) {
       } else {
         await reply(fromChat, `No draft offer to cancel for "${code}".`);
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    // 6b) /moreinfo <id> — email the customer that we need a bit more detail.
+    const moreInfoCmd = text.match(/^\/moreinfo(@\w+)?\b\s*(\S+)?/i);
+    if (moreInfoCmd) {
+      const code = (moreInfoCmd[2] || "").trim();
+      if (!code) {
+        await reply(fromChat, "Usage: /moreinfo <id>  — emails the customer to ask for more detail before you quote.");
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const res = await sendMoreInfo(lead);
+      if (!res.ok) {
+        await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const nowISO = new Date().toISOString();
+      await updateLead(lead.id, {
+        nurtureStage: "awaiting_info",
+        moreInfoSentAt: nowISO,
+        lastNurtureAt: undefined,
+        firstTouchAt: lead.firstTouchAt || nowISO,
+        contactedAt: lead.contactedAt || nowISO,
+        status: lead.status === "new" ? "contacted" : lead.status,
+      });
+      await reply(fromChat, `📩 Sent — asked ${lead.contact.name || lead.contact.email} for more detail on their ${carText(lead)}. If they go quiet, they'll get a reminder in 2 and 5 days.\nAsk something specific → /ask ${code} <question>`);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 6c) /ask <id> <question> — email the customer a specific question.
+    const askCmd = text.match(/^\/ask(@\w+)?\b\s*([\s\S]*)/i);
+    if (askCmd) {
+      const rest = askCmd[2].trim();
+      const sp = rest.indexOf(" ");
+      const code = sp === -1 ? rest : rest.slice(0, sp);
+      const question = sp === -1 ? "" : rest.slice(sp + 1).trim();
+      if (!code || !question) {
+        await reply(fromChat, "Usage: /ask <id> <question>\nExample: /ask a1b2c3d4 Is it automatic or manual?");
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const res = await sendAsk(lead, question);
+      if (!res.ok) {
+        await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const nowISO = new Date().toISOString();
+      await updateLead(lead.id, {
+        nurtureStage: "awaiting_info",
+        moreInfoSentAt: nowISO,
+        lastNurtureAt: undefined,
+        firstTouchAt: lead.firstTouchAt || nowISO,
+        contactedAt: lead.contactedAt || nowISO,
+        status: lead.status === "new" ? "contacted" : lead.status,
+      });
+      await reply(fromChat, `📩 Question sent to ${lead.contact.name || lead.contact.email} about their ${carText(lead)}.`);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 7) /schedule <id> <YYYY-MM-DD HH:MM> — book the inspection (Mountain Time).
+    const schedCmd = text.match(/^\/schedule(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
+    if (schedCmd) {
+      const code = (schedCmd[2] || "").trim();
+      const whenRaw = (schedCmd[3] || "").trim();
+      if (!code || !whenRaw) {
+        await reply(fromChat, "Usage: /schedule <id> <YYYY-MM-DD HH:MM>\nExample: /schedule a1b2c3d4 2026-07-05 14:30  (24h, Mountain Time)");
+        return NextResponse.json({ ok: true });
+      }
+      const appt = parseEdmonton(whenRaw);
+      if (!appt) {
+        await reply(fromChat, "Couldn't read that date. Use 24h Mountain Time, e.g. /schedule " + code + " 2026-07-05 14:30");
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const nowISO = new Date().toISOString();
+      await updateLead(lead.id, {
+        appointmentAt: appt.toISOString(),
+        apptRemindedAt: undefined, // reset so the T-2h reminder fires for this booking
+        status: "scheduled",
+        scheduledAt: lead.scheduledAt || nowISO,
+        firstTouchAt: lead.firstTouchAt || nowISO,
+      });
+      const whenLabel = appt.toLocaleString("en-CA", {
+        timeZone: "America/Edmonton",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      await reply(fromChat, `📅 Booked — ${carText(lead)} inspection ${whenLabel} (MT). I'll remind you ~2h before.`);
       return NextResponse.json({ ok: true });
     }
 

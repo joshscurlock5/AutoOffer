@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import StickyMobileBar from "@/components/StickyMobileBar";
 import StickyCTA from "@/components/StickyCTA";
 import ExitIntent from "@/components/ExitIntent";
+import ResumeBanner from "@/components/ResumeBanner";
 import Analytics from "@/components/Analytics";
 import ChatWidget from "@/components/ChatWidget";
 import JsonLd from "@/components/JsonLd";
@@ -112,6 +113,7 @@ export default function RootLayout({
         <StickyMobileBar />
         <StickyCTA />
         <ExitIntent />
+        <ResumeBanner />
         <ChatWidget />
       </body>
     </html>

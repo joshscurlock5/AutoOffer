@@ -3,6 +3,7 @@
 export type LeadKind = "vehicle" | "inquiry";
 
 export type LeadStatus =
+  | "partial"
   | "new"
   | "contacted"
   | "scheduled"
@@ -11,6 +12,7 @@ export type LeadStatus =
   | "spam";
 
 export const LEAD_STATUSES: LeadStatus[] = [
+  "partial",
   "new",
   "contacted",
   "scheduled",
@@ -115,6 +117,36 @@ export interface Lead {
   pendingOffer?: { low: number; high: number; at: string };
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
+  /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
+  firstTouchAt?: string; // first outbound touch (owner or automated) after createdAt
+  contactedAt?: string;
+  offerSentAt?: string;
+  scheduledAt?: string;
+  closedAt?: string;
+  /** Inspection/appointment time — a real field now, not just free-text notes. */
+  appointmentAt?: string;
+  /** When the T-2h appointment reminder was sent (idempotency for the cron). */
+  apptRemindedAt?: string;
+  /** Where the customer wants to meet for the inspection (customer self-booking). */
+  appointmentLocation?: string;
+  /** True when the customer booked their own slot (vs the owner's /schedule). */
+  bookedByCustomer?: boolean;
+  /** Set when the customer clicks "confirm" on the day-of reminder. */
+  appointmentConfirmedAt?: string;
+  /** When the day-of booking reminder was sent (idempotency for the cron). */
+  dayOfRemindedAt?: string;
+  /** Unguessable token that authorizes the customer self-booking link /book/<token>. */
+  bookingToken?: string;
+  /** When a "need more info" / question email was last sent (base for the awaiting-info reminders). */
+  moreInfoSentAt?: string;
+  /** Owner stale-lead SLA nudges already sent (idempotency guard for the cron). */
+  staleNudges?: number;
+  lastNudgedAt?: string;
+  /** Customer nurture cadence, DECOUPLED from status: which follow-up track/step is
+   * active, a pause-until gate, and the last automated-nurture timestamp (idempotency). */
+  nurtureStage?: string;
+  nurturePausedUntil?: string;
+  lastNurtureAt?: string;
   source: string;
 }
 
