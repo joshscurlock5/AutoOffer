@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, savePhotos, markLookupConverted, updateLead } from "@/lib/store";
+import { addLead, markLookupConverted, updateLead } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
-import { notifyNewLead, type NotifyPhoto } from "@/lib/notify";
+import { notifyNewLead } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -18,21 +18,30 @@ export const runtime = "nodejs";
 // here for a future, more accurate API swap; flip to true to re-enable.
 const COMPUTE_ESTIMATE = false;
 
-// Hard caps on uploaded photos — bound S3 cost / server memory against abuse.
-const MAX_PHOTOS = 12;
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB per file
-const MAX_PHOTOS_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB per submission
-const ALLOWED_PHOTO_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-  "image/gif",
-]);
-
 function str(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
+}
+
+/** Parse the damage/condition the client sent (chips + optional note). Hardened
+ * against arbitrary input: tags are string-only, length- and count-capped; the
+ * note is trimmed and clamped. Returns undefined when there's nothing to store. */
+function parseCondition(raw: string): { tags: string[]; note?: string } | undefined {
+  if (!raw) return undefined;
+  try {
+    const o = JSON.parse(raw);
+    const tags: string[] = Array.isArray(o?.tags)
+      ? o.tags
+          .filter((t: unknown): t is string => typeof t === "string")
+          .map((t: string) => t.trim().slice(0, 60))
+          .filter(Boolean)
+          .slice(0, 10)
+      : [];
+    const note = typeof o?.note === "string" ? o.note.trim().slice(0, 500) : "";
+    if (!tags.length && !note) return undefined;
+    return note ? { tags, note } : { tags };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Defensively parse the estimate the client was shown (used only as a fallback). */
@@ -112,8 +121,9 @@ export async function POST(req: NextRequest) {
     const id = crypto.randomUUID();
     let vehicle: VehicleInfo | undefined;
     let estimate: OfferEstimate | undefined;
-    let photos: UploadedPhoto[] = [];
-    let photoBuffers: NotifyPhoto[] = [];
+    // Photos are no longer collected; kept as an empty array for back-compat with
+    // existing leads (admin still displays historical photos from S3).
+    const photos: UploadedPhoto[] = [];
 
     if (kind === "vehicle") {
       const year = str(form.get("year"));
@@ -121,8 +131,9 @@ export async function POST(req: NextRequest) {
       const model = str(form.get("model"));
       const trim = str(form.get("trim"));
       const mileageKm = Number(str(form.get("mileageKm"))) || 0;
+      const condition = parseCondition(str(form.get("condition")));
 
-      vehicle = { year, make, model, trim: trim || undefined, mileageKm };
+      vehicle = { year, make, model, trim: trim || undefined, mileageKm, ...(condition ? { condition } : {}) };
       if (COMPUTE_ESTIMATE) {
         // Re-derive the estimate server-side. Normally a warm-cache hit (the user
         // just viewed it), so usually no extra MarketCheck call; on a cold/expired
@@ -135,36 +146,6 @@ export async function POST(req: NextRequest) {
           if (shown) estimate = shown;
         }
       }
-
-      const files = form
-        .getAll("photos")
-        .filter((f): f is File => f instanceof File && f.size > 0);
-      if (files.length > MAX_PHOTOS) {
-        return NextResponse.json({ error: `Please attach at most ${MAX_PHOTOS} photos.` }, { status: 413 });
-      }
-      let totalBytes = 0;
-      for (const f of files) {
-        if (!ALLOWED_PHOTO_TYPES.has(f.type)) {
-          return NextResponse.json({ error: "Photos must be images (JPG, PNG, WebP, HEIC or GIF)." }, { status: 415 });
-        }
-        if (f.size > MAX_PHOTO_BYTES) {
-          return NextResponse.json({ error: "Each photo must be under 10 MB." }, { status: 413 });
-        }
-        totalBytes += f.size;
-      }
-      if (totalBytes > MAX_PHOTOS_TOTAL_BYTES) {
-        return NextResponse.json({ error: "Total photo size must be under 50 MB." }, { status: 413 });
-      }
-      photos = await savePhotos(id, files);
-      // Keep the raw bytes in memory to attach to the owner's Telegram alert as
-      // a photo gallery (read after savePhotos so it can never disrupt the S3 save).
-      photoBuffers = await Promise.all(
-        files.map(async (f) => ({
-          buffer: Buffer.from(await f.arrayBuffer()),
-          name: f.name || "photo.jpg",
-          type: f.type || "image/jpeg",
-        })),
-      );
     }
 
     // Meta ad-match keys. metaEventId is shared with the browser Pixel "Lead" so
@@ -195,9 +176,9 @@ export async function POST(req: NextRequest) {
     };
 
     await addLead(lead);
-    // Best-effort owner alert (Telegram), with a photo gallery if any. Awaited so
-    // Amplify's Lambda doesn't freeze the send; never throws, so the lead is safe.
-    await notifyNewLead(lead, photoBuffers);
+    // Best-effort owner alert (Telegram). Awaited so Amplify's Lambda doesn't
+    // freeze the send; never throws, so the lead is safe.
+    await notifyNewLead(lead);
     // Instant confirmation email to the customer (best-effort; only fires when
     // they gave an email — phone-only call/text leads have none). Never blocks
     // or fails the lead.

@@ -529,6 +529,14 @@ function LeadCard({
                   {lead.estimate?.unique && <> · <span className="font-semibold text-amber-600">Unique — needs manual quote</span></>}
                   {!lead.estimate && <> · <span className="font-semibold text-amber-600">Needs quote</span></>}
                 </div>
+                {v.condition && (v.condition.tags?.length || v.condition.note) ? (
+                  <div className="mt-1 text-sm">
+                    <span className="font-semibold text-navy">Condition: </span>
+                    <span className="text-muted">
+                      {[(v.condition.tags || []).join(", "), v.condition.note].filter(Boolean).join(" — ")}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (

@@ -1,6 +1,6 @@
 // End-to-end smoke test. Run the app (npm start / npm run dev) then:
 //   node scripts/smoke-test.mjs
-// Verifies every page renders and the full lead -> admin -> photo flow works.
+// Verifies every page renders and the full lead -> admin flow works.
 
 const BASE = process.env.BASE || "http://localhost:3000";
 const PASSWORD = process.env.ADMIN_PASSWORD || "autooffer-admin";
@@ -72,11 +72,7 @@ async function main() {
   const admin = await (await fetch(BASE + "/admin")).text();
   ok("admin shows login gate", /Admin/.test(admin) && /Password/.test(admin));
 
-  // --- create a vehicle lead WITH a photo ---
-  const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
-    "base64",
-  );
+  // --- create a vehicle lead WITH damage/condition ---
   const fd = new FormData();
   fd.append("kind", "vehicle");
   fd.append("year", "2019");
@@ -88,7 +84,7 @@ async function main() {
   fd.append("email", "test@example.com");
   fd.append("phone", "(587) 555-1234");
   fd.append("referralCode", "FRIEND-AB12");
-  fd.append("photos", new Blob([png], { type: "image/png" }), "car.png");
+  fd.append("condition", JSON.stringify({ tags: ["Minor cosmetic (dents, scratches)"], note: "small scratch on rear bumper" }));
 
   const lr = await fetch(BASE + "/api/leads", { method: "POST", body: fd });
   const lj = await lr.json().catch(() => ({}));
@@ -152,20 +148,23 @@ async function main() {
   ok("submitted lead is visible in admin", !!found, `leadCount=${(aj.leads || []).length}`);
   if (found) {
     ok("lead saved with NO estimate (instant estimate removed)", !found.estimate, JSON.stringify(found.estimate));
-    ok("lead retained uploaded photo", Array.isArray(found.photos) && found.photos.length >= 1, `photos=${found.photos?.length}`);
+    ok(
+      "lead captured damage/condition",
+      found.vehicle?.condition?.tags?.includes("Minor cosmetic (dents, scratches)") &&
+        /rear bumper/.test(found.vehicle?.condition?.note || ""),
+      JSON.stringify(found.vehicle?.condition),
+    );
     ok("lead vehicle data correct", found.vehicle?.make === "Dodge" && found.vehicle?.model === "Challenger");
     ok("lead referral code captured", found.referralCode === "FRIEND-AB12");
     ok("lead defaults to status 'new'", found.status === "new");
   }
   ok("referral visible in admin", (aj.referrals || []).some((r) => r.referrer?.email === "jane@example.com"));
 
-  // --- gated photo serving ---
-  if (found && found.photos?.[0]) {
-    const url = `${BASE}/api/uploads/${leadId}/${found.photos[0].file}`;
-    ok("photo blocked without auth -> 401", (await fetch(url)).status === 401);
-    const a = await fetch(url, { headers: { Cookie: cookie } });
-    ok("photo served to admin -> image", a.status === 200 && (a.headers.get("content-type") || "").startsWith("image/"), `(${a.status} ${a.headers.get("content-type")})`);
-  }
+  // --- gated uploads route still protected (used for historical leads' photos) ---
+  ok(
+    "uploads route blocked without auth -> 401",
+    (await fetch(`${BASE}/api/uploads/${leadId}/photo-1.jpg`)).status === 401,
+  );
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

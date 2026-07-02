@@ -22,7 +22,6 @@ const DAY = 86400000;
 
 // Small inline "icons" for the offer email, built from codepoints so they
 // survive the build + JSON transport intact (literal emoji can arrive escaped).
-const ICON_CHECK = String.fromCodePoint(0x2713); // ✓
 const ICON_FAST = String.fromCodePoint(0x26a1); //  ⚡
 const ICON_MAIL = String.fromCodePoint(0x2709); //  ✉
 
@@ -175,7 +174,6 @@ function referralConfirmationEmail(ref: Referral): Email {
 function offerEmail(lead: Lead, low: number, high: number): Email {
   const first = firstName(lead);
   const car = carLine(lead); // escaped, for HTML
-  const owner = esc((site.owner || "").trim().split(" ")[0] || site.name); // "Samir"
   const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
   const leadIn = car
     ? `Thanks for sending over your <strong>${car}</strong>. Based on the basics, here's our range:`
@@ -191,12 +189,9 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   const phone = `<a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>`;
   const actionBox = `<tr><td style="padding:0 28px;">
     <div style="background:#f3f6f8;border:1px solid #e4e9ed;border-radius:12px;padding:18px;margin-bottom:18px;">
-      <div style="font-size:15px;line-height:1.5;color:#3a4654;margin-bottom:12px;">For your exact number, ${owner} just needs two things:</div>
-      <div style="font-size:15px;line-height:1.5;color:#1f2a36;margin-bottom:8px;"><span style="color:#1A7F54;font-weight:700;">${ICON_CHECK}</span>&nbsp;&nbsp;Your vehicle's <strong>VIN</strong> <span style="color:#7b8794;">(if you haven't already sent it)</span></div>
-      <div style="font-size:15px;line-height:1.5;color:#1f2a36;"><span style="color:#1A7F54;font-weight:700;">${ICON_CHECK}</span>&nbsp;&nbsp;Any <strong>damage</strong> worth noting</div>
-      <div style="border-top:1px solid #e4e9ed;margin:16px 0;"></div>
-      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_FAST} Fastest way &mdash; text or call</div>
-      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0 0 14px;padding-left:22px;">Reach ${owner} at ${phone} and he'll send your exact offer back in minutes.</div>
+      <div style="font-size:15px;line-height:1.5;color:#3a4654;margin-bottom:12px;">Want your exact, firm number? Just reach out and we'll lock it in:</div>
+      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_FAST} Fastest &mdash; text or call</div>
+      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0 0 14px;padding-left:22px;">Reach us at ${phone} and we'll send your exact offer back in minutes.</div>
       <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_MAIL} Not a phone person?</div>
       <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0;padding-left:22px;">Just reply to this email and you'll have it within the hour.</div>
     </div></td></tr>`;
@@ -206,8 +201,7 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Talk soon,<br/>
-    <strong>${esc(site.owner)}</strong><br/>
-    ${esc(site.name)}<br/>
+    <strong>The ${esc(site.name)} Team</strong><br/>
     <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; <a href="mailto:${esc(site.email)}" style="color:#1A7F54;text-decoration:none;">${esc(site.email)}</a>
   </td></tr>`;
   return {

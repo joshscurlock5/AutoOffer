@@ -34,6 +34,8 @@ export interface VehicleInfo {
   model: string;
   trim?: string;
   mileageKm: number;
+  /** Damage / condition the seller flagged: quick-pick tags + an optional note. */
+  condition?: { tags: string[]; note?: string };
 }
 
 export interface OfferEstimate {

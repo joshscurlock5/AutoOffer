@@ -8,13 +8,12 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
-  PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, UploadedPhoto, ChatConversation, ChatMessage, Lookup } from "./types";
+import type { Lead, Referral, ChatConversation, ChatMessage, Lookup } from "./types";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -151,36 +150,9 @@ export async function updateReferral(
 }
 
 // ---- Photos (S3) ----------------------------------------------------------
-
-export async function savePhotos(
-  leadId: string,
-  files: File[],
-): Promise<UploadedPhoto[]> {
-  const saved: UploadedPhoto[] = [];
-  if (!files.length || !PHOTOS_BUCKET) return saved;
-
-  let i = 0;
-  for (const f of files) {
-    if (!f || typeof f.arrayBuffer !== "function" || f.size === 0) continue;
-    i += 1;
-    const ext = (f.name.split(".").pop() || "jpg")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-    const safeExt = ext.length > 0 && ext.length <= 5 ? ext : "jpg";
-    const stored = `photo-${i}.${safeExt}`;
-    const buf = Buffer.from(await f.arrayBuffer());
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: PHOTOS_BUCKET,
-        Key: `${leadId}/${stored}`,
-        Body: buf,
-        ContentType: f.type || "image/jpeg",
-      }),
-    );
-    saved.push({ name: f.name, file: stored, size: f.size, type: f.type });
-  }
-  return saved;
-}
+// New leads no longer collect photos, but historical leads still have them in
+// S3 — the admin reads them via readPhoto() below, and deleteLead() cleans them
+// up. (savePhotos was removed when the upload step was retired.)
 
 /** Read a single stored photo (admin-gated route streams this). */
 export async function readPhoto(

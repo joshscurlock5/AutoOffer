@@ -17,14 +17,18 @@ import SecurePayment from "@/components/SecurePayment";
 import CarBodyIllustration from "@/components/CarBodyIllustration";
 import TurnstileBox, { turnstileEnabled } from "@/components/TurnstileBox";
 import {
-  ArrowRight, Check, Camera, Trash,
+  ArrowRight, Check,
   Car, Lock,
 } from "@/components/icons";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type InputMode = "manual" | "vin";
-const MAX_PHOTOS = 12;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
+// The details step offers a single "No known issues" quick-select; anything else
+// must be typed into the note so customers explain the specifics (a lone tag like
+// "accident history" with no detail isn't useful). Selecting the chip and typing a
+// note are mutually exclusive.
+const DAMAGE_CLEAN = "No known issues";
 const UNIQUE: OfferEstimate = { low: 0, high: 0, mid: 0, currency: "CAD", unique: true };
 // Sentinel for an explicit "Not sure" trim pick — kept distinct from the blank
 // placeholder so the <select> can show it, but normalized to "" before it's ever
@@ -63,8 +67,9 @@ export default function OfferFlow() {
   const [model, setModel] = useState(() => sp.get("model") || "");
   const [trim, setTrim] = useState(() => sp.get("trim") || "");
   const [kmv, setKmv] = useState(() => sp.get("km") || "");
-  const [photos, setPhotos] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  // Damage / condition (details step). Defaults to the clean "No known issues" chip.
+  const [damageTags, setDamageTags] = useState<string[]>([DAMAGE_CLEAN]);
+  const [damageNote, setDamageNote] = useState("");
 
   // VIN flow
   const [vin, setVin] = useState(() => (sp.get("vin") || "").toUpperCase());
@@ -142,19 +147,14 @@ export default function OfferFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Revoke object URLs only on unmount.
-  const previewsRef = useRef<string[]>([]);
-  useEffect(() => {
-    previewsRef.current = previews;
-  }, [previews]);
+  // Clear any pending estimate-calc timer on unmount.
   useEffect(() => {
     return () => {
-      previewsRef.current.forEach((u) => URL.revokeObjectURL(u));
       if (calcTimer.current) clearTimeout(calcTimer.current);
     };
   }, []);
 
-  // Restore in-progress fields (not photos) so a refresh / accidental back-button
+  // Restore in-progress fields so a refresh / accidental back-button
   // doesn't wipe what they typed. A deep-link that already carries a vehicle wins.
   useEffect(() => {
     if (cameWithVehicle) return;
@@ -166,6 +166,8 @@ export default function OfferFlow() {
       if (s.model) setModel(s.model);
       if (s.trim) setTrim(s.trim);
       if (s.kmv) setKmv(s.kmv);
+      if (Array.isArray(s.damageTags) && s.damageTags.length) setDamageTags(s.damageTags);
+      if (s.damageNote) setDamageNote(s.damageNote);
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.phone) setPhone(s.phone);
@@ -187,27 +189,38 @@ export default function OfferFlow() {
       }
       localStorage.setItem(
         "ao_offer_progress",
-        JSON.stringify({ year, make, model, trim, kmv, name, email, phone, contactMethod, bestTime }),
+        JSON.stringify({ year, make, model, trim, kmv, damageTags, damageNote, name, email, phone, contactMethod, bestTime }),
       );
     } catch {
       /* ignore */
     }
-  }, [year, make, model, trim, kmv, name, email, phone, contactMethod, bestTime, step]);
+  }, [year, make, model, trim, kmv, damageTags, damageNote, name, email, phone, contactMethod, bestTime, step]);
 
   const models = make ? modelsFor(make) : [];
   const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
 
-  function addPhotos(list: FileList | null) {
-    if (!list) return;
-    const incoming = Array.from(list).filter((f) => f.type.startsWith("image/"));
-    const room = MAX_PHOTOS - photos.length;
-    const accepted = incoming.slice(0, Math.max(0, room));
-    if (!accepted.length) return;
-    setPhotos((p) => [...p, ...accepted]);
-    setPreviews((p) => [...p, ...accepted.map((f) => URL.createObjectURL(f))]);
-    track("photos_added", { count: accepted.length, total: photos.length + accepted.length });
+  const noKnownIssues = damageTags.includes(DAMAGE_CLEAN);
+
+  // Toggle the single "No known issues" chip. Selecting it clears any typed note
+  // (the two states are mutually exclusive).
+  function toggleNoKnownIssues() {
+    if (noKnownIssues) {
+      setDamageTags([]);
+    } else {
+      setDamageTags([DAMAGE_CLEAN]);
+      setDamageNote("");
+    }
   }
+
+  // Typing a note means there's something to note, so drop the clean selection.
+  function onDamageNoteChange(v: string) {
+    setDamageNote(v);
+    if (v.trim().length > 0) setDamageTags((prev) => prev.filter((t) => t !== DAMAGE_CLEAN));
+  }
+
+  // Did the seller describe anything worth noting?
+  const hasDamage = damageNote.trim().length > 0;
 
   /** Fire a granular per-field funnel event at most once per mount. */
   function once(event: string) {
@@ -225,12 +238,6 @@ export default function OfferFlow() {
       { unique: !!estimate?.unique },
       { value: estimate?.mid ?? 0, currency: "CAD" },
     );
-  }
-
-  function removePhoto(i: number) {
-    URL.revokeObjectURL(previews[i]);
-    setPhotos((p) => p.filter((_, idx) => idx !== i));
-    setPreviews((p) => p.filter((_, idx) => idx !== i));
   }
 
   /** Fetch the real (market-based) estimate from the server. */
@@ -297,7 +304,7 @@ export default function OfferFlow() {
     }
     setError("");
     const yr = Number(year);
-    track("details_submitted", { make, model, year: yr, hasPhotos: photos.length > 0 });
+    track("details_submitted", { make, model, year: yr, hasDamage });
     setStep(3);
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (!SHOW_INSTANT_ESTIMATE) {
@@ -430,7 +437,7 @@ export default function OfferFlow() {
       if (lookupIdRef.current) fd.append("lookupId", lookupIdRef.current);
       fd.append("metaEventId", metaEventId);
       if (tsToken) fd.append("turnstileToken", tsToken);
-      photos.forEach((f) => fd.append("photos", f));
+      fd.append("condition", JSON.stringify({ tags: damageTags, note: damageNote.trim() }));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
@@ -442,6 +449,7 @@ export default function OfferFlow() {
         year: Number(year),
         contactMethod,
         unique: !!estimate?.unique,
+        has_damage: hasDamage,
         cta_source: ctaSource,
       });
       trackMeta("Lead", { currency: "CAD", value: estimate?.mid ?? 0, content_name: `${year} ${make} ${model}` }, metaEventId);
@@ -460,53 +468,35 @@ export default function OfferFlow() {
   // "Not sure" → no trim, for anything user-facing or stored.
   const cleanTrim = trim === TRIM_UNSURE ? "" : trim;
 
-  const photoBlock = (
+  const damageBlock = (
     <div className="mt-6">
       <label className="label">
-        Photos <span className="font-normal text-muted">(optional)</span>
+        Any damage worth noting? <span className="font-normal text-muted">(optional)</span>
       </label>
-      <p className="-mt-1 mb-2 text-sm text-muted">
-        Photos are optional, but they help us make a firmer offer faster. No car nearby? You can add them later.
+      <p className="-mt-1 mb-3 text-sm text-muted">
+        All good? Tap &ldquo;No known issues.&rdquo; Otherwise, tell us what to note so we can prepare an accurate offer.
       </p>
-      <label
-        htmlFor="photos"
-        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-300 hover:bg-slate-100"
+      <button
+        type="button"
+        onClick={toggleNoKnownIssues}
+        aria-pressed={noKnownIssues}
+        className={`rounded-full border px-3.5 py-2 text-sm font-semibold transition ${
+          noKnownIssues
+            ? "border-brand-600 bg-brand-600 text-white"
+            : "border-slate-200 bg-white text-navy hover:border-brand-600"
+        }`}
       >
-        <span className="grid h-12 w-12 place-items-center rounded-full bg-navy text-white">
-          <Camera className="h-6 w-6" />
-        </span>
-        <span className="mt-3 font-semibold text-navy">Add photos of your car</span>
-        <span className="mt-1 text-sm text-muted">
-          Front, back, sides, interior &amp; odometer work best. Up to {MAX_PHOTOS} photos.
-        </span>
-        <input
-          id="photos"
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
-        />
-      </label>
-
-      {previews.length > 0 && (
-        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
-          {previews.map((src, i) => (
-            <div key={src} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={`Vehicle photo ${i + 1}`} className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => removePhoto(i)}
-                className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
-                aria-label="Remove photo"
-              >
-                <Trash className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+        No known issues
+      </button>
+      <textarea
+        id="damageNote"
+        className="field mt-3 resize-none"
+        rows={2}
+        maxLength={500}
+        value={damageNote}
+        onChange={(e) => onDamageNoteChange(e.target.value)}
+        placeholder="Anything else worth noting? (optional)"
+      />
     </div>
   );
 
@@ -726,7 +716,7 @@ export default function OfferFlow() {
         <ConfirmCard decoded={decoded} onConfirm={confirmDecoded} onReject={rejectDecoded} />
       )}
 
-      {/* -------------------- STEP 2: details (trim / mileage / photos) -------------------- */}
+      {/* -------------------- STEP 2: details (trim / mileage / condition) -------------------- */}
       {step === 2 && (
         <div className="mt-8 animate-fade-up">
           <VehicleSummary year={year} make={make} model={model} trim={cleanTrim} kmv={kmv} onEdit={editVehicle} />
@@ -735,7 +725,7 @@ export default function OfferFlow() {
               Add a few details
             </h1>
             <p className="mt-2 text-muted">
-              Trim, mileage and a few photos help us put together your firm offer.
+              Trim, mileage and the car&apos;s condition help us put together your firm offer.
             </p>
             <form onSubmit={goToValue}>
               <div className="mt-6 grid grid-cols-1 gap-4">
@@ -765,7 +755,7 @@ export default function OfferFlow() {
                 </div>
               </div>
 
-              {photoBlock}
+              {damageBlock}
 
               <div className="mt-8">
                 <button type="submit" className="btn-primary w-full py-4 text-lg">

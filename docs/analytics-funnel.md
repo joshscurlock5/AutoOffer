@@ -55,7 +55,7 @@ and stamps `?source=<location>` on the URL, which surfaces as `cta_source` on
 `phone_click` (`location`).
 **Vehicle:** `offer_flow_start` (`source`, `cta_source`), `step1_submitted`,
 `vin_submitted`, `vin_confirmed`, `vin_rejected`, `vin_failed` (`reason`).
-**Details:** `details_submitted`, `photos_added` (`count`), `form_error`
+**Details:** `details_submitted` (`hasDamage`), `form_error`
 (`step`, `reason`).
 **Value:** `estimate_viewed` (+Meta ViewContent), `estimate_error`.
 **Contact:** `contact_started` (impression, GA4-only), `contact_engaged`
@@ -63,7 +63,7 @@ and stamps `?source=<location>` on the URL, which surfaces as `cta_source` on
 (+Meta Lead +server CAPI +server GA4 MP), `lead_error`, `form_error`.
 **Engagement:** `chat_opened`, `chat_message_sent`, `chat_conversation_started`,
 `exit_intent_shown/clicked/dismissed`, `contact_popup_opened`, `email_click`,
-`cookie_accepted`, `faq_opened`, `scroll_depth` (`percent`, `slug`).
+`faq_opened`, `scroll_depth` (`percent`, `slug`).
 **Secondary conversions:** `referral_submitted` (+Meta Lead), `referral_error`,
 `contact_form_submitted` (+Meta Lead), `contact_form_error`.
 

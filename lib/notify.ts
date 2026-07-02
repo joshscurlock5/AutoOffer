@@ -9,27 +9,18 @@ import type { Lead, Referral } from "./types";
  * the smoke test, where they're blank). `notifyNewLead` never throws — the lead
  * is already saved by the time it runs, and an alert failure must never break it.
  *
- * If the lead has car photos, they're sent as a Telegram **photo album (gallery)**
- * with the lead details as the caption; otherwise a plain text message. If the
- * album send fails (e.g. a photo is too large), it falls back to the text alert
- * so the details always get through.
- *
  * IMPORTANT: the caller must `await` this. Amplify runs the route as a Lambda
  * that freezes the instant the HTTP response returns, so a fire-and-forget send
- * (text or photos) can be frozen mid-flight and never deliver.
+ * can be frozen mid-flight and never deliver.
  */
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const api = (method: string) => `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
-const MAX_ALBUM = 10; // Telegram media-group hard limit
 
 // Category emojis built from codepoints so they always survive the build + JSON
 // transport intact (a literal emoji added here once arrived as escaped text).
 const EMOJI_CHAT = String.fromCodePoint(0x1f4ac); // 💬 speech balloon
 const EMOJI_REFERRAL = String.fromCodePoint(0x1f91d); // 🤝 handshake
-
-/** A lead photo's raw bytes (read from the upload in the API route). */
-export type NotifyPhoto = { buffer: Buffer; name: string; type: string };
 
 function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
@@ -45,6 +36,12 @@ function buildText(lead: Lead): string {
     const v = lead.vehicle;
     const km = v.mileageKm ? ` · ${Number(v.mileageKm).toLocaleString("en-CA")} km` : "";
     lines.push(`${v.year} ${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ""}${km}`);
+    const cond = v.condition;
+    if (cond && (cond.tags?.length || cond.note)) {
+      const tagStr = (cond.tags || []).join(", ");
+      const noteStr = cond.note ? `${tagStr ? " — " : ""}${cond.note}` : "";
+      lines.push(`🔧 ${tagStr}${noteStr}`);
+    }
   }
 
   if (lead.estimate && !lead.estimate.unique) {
@@ -76,53 +73,13 @@ async function sendText(text: string): Promise<void> {
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
 }
 
-/** Send the car photos as a gallery, with the lead details as the caption. */
-async function sendPhotos(photos: NotifyPhoto[], caption: string): Promise<void> {
-  const top = photos.slice(0, MAX_ALBUM);
-  const cap =
-    photos.length > MAX_ALBUM ? `${caption}\n(+${photos.length - MAX_ALBUM} more photos)` : caption;
-  const fd = new FormData();
-  fd.append("chat_id", String(CHAT_ID));
-
-  // A media group needs 2-10 items; a lone photo uses sendPhoto.
-  if (top.length === 1) {
-    fd.append("caption", cap);
-    fd.append("photo", new Blob([top[0].buffer], { type: top[0].type || "image/jpeg" }), top[0].name || "photo.jpg");
-    const r = await fetch(api("sendPhoto"), { method: "POST", body: fd });
-    if (!r.ok) throw new Error(`sendPhoto ${r.status}`);
-    return;
-  }
-
-  const media = top.map((p, i) => ({
-    type: "photo",
-    media: `attach://p${i}`,
-    ...(i === 0 ? { caption: cap } : {}),
-  }));
-  fd.append("media", JSON.stringify(media));
-  top.forEach((p, i) =>
-    fd.append(`p${i}`, new Blob([p.buffer], { type: p.type || "image/jpeg" }), p.name || `p${i}.jpg`),
-  );
-  const r = await fetch(api("sendMediaGroup"), { method: "POST", body: fd });
-  if (!r.ok) throw new Error(`sendMediaGroup ${r.status}`);
-}
-
-/** Alert the owner about a new lead (with a photo gallery if any). No-op if unconfigured; never throws. */
-export async function notifyNewLead(lead: Lead, photos: NotifyPhoto[] = []): Promise<void> {
+/** Alert the owner about a new lead. No-op if unconfigured; never throws. */
+export async function notifyNewLead(lead: Lead): Promise<void> {
   if (!BOT_TOKEN || !CHAT_ID) return;
   const text = buildText(lead);
   const sid = lead.id.split("-")[0];
   try {
-    let sentAlbum = false;
-    if (photos.length > 0) {
-      try {
-        await sendPhotos(photos, text);
-        sentAlbum = true;
-      } catch (e) {
-        // Photos failed (too big, bad format, etc.) — still deliver the text.
-        console.error("[notify] photo album failed, sending text only:", e);
-      }
-    }
-    if (!sentAlbum) await sendText(text);
+    await sendText(text);
     // Second message: the bare short ID only — no emoji, no label, nothing else —
     // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
     // only (the /offer, /confirm, /cancel command replies never send it).
