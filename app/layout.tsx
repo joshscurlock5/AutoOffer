@@ -9,7 +9,6 @@ import StickyMobileBar from "@/components/StickyMobileBar";
 import StickyCTA from "@/components/StickyCTA";
 import ExitIntent from "@/components/ExitIntent";
 import Analytics from "@/components/Analytics";
-import CookieNotice from "@/components/CookieNotice";
 import ChatWidget from "@/components/ChatWidget";
 import JsonLd from "@/components/JsonLd";
 import { site } from "@/lib/site-config";
@@ -113,7 +112,6 @@ export default function RootLayout({
         <StickyMobileBar />
         <StickyCTA />
         <ExitIntent />
-        <CookieNotice />
         <ChatWidget />
       </body>
     </html>

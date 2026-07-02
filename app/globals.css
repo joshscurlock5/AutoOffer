@@ -145,11 +145,6 @@ body {
      translateY(50%) then drops it by half its OWN height so its center lands on
      that line regardless of the notice's height. lg+ reverts (transform:none +
      the lg:bottom-* utilities take over to clear the centered desktop pill). */
-  .cookie-notice {
-    bottom: calc(3rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
-    transform: translateY(50%);
-    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
   @media (min-width: 1024px) {
     /* lg+: line the chat button's center up with the desktop CTA pill's measured
        center (--cta-pill-center, published by StickyCTA), minus half the button's
@@ -159,9 +154,6 @@ body {
     }
     .chat-panel {
       bottom: 5.5rem;
-    }
-    .cookie-notice {
-      transform: none;
     }
   }
 }
