@@ -255,6 +255,17 @@ export interface Profile {
   leadIds: string[];
 }
 
+/** One campaign's ad performance pulled from the Meta Marketing API. */
+export interface AdInsight {
+  campaign: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number; // percent
+  cpc: number; // $ per click
+  reach?: number;
+}
+
 export interface Referral {
   id: string;
   createdAt: string;

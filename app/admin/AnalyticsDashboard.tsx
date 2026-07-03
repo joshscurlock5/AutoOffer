@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
-import type { Profile } from "@/lib/types";
+import type { Profile, AdInsight } from "@/lib/types";
 import {
   computeView,
   filterProfiles,
@@ -339,6 +339,101 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function AdPerformance({ profiles }: { profiles: Profile[] }) {
+  const [range, setRange] = useState("last_30d");
+  const [data, setData] = useState<{ configured: boolean; insights: AdInsight[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/ads?range=${range}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setData({ configured: false, insights: [] }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range]);
+
+  const rows = useMemo(() => {
+    return (data?.insights || []).map((ins) => {
+      const ps = profiles.filter((p) => (p.attribution?.utmCampaign || "") === ins.campaign);
+      const leads = ps.filter((p) => p.stage !== "partial" && p.stage !== "spam").length;
+      const revenue = ps.filter((p) => p.stage === "closed").reduce((s, p) => s + (p.purchasePrice || 0), 0);
+      return { ...ins, leads, revenue, cpl: leads ? ins.spend / leads : null, roas: ins.spend ? revenue / ins.spend : null };
+    });
+  }, [data, profiles]);
+
+  const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+  const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
+  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+
+  if (loading) return <div className="card p-4 text-sm text-muted">Loading ad performance…</div>;
+  if (!data?.configured) {
+    return (
+      <div className="card p-4 text-sm text-muted">
+        <span className="font-semibold text-navy">Meta ads not connected yet.</span> Add{" "}
+        <code className="rounded bg-slate-100 px-1">META_MARKETING_TOKEN</code> and{" "}
+        <code className="rounded bg-slate-100 px-1">META_AD_ACCOUNT_ID</code> in Amplify to see spend, cost-per-lead, and ROAS here.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Ad spend" value={money(totalSpend)} />
+          <StatCard label="Leads from ads" value={String(totalLeads)} />
+          <StatCard label="Cost / lead" value={totalLeads ? money(totalSpend / totalLeads) : "—"} />
+          <StatCard label="ROAS" value={totalSpend ? `${(totalRevenue / totalSpend).toFixed(1)}×` : "—"} sub={money(totalRevenue)} />
+        </div>
+        <select className="field py-1 text-sm" value={range} onChange={(e) => setRange(e.target.value)}>
+          <option value="last_7d">Last 7 days</option>
+          <option value="last_30d">Last 30 days</option>
+          <option value="last_90d">Last 90 days</option>
+        </select>
+      </div>
+      <div className="card overflow-x-auto p-4">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="py-2 pr-2">Campaign</th>
+              <th className="px-2 text-right">Spend</th>
+              <th className="px-2 text-right">Impr.</th>
+              <th className="px-2 text-right">Clicks</th>
+              <th className="px-2 text-right">CTR</th>
+              <th className="px-2 text-right">Leads</th>
+              <th className="px-2 text-right">Cost/lead</th>
+              <th className="px-2 text-right">Revenue</th>
+              <th className="pl-2 text-right">ROAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={9} className="py-3 text-muted">No ad spend in range.</td></tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.campaign} className="border-b border-slate-100">
+                  <td className="py-2 pr-2 font-semibold text-navy">{r.campaign}</td>
+                  <td className="px-2 text-right">{money(r.spend)}</td>
+                  <td className="px-2 text-right">{r.impressions.toLocaleString("en-CA")}</td>
+                  <td className="px-2 text-right">{r.clicks.toLocaleString("en-CA")}</td>
+                  <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
+                  <td className="px-2 text-right">{r.leads}</td>
+                  <td className="px-2 text-right font-semibold">{r.cpl != null ? money(r.cpl) : "—"}</td>
+                  <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
+                  <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        <p className="mt-2 text-xs text-muted">Cost/lead + ROAS join ad spend to your leads by campaign — fills in as UTM-tagged ads bring in leads.</p>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const { profiles, lookupsTotal } = data;
   const [filters, setFilters] = useState<Filters>({});
@@ -415,6 +510,10 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       <Section title="Segments — how different groups respond">
         <SegmentView rows={segments} dim={dim} setDim={setDim} />
+      </Section>
+
+      <Section title="Ad performance (Meta) — spend & cost-per-lead">
+        <AdPerformance profiles={profiles} />
       </Section>
 
       <Section title="Geography">
