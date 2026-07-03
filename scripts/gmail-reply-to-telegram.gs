@@ -22,8 +22,10 @@
  */
 
 // ====== FILL THESE IN ======
-var BOT_TOKEN = 'PASTE_TELEGRAM_BOT_TOKEN_HERE';
-var CHAT_ID   = 'PASTE_TELEGRAM_CHAT_ID_HERE';
+var BOT_TOKEN   = 'PASTE_TELEGRAM_BOT_TOKEN_HERE';
+var CHAT_ID     = 'PASTE_TELEGRAM_CHAT_ID_HERE';
+var SITE_URL    = 'https://www.driveoffer.ca';   // your live site
+var CRON_SECRET = 'PASTE_YOUR_CRON_SECRET_HERE';  // = your Amplify CRON_SECRET; logs the reply onto the customer's analytics profile
 // ===========================
 
 // Which emails count as "a customer reply". The default matches inbox mail
@@ -64,6 +66,7 @@ function checkEmailAndNotify() {
         var rm = (msgs[k].getPlainBody() || '').match(/Ref:\s*([a-z0-9]{6,12})\b/i);
         if (rm) { ref = rm[1]; break; }
       }
+      if (ref) logReplyToProfile(ref); // stamp the reply on the customer's analytics profile
       var offerLine = ref
         ? '\n\nSend an offer → /offer ' + ref + ' <price>'
         : '\n\nSend an offer → /offer <id> <price>  (id is in the Leads alert)';
@@ -89,4 +92,19 @@ function sendTelegram(text) {
     payload: JSON.stringify({ chat_id: CHAT_ID, text: text, disable_web_page_preview: true }),
     muteHttpExceptions: true
   });
+}
+
+// Tell the site a customer replied by email, so it shows on their analytics
+// profile (lastReplyAt / repliesCount). Best-effort — never breaks the alert.
+function logReplyToProfile(ref) {
+  if (!ref || !CRON_SECRET || CRON_SECRET.indexOf('PASTE') === 0) return;
+  try {
+    UrlFetchApp.fetch(SITE_URL + '/api/leads/reply', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + CRON_SECRET },
+      payload: JSON.stringify({ ref: ref, channel: 'email' }),
+      muteHttpExceptions: true
+    });
+  } catch (e) { /* best-effort */ }
 }
