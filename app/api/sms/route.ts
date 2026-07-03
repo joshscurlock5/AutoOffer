@@ -103,7 +103,14 @@ export async function POST(req: NextRequest) {
       return twiml();
     }
 
-    // A real reply — forward it so the owner can respond (parity with email replies).
+    // A real reply — stamp the person's profile, then forward it (parity with email replies).
+    if (lead) {
+      await updateLead(lead.id, {
+        lastReplyAt: new Date().toISOString(),
+        repliesCount: (lead.repliesCount || 0) + 1,
+        lastInboundChannel: "sms",
+      });
+    }
     await notifyOwner(
       [
         "\u{1F4AC} Text reply from a customer",

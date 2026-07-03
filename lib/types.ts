@@ -76,6 +76,37 @@ export interface Contact {
   bestTime?: string;
 }
 
+/** First-touch marketing attribution — which ad/campaign/referrer brought a
+ * person in. Captured client-side on the first page they land on (first-touch
+ * wins) and carried into the lead + partial beacon. */
+export interface Attribution {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  gclid?: string;
+  fbclid?: string;
+  /** External referrer at first touch (same-origin referrers are dropped). */
+  referrer?: string;
+  /** First landing path (+query). */
+  landingPath?: string;
+  landingAt?: string;
+}
+
+/** Lightweight on-site behavior summary, accumulated client-side in localStorage
+ * across the session and sent with the lead. */
+export interface Behavior {
+  sessionId?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  pageviews?: number;
+  /** Furthest offer-flow step reached (1=vehicle, 2=details, 3=contact, 5=done). */
+  maxFunnelStep?: number;
+  /** lastSeenAt − firstSeenAt, computed at read time. */
+  timeOnSiteMs?: number;
+}
+
 export interface Lead {
   id: string;
   kind: LeadKind;
@@ -151,6 +182,20 @@ export interface Lead {
   lastNurtureAt?: string;
   /** True once the customer texted STOP (or Twilio flagged them) — suppresses ALL further SMS. */
   smsOptOut?: boolean;
+  /** First-touch marketing attribution (which ad/campaign/referrer brought them). */
+  attribution?: Attribution;
+  /** Lightweight on-site behavior summary captured client-side. */
+  behavior?: Behavior;
+  /** GA4 client_id (from the _ga cookie) captured at submission, for GA session stitching. */
+  gaClientId?: string;
+  /** First landing path (+query) — quick access without digging into `attribution`. */
+  landingPath?: string;
+  /** External referrer URL at first touch. */
+  referrerUrl?: string;
+  /** Inbound-reply signals folded onto the profile by the SMS/email/chat handlers. */
+  lastReplyAt?: string;
+  repliesCount?: number;
+  lastInboundChannel?: "sms" | "email" | "chat";
   source: string;
 }
 

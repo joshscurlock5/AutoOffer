@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { getLeads, addLead, updateLead } from "@/lib/store";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import type { Lead, VehicleInfo } from "@/lib/types";
+import { parseAttribution, parseBehavior } from "@/lib/attribution";
+import { clientIdFromGaCookie } from "@/lib/ga4Mp";
 
 export const runtime = "nodejs";
 
@@ -55,6 +57,11 @@ export async function POST(req: NextRequest) {
     const vehicle: VehicleInfo | undefined =
       year || make || model ? { year, make, model, trim: trim || undefined, mileageKm } : undefined;
 
+    // Per-person profile enrichment (mirrors the full lead route).
+    const attribution = parseAttribution(body.attribution);
+    const behavior = parseBehavior(body.behavior);
+    const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
+
     // Dedupe against existing leads by email/phone (volume is small; a scan is cheap).
     const leads = await getLeads();
     const eKey = validEmail ? email.toLowerCase() : "";
@@ -71,7 +78,16 @@ export async function POST(req: NextRequest) {
     }
     // An earlier partial exists — refresh it instead of creating a duplicate.
     if (match && match.status === "partial") {
-      await updateLead(match.id, { contact: { name, email, phone, contactMethod }, vehicle });
+      await updateLead(match.id, {
+        contact: { name, email, phone, contactMethod },
+        vehicle,
+        ...(behavior ? { behavior } : {}),
+        // Preserve first-touch attribution / gaClientId — only fill if not already set.
+        ...(attribution && !match.attribution
+          ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
+          : {}),
+        ...(gaClientId && !match.gaClientId ? { gaClientId } : {}),
+      });
       return NextResponse.json({ ok: true, updated: true });
     }
 
@@ -83,6 +99,11 @@ export async function POST(req: NextRequest) {
       contact: { name, email, phone, contactMethod },
       vehicle,
       photos: [],
+      ...(attribution
+        ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
+        : {}),
+      ...(behavior ? { behavior } : {}),
+      ...(gaClientId ? { gaClientId } : {}),
       source: "web-partial",
     };
     await addLead(lead);

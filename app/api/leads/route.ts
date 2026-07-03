@@ -7,9 +7,10 @@ import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/type
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead, splitName } from "@/lib/metaCapi";
-import { sendGa4Lead } from "@/lib/ga4Mp";
+import { sendGa4Lead, clientIdFromGaCookie } from "@/lib/ga4Mp";
 import { sendLeadConfirmation } from "@/lib/email";
 import { smsLeadConfirmation } from "@/lib/sms";
+import { parseAttribution, parseBehavior } from "@/lib/attribution";
 
 export const runtime = "nodejs";
 
@@ -156,6 +157,12 @@ export async function POST(req: NextRequest) {
     const fbc = req.cookies.get("_fbc")?.value;
     const userAgent = req.headers.get("user-agent") || undefined;
 
+    // Per-person profile enrichment: first-touch attribution + on-site behavior
+    // (sent by the client) + the GA4 client_id (for GA session stitching).
+    const attribution = parseAttribution(str(form.get("attribution")));
+    const behavior = parseBehavior(str(form.get("behavior")));
+    const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
+
     const lead: Lead = {
       id,
       kind,
@@ -168,6 +175,11 @@ export async function POST(req: NextRequest) {
       message: str(form.get("message")) || undefined,
       referralCode: str(form.get("referralCode")) || undefined,
       meta: { fbc, fbp, eventId: metaEventId, clientIp: ip, userAgent },
+      ...(attribution
+        ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
+        : {}),
+      ...(behavior ? { behavior } : {}),
+      ...(gaClientId ? { gaClientId } : {}),
       source: "web",
     };
 

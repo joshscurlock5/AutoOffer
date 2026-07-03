@@ -85,6 +85,8 @@ async function main() {
   fd.append("phone", "(587) 555-1234");
   fd.append("referralCode", "FRIEND-AB12");
   fd.append("condition", JSON.stringify({ tags: ["Minor cosmetic (dents, scratches)"], note: "small scratch on rear bumper" }));
+  fd.append("attribution", JSON.stringify({ utmSource: "facebook", utmMedium: "cpc", utmCampaign: "smoke-campaign", referrer: "https://l.facebook.com/" }));
+  fd.append("behavior", JSON.stringify({ sessionId: "smoke-sess-1", pageviews: 5, maxFunnelStep: 3, firstSeenAt: new Date(Date.now() - 120000).toISOString(), lastSeenAt: new Date().toISOString() }));
 
   const lr = await fetch(BASE + "/api/leads", { method: "POST", body: fd });
   const lj = await lr.json().catch(() => ({}));
@@ -118,6 +120,19 @@ async function main() {
   const nlr = await fetch(BASE + "/api/leads", { method: "POST", body: nfd });
   const nlj = await nlr.json().catch(() => ({}));
   ok("POST lead with NO name -> ok", nlr.status === 200 && nlj.ok === true, JSON.stringify(nlj));
+
+  // --- second lead, SAME phone as the first (identity-stitch merge test) ---
+  const dfd = new FormData();
+  dfd.append("kind", "vehicle");
+  dfd.append("year", "2016");
+  dfd.append("make", "Ford");
+  dfd.append("model", "F-150");
+  dfd.append("mileageKm", "120000");
+  dfd.append("phone", "(587) 555-1234"); // same phone as the first lead
+  dfd.append("contactMethod", "text");
+  const dlr = await fetch(BASE + "/api/leads", { method: "POST", body: dfd });
+  const dlj = await dlr.json().catch(() => ({}));
+  ok("POST second lead (same phone) -> ok", dlr.status === 200 && dlj.ok === true, JSON.stringify(dlj));
 
   // --- referral ---
   const rr = await fetch(BASE + "/api/referrals", {
@@ -190,12 +205,36 @@ async function main() {
     ok("lead vehicle data correct", found.vehicle?.make === "Dodge" && found.vehicle?.model === "Challenger");
     ok("lead referral code captured", found.referralCode === "FRIEND-AB12");
     ok("lead defaults to status 'new'", found.status === "new");
+    ok("lead stored attribution (campaign)", found.attribution?.utmCampaign === "smoke-campaign", JSON.stringify(found.attribution));
+    ok("lead stored behavior (pageviews)", found.behavior?.pageviews === 5, JSON.stringify(found.behavior));
   }
   ok("referral visible in admin", (aj.referrals || []).some((r) => r.referrer?.email === "jane@example.com"));
   ok(
     "partial lead captured in admin",
     (aj.leads || []).some((l) => l.status === "partial" && l.contact?.email === "partial-test@example.com"),
   );
+
+  // --- analytics: auth gate + shape + identity stitching ---
+  ok("analytics without cookie -> 401", (await fetch(BASE + "/api/admin/analytics")).status === 401);
+  const an = await fetch(BASE + "/api/admin/analytics", { headers: { Cookie: cookie } });
+  const anj = await an.json().catch(() => ({}));
+  ok("authed analytics -> 200", an.status === 200, `(got ${an.status})`);
+  ok(
+    "analytics returns profiles + aggregates",
+    Array.isArray(anj.profiles) && !!anj.aggregates && Array.isArray(anj.aggregates.funnel),
+    JSON.stringify(Object.keys(anj || {})),
+  );
+  ok(
+    "analytics profiles deduped (<= lead count)",
+    Array.isArray(anj.profiles) && anj.profiles.length <= (aj.leads || []).length,
+    `profiles=${(anj.profiles || []).length} leads=${(aj.leads || []).length}`,
+  );
+  if (found) {
+    const dg = (s) => (s || "").replace(/\D/g, "");
+    const prof = (anj.profiles || []).find((p) => (p.phones || []).some((ph) => dg(ph) === "5875551234"));
+    ok("same-phone leads merged into one profile", !!prof && prof.leadIds.length >= 2, prof ? `leadIds=${prof.leadIds.length}` : "no profile");
+    ok("profile carries first-touch campaign", !!prof && prof.attribution?.utmCampaign === "smoke-campaign", prof ? JSON.stringify(prof.source) : "no profile");
+  }
 
   // --- gated uploads route still protected (used for historical leads' photos) ---
   ok(

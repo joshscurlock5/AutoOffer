@@ -1,0 +1,183 @@
+import type { Attribution, Behavior } from "./types";
+
+// ===========================================================================
+//  Client-side first-touch attribution + lightweight behavior tracking.
+//
+//  Persists to localStorage so the data survives across pages and rides along
+//  with the lead + partial-beacon submissions. FIRST-TOUCH WINS — we keep the
+//  campaign/referrer that originally brought the person in, not the last click.
+//
+//  The capture functions (captureFirstTouch / markFunnelStep / getAttribution /
+//  getBehavior) touch window/localStorage and are safe no-ops on the server.
+//  The parse functions (parseAttribution / parseBehavior) are pure + defensive,
+//  so the API routes can import this module server-side and only call those.
+// ===========================================================================
+
+const ATTR_KEY = "ao_attribution";
+const BEHAVIOR_KEY = "ao_behavior";
+
+function canUseStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function read<T>(key: string): T | null {
+  if (!canUseStorage()) return null;
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, val: unknown): void {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    /* storage full / disabled — never disrupt the page */
+  }
+}
+
+function randomId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch {
+    /* fall through */
+  }
+  return `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+}
+
+/**
+ * Record first-touch attribution and start/refresh the behavior session. Call
+ * on every page load / route change (from <Analytics/>). Attribution is written
+ * once and never overwritten; the behavior counters bump on each call.
+ */
+export function captureFirstTouch(): void {
+  if (!canUseStorage()) return;
+  const url = new URL(window.location.href);
+  const p = url.searchParams;
+
+  // First-touch attribution — only set if we've never captured it before.
+  if (!read<Attribution>(ATTR_KEY)) {
+    let referrer = document.referrer || "";
+    try {
+      // Drop same-origin referrers (internal nav) — we want the EXTERNAL source.
+      if (referrer && new URL(referrer).host === window.location.host) referrer = "";
+    } catch {
+      /* keep referrer as-is */
+    }
+    const attr: Attribution = {
+      utmSource: p.get("utm_source") || undefined,
+      utmMedium: p.get("utm_medium") || undefined,
+      utmCampaign: p.get("utm_campaign") || undefined,
+      utmContent: p.get("utm_content") || undefined,
+      utmTerm: p.get("utm_term") || undefined,
+      gclid: p.get("gclid") || undefined,
+      fbclid: p.get("fbclid") || undefined,
+      referrer: referrer || undefined,
+      landingPath: url.pathname + (url.search || ""),
+      landingAt: new Date().toISOString(),
+    };
+    write(ATTR_KEY, attr);
+  }
+
+  // Behavior session — create once, then bump pageviews + lastSeenAt each call.
+  const now = new Date().toISOString();
+  const b: Behavior = read<Behavior>(BEHAVIOR_KEY) || {
+    sessionId: randomId(),
+    firstSeenAt: now,
+    pageviews: 0,
+    maxFunnelStep: 0,
+  };
+  b.lastSeenAt = now;
+  b.pageviews = (b.pageviews || 0) + 1;
+  write(BEHAVIOR_KEY, b);
+}
+
+/** Record the furthest offer-flow step the visitor reached (monotonic). */
+export function markFunnelStep(step: number): void {
+  if (!canUseStorage()) return;
+  const b: Behavior = read<Behavior>(BEHAVIOR_KEY) || {
+    sessionId: randomId(),
+    firstSeenAt: new Date().toISOString(),
+    pageviews: 0,
+    maxFunnelStep: 0,
+  };
+  if ((b.maxFunnelStep || 0) < step) {
+    b.maxFunnelStep = step;
+    b.lastSeenAt = new Date().toISOString();
+    write(BEHAVIOR_KEY, b);
+  }
+}
+
+/** The stored first-touch attribution (empty object if none). */
+export function getAttribution(): Attribution {
+  return read<Attribution>(ATTR_KEY) || {};
+}
+
+/** The behavior summary, with timeOnSiteMs computed (lastSeen − firstSeen). */
+export function getBehavior(): Behavior {
+  const b = read<Behavior>(BEHAVIOR_KEY) || {};
+  const first = b.firstSeenAt ? Date.parse(b.firstSeenAt) : NaN;
+  const last = b.lastSeenAt ? Date.parse(b.lastSeenAt) : NaN;
+  const timeOnSiteMs =
+    Number.isFinite(first) && Number.isFinite(last) && last >= first ? last - first : undefined;
+  return { ...b, ...(timeOnSiteMs != null ? { timeOnSiteMs } : {}) };
+}
+
+// ---- Server-safe defensive parsers (used by the API routes) ----------------
+
+function S(v: unknown, max: number): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim().slice(0, max);
+  return t || undefined;
+}
+
+function N(v: unknown, max: number): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n), max) : undefined;
+}
+
+/** Parse + clamp the attribution JSON the client sent. undefined when empty. */
+export function parseAttribution(raw: unknown): Attribution | undefined {
+  if (!raw) return undefined;
+  try {
+    const o = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    if (!o || typeof o !== "object") return undefined;
+    const a: Attribution = {
+      utmSource: S(o.utmSource, 120),
+      utmMedium: S(o.utmMedium, 120),
+      utmCampaign: S(o.utmCampaign, 200),
+      utmContent: S(o.utmContent, 200),
+      utmTerm: S(o.utmTerm, 200),
+      gclid: S(o.gclid, 400),
+      fbclid: S(o.fbclid, 400),
+      referrer: S(o.referrer, 400),
+      landingPath: S(o.landingPath, 400),
+      landingAt: S(o.landingAt, 40),
+    };
+    return Object.values(a).some(Boolean) ? a : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Parse + clamp the behavior JSON the client sent. undefined when empty. */
+export function parseBehavior(raw: unknown): Behavior | undefined {
+  if (!raw) return undefined;
+  try {
+    const o = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    if (!o || typeof o !== "object") return undefined;
+    const b: Behavior = {
+      sessionId: S(o.sessionId, 60),
+      firstSeenAt: S(o.firstSeenAt, 40),
+      lastSeenAt: S(o.lastSeenAt, 40),
+      pageviews: N(o.pageviews, 100000),
+      maxFunnelStep: N(o.maxFunnelStep, 100),
+      timeOnSiteMs: N(o.timeOnSiteMs, 1000 * 60 * 60 * 24 * 30), // cap 30 days
+    };
+    return Object.values(b).some((v) => v !== undefined) ? b : undefined;
+  } catch {
+    return undefined;
+  }
+}

@@ -7,6 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track, trackFunnel } from "@/lib/analytics";
+import { getAttribution, getBehavior, markFunnelStep } from "@/lib/attribution";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
@@ -198,6 +199,11 @@ export default function OfferFlow() {
     }
   }, [year, make, model, trim, kmv, damageTags, damageNote, name, email, phone, contactMethod, bestTime, step]);
 
+  // Record the furthest offer-flow step reached — feeds the per-person behavior summary.
+  useEffect(() => {
+    markFunnelStep(step);
+  }, [step]);
+
   const models = make ? modelsFor(make) : [];
   const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
@@ -251,6 +257,8 @@ export default function OfferFlow() {
         model,
         trim: trim === TRIM_UNSURE ? "" : trim,
         mileageKm: kmv,
+        attribution: getAttribution(),
+        behavior: getBehavior(),
       });
       navigator.sendBeacon("/api/leads/partial", new Blob([payload], { type: "application/json" }));
       track("partial_captured", {});
@@ -463,6 +471,9 @@ export default function OfferFlow() {
       fd.append("metaEventId", metaEventId);
       if (tsToken) fd.append("turnstileToken", tsToken);
       fd.append("condition", JSON.stringify({ tags: damageTags, note: damageNote.trim() }));
+      // First-touch attribution + behavior summary for the per-person profile.
+      fd.append("attribution", JSON.stringify(getAttribution()));
+      fd.append("behavior", JSON.stringify(getBehavior()));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");

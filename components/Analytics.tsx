@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { captureFirstTouch } from "@/lib/attribution";
 
 /**
  * Fires a GA4 page_view on every client-side route change. App Router SPA
@@ -16,6 +17,8 @@ export default function Analytics() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // First-touch attribution + behavior counters (safe no-op without storage).
+    captureFirstTouch();
     const qs = searchParams?.toString();
     const path = qs ? `${pathname}?${qs}` : pathname;
     if (typeof window.gtag === "function") {

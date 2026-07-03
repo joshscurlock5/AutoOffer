@@ -253,9 +253,17 @@ export default function AdminDashboard({
               Admin
             </span>
           </div>
-          <button onClick={logout} className="text-sm font-semibold text-muted hover:text-brand">
-            Sign out
-          </button>
+          <div className="flex items-center gap-4">
+            <a
+              href="/admin/analytics"
+              className="rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
+            >
+              Analytics
+            </a>
+            <button onClick={logout} className="text-sm font-semibold text-muted hover:text-brand">
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
 
