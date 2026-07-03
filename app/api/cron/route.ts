@@ -166,7 +166,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
           });
           const loc = lead.appointmentLocation ? `\n📍 ${lead.appointmentLocation}` : "";
           const confirmed = lead.appointmentConfirmedAt ? " ✅ confirmed" : "";
-          await notifyOwner(`📅 Inspection soon (${when})${confirmed} — ${leadLine(lead)}${loc}`);
+          await notifyOwner(`📅 Inspection soon (${when})${confirmed} — ${leadLine(lead)}${loc}`, "bookings");
           await updateLead(lead.id, { apptRemindedAt: nowISO });
           summary.apptReminders += 1;
         }

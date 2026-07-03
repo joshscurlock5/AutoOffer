@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, cancelScheduledEmails } from "@/lib/email";
+import { telegramChatIds } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import type { Lead } from "@/lib/types";
 
@@ -48,7 +49,6 @@ function carText(lead: Lead): string {
 // ---------------------------------------------------------------------------
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const EMOJI_USAGE = String.fromCodePoint(0x1f4ca); // 📊 bar chart
 
@@ -80,8 +80,10 @@ export async function POST(req: NextRequest) {
     const text: string = String(msg?.text || "").trim();
     const fromChat = msg?.chat?.id;
 
-    // 2) Only respond to the authorized chat.
-    if (!msg || (CHAT_ID && String(fromChat) !== String(CHAT_ID))) {
+    // 2) Only respond to one of the owner's authorized chats — any configured
+    //    channel group (Leads / Bookings / Updates / Replies / the original chat).
+    const allowedChats = telegramChatIds();
+    if (!msg || (allowedChats.length && !allowedChats.includes(String(fromChat)))) {
       return NextResponse.json({ ok: true });
     }
 

@@ -157,6 +157,16 @@ leads; a daily **needs-action digest** (8am MT); **T-2h** inspection ping
 (send offer + mint booking link), **`/moreinfo <id> <questions, one per line>`** (one
 email; at least one question required, one bullet per line), `/schedule <id> <YYYY-MM-DD HH:MM>` (Mountain Time), `/cancel`, `/usage`.
 
+**Telegram channels (split by urgency).** `lib/notify.ts` routes each alert to one
+of four optional chats via env vars; anything unset falls back to `TELEGRAM_CHAT_ID`:
+**🚗 Leads** (`TELEGRAM_CHAT_LEADS` — new leads, website chats, your command replies),
+**💬 Replies** (`TELEGRAM_CHAT_REPLIES` — customer email replies, via the Gmail script),
+**💰 Bookings** (`TELEGRAM_CHAT_BOOKINGS` — booked, confirmed, T-2h heads-up),
+**📋 Updates** (`TELEGRAM_CHAT_UPDATES`, keep muted — stale nudges, abandoned-cart,
+referrals, daily digest, weekly scoreboard). The webhook accepts commands from ANY
+configured chat (`telegramChatIds()`). All four must be added to the `amplify.yml`
+env whitelist or they won't reach the runtime.
+
 **Customer self-booking:** the offer email + reminders link to `/book/<token>`
 (unguessable token minted on `/confirm`). The page shows the car/offer and 45-min
 slots within the shop's hours (Mon/Tue 8–3:30, Wed/Thu 8–6:30, Fri 8–4:30, Sat

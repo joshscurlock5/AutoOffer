@@ -14,8 +14,36 @@ import type { Lead, Referral } from "./types";
  * can be frozen mid-flight and never deliver.
  */
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// Split notification channels — each optional. Anything unset falls back to the
+// original single chat (TELEGRAM_CHAT_ID), so the split rolls out safely: until a
+// group's id is configured, its messages keep going to the current chat.
+const CHAT_MAIN = process.env.TELEGRAM_CHAT_ID;
+const CHAT_LEADS = process.env.TELEGRAM_CHAT_LEADS;
+const CHAT_REPLIES = process.env.TELEGRAM_CHAT_REPLIES;
+const CHAT_BOOKINGS = process.env.TELEGRAM_CHAT_BOOKINGS;
+const CHAT_UPDATES = process.env.TELEGRAM_CHAT_UPDATES;
 const api = (method: string) => `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
+
+export type NotifyChannel = "leads" | "replies" | "bookings" | "updates";
+
+/** Resolve a channel to its chat id; falls back to the main chat when unset. */
+function chatFor(channel: NotifyChannel): string | undefined {
+  const map: Record<NotifyChannel, string | undefined> = {
+    leads: CHAT_LEADS,
+    replies: CHAT_REPLIES,
+    bookings: CHAT_BOOKINGS,
+    updates: CHAT_UPDATES,
+  };
+  return map[channel] || CHAT_MAIN;
+}
+
+/** Every configured chat id — the webhook uses this to accept commands from any
+ * of the owner's groups (Leads / Bookings / Updates / Replies / the original). */
+export function telegramChatIds(): string[] {
+  return [CHAT_MAIN, CHAT_LEADS, CHAT_REPLIES, CHAT_BOOKINGS, CHAT_UPDATES].filter(
+    (x): x is string => Boolean(x),
+  );
+}
 
 // Category emojis built from codepoints so they always survive the build + JSON
 // transport intact (a literal emoji added here once arrived as escaped text).
@@ -64,39 +92,41 @@ function buildText(lead: Lead): string {
   return lines.join("\n");
 }
 
-async function sendText(text: string): Promise<void> {
+async function sendText(text: string, chatId: string): Promise<void> {
   const r = await fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, text, disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
   });
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
 }
 
 /** Alert the owner about a new lead. No-op if unconfigured; never throws. */
 export async function notifyNewLead(lead: Lead): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) return;
+  const chat = chatFor("leads");
+  if (!BOT_TOKEN || !chat) return;
   const text = buildText(lead);
   const sid = lead.id.split("-")[0];
   try {
-    await sendText(text);
+    await sendText(text, chat);
     // Second message: the bare short ID only — no emoji, no label, nothing else —
     // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
     // only (the /offer, /confirm, /cancel command replies never send it).
-    await sendText(sid);
+    await sendText(sid, chat);
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
   }
 }
 
-/** Generic owner Telegram message (gated, best-effort, never throws). Used by the
- * scheduled cron for stale-lead SLA alerts, the daily "needs action" digest,
- * appointment reminders, and the weekly scoreboard. Caller should await it. */
-export async function notifyOwner(text: string): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) return;
+/** Generic owner Telegram message (gated, best-effort, never throws). Routes to
+ * `channel` (defaults to the muted Updates channel); booking/appointment events
+ * pass "bookings". Used by the scheduled cron and the booking routes. Await it. */
+export async function notifyOwner(text: string, channel: NotifyChannel = "updates"): Promise<void> {
+  const chat = chatFor(channel);
+  if (!BOT_TOKEN || !chat) return;
   try {
-    await sendText(text);
+    await sendText(text, chat);
   } catch (e) {
     console.error("[notify] owner message failed:", e);
   }
@@ -125,14 +155,15 @@ export async function notifyNewChatMessage(opts: {
   contact?: string;
   conversationId: string;
 }): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) return;
+  const chat = chatFor("leads");
+  if (!BOT_TOKEN || !chat) return;
   const who = opts.name?.trim() ? opts.name.trim() : "Visitor";
   const lines: string[] = [`${EMOJI_CHAT} New chat message`, "", `From: ${who}`];
   if (opts.contact?.trim()) lines.push(`Contact: ${opts.contact.trim()}`);
   lines.push("", `"${opts.text.slice(0, 500)}"`, "", "Reply in Messages: https://www.driveoffer.ca/admin");
   const text = lines.join("\n");
   try {
-    await sendText(text);
+    await sendText(text, chat);
   } catch (e) {
     console.error("[notify] chat Telegram alert failed:", e);
   }
@@ -143,7 +174,8 @@ export async function notifyNewChatMessage(opts: {
  * friend they referred. No-op if unconfigured; never throws. Caller must await.
  */
 export async function notifyNewReferral(ref: Referral): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) return;
+  const chat = chatFor("updates");
+  if (!BOT_TOKEN || !chat) return;
   const r = ref.referrer;
   const fr = ref.friend;
   const lines: string[] = [`${EMOJI_REFERRAL} New DriveOffer referral`, "", `Referred by: ${r.name}`];
@@ -155,7 +187,7 @@ export async function notifyNewReferral(ref: Referral): Promise<void> {
   if (fr.email) lines.push(`Email: ${fr.email}`);
   if (ref.message) lines.push("", `"${ref.message.slice(0, 300)}"`);
   try {
-    await sendText(lines.join("\n"));
+    await sendText(lines.join("\n"), chat);
   } catch (e) {
     console.error("[notify] referral Telegram alert failed:", e);
   }
