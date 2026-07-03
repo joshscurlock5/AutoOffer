@@ -82,7 +82,8 @@ function nextStepsBox(lead: Lead): string {
   return `<tr><td style="padding:0 28px;">
     <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">What happens next</div>
-      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:4px;">A ${esc(site.name)} specialist will ${reachVerb(lead)} with your offer. There's no obligation &mdash; and if it's a fit, we handle pickup, payment, and the paperwork.</div>
+      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:4px;">A ${esc(site.name)} specialist will ${reachVerb(lead)} with your offer.</div>
+      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:8px;">There's no obligation &mdash; and if it's a fit, we handle pickup, payment, and the paperwork.</div>
     </div></td></tr>`;
 }
 function ctaBox(): string {
@@ -311,7 +312,10 @@ function bookingConfirmationEmail(lead: Lead): Email {
       <div style="font-size:18px;font-weight:800;color:#0f5132;margin-top:6px;">${when}</div>
       <div style="font-size:15px;color:#1f2a36;margin-top:6px;">&#128205; ${where}</div>
     </div></td></tr>`;
-  const confirmNote = `<tr><td style="padding:0 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">We'll send you a reminder the morning of — <strong>please tap &ldquo;Confirm&rdquo; so we know you're still on.</strong> We only send a rep out to bookings that are confirmed.</td></tr>`;
+  const confirmNote = `<tr><td style="padding:0 28px 10px;">
+    <div style="font-size:14px;line-height:1.55;color:#3a4654;">We'll send you a reminder the morning of — <strong>please tap &ldquo;Confirm&rdquo; so we know you're still on.</strong></div>
+    <div style="font-size:14px;line-height:1.55;color:#3a4654;margin-top:8px;">We only send a rep out to bookings that are confirmed.</div>
+  </td></tr>`;
   const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft).\nNeed to change it? Just call or text.`;
   return {
     subject: `Booked — your ${site.name} inspection`,
@@ -438,8 +442,9 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
     Questions? You can always reply to this email, or <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:600;">call or text us</a> — whatever's easiest.
   </td></tr>`;
 
-  const noPressure = `<tr><td style="padding:2px 28px 4px;font-size:15px;line-height:1.6;color:#3a4654;">
-    No pressure &mdash; once you see it, it's your call. If it's a yes, we come to you and pay on the spot.
+  const noPressure = `<tr><td style="padding:2px 28px 4px;">
+    <div style="font-size:15px;line-height:1.6;color:#3a4654;">No pressure &mdash; once you see it, it's your call.</div>
+    <div style="font-size:15px;line-height:1.6;color:#3a4654;margin-top:10px;">If it's a yes, we come to you and pay on the spot.</div>
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Talk soon,<br/>
