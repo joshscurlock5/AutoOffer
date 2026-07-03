@@ -60,9 +60,17 @@ function reachVerb(lead: Lead): string {
 // ---- HTML building blocks (shared chrome) ---------------------------------
 
 function intro(heading: string, paragraphHtml: string): string {
-  return `<tr><td style="padding:28px 28px 8px;">
-    <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">${heading}</h1>
-    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#3a4654;">${paragraphHtml}</p>
+  // Split on newlines so a body can be several short paragraphs (easier to skim
+  // on a phone). A single-line body stays one paragraph, unchanged.
+  const paras = paragraphHtml
+    .split("\n")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 14px;font-size:16px;line-height:1.6;color:#3a4654;">${p}</p>`)
+    .join("");
+  return `<tr><td style="padding:28px 28px 10px;">
+    <h1 style="margin:0 0 14px;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">${heading}</h1>
+    ${paras}
   </td></tr>`;
 }
 // "What happens next" reassurance box for vehicle leads. (Replaced the old
@@ -118,7 +126,8 @@ function linkButton(url: string, label: string, alt = false): string {
     <a href="${url}" style="display:inline-block;background:${alt ? "#0e1c2b" : "#1A7F54"};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">${label}</a>
   </td></tr>`;
 }
-/** A pill button with an optional badge INSIDE it, vertically centered with the label. */
+/** A pill button with an optional badge INSIDE it, vertically centered with the label.
+ * Used for the SECONDARY actions (Book online, etc.); the call button uses callButtonB. */
 function pillButton(href: string, label: string, badge: string, dark: boolean): string {
   const bg = dark ? "#0e1c2b" : "#1A7F54";
   const badgeHtml = badge
@@ -126,15 +135,22 @@ function pillButton(href: string, label: string, badge: string, dark: boolean): 
     : "";
   return `<a href="${href}" style="display:inline-block;background:${bg};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 20px;border-radius:999px;margin:0 8px 8px 0;"><span style="vertical-align:middle;">${label}</span>${badgeHtml}</a>`;
 }
-/** A single "Call or text" button (optional in-button badge), as a full row. */
-function callCta(badge: string): string {
-  return `<tr><td style="padding:0 28px 12px;">${pillButton(`tel:${site.phoneE164}`, `Call or text ${esc(site.phoneDisplay)}`, badge, false)}</td></tr>`;
+/** The primary "call or text" button — stacked (a small "Fastest · Call or text"
+ * line over the big, tappable number) so it never wraps/smushes on a phone. */
+function callButtonB(): string {
+  return `<a href="tel:${site.phoneE164}" style="display:block;background:#1A7F54;color:#ffffff;text-decoration:none;text-align:center;padding:13px 18px;border-radius:14px;margin:0 0 8px;">
+    <span style="display:block;font-size:11px;line-height:1.3;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:#d6f5e5;">&#9889; Fastest &middot; Call or text</span>
+    <span style="display:block;font-size:21px;line-height:1.3;font-weight:800;margin-top:2px;">${esc(site.phoneDisplay)}</span>
+  </a>`;
 }
-/** Call/text (primary, badged) + a secondary action button (optionally badged). No caption. */
-function callFirstCta(callBadge: string, secondUrl: string, secondLabel: string, secondBadge: string): string {
-  const call = pillButton(`tel:${site.phoneE164}`, `Call or text ${esc(site.phoneDisplay)}`, callBadge, false);
+/** A single "Call or text" button, as a full row. */
+function callCta(_badge: string): string {
+  return `<tr><td style="padding:0 28px 12px;">${callButtonB()}</td></tr>`;
+}
+/** Call/text (primary) + a secondary action button (optionally badged). No caption. */
+function callFirstCta(_callBadge: string, secondUrl: string, secondLabel: string, secondBadge: string): string {
   const second = secondUrl ? pillButton(secondUrl, secondLabel, secondBadge, true) : "";
-  return `<tr><td style="padding:0 28px 12px;">${call}${second}</td></tr>`;
+  return `<tr><td style="padding:0 28px 12px;">${callButtonB()}${second}</td></tr>`;
 }
 /** "Call or text is fastest" emphasis line — used to nudge phone contact in every email. */
 function fastestLine(): string {
@@ -256,7 +272,7 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
 function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
-  const body = `To get you an accurate offer on ${carRef}, we just need a couple details. The fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then. Prefer email? Just reply with the answers below.`;
+  const body = `To get you an accurate offer on ${carRef}, we just need a couple details.\nThe fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then.\nPrefer email? Just reply with the answers below.`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
     html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest") + refRow(lead)),
