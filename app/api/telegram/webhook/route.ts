@@ -80,6 +80,13 @@ export async function POST(req: NextRequest) {
     const text: string = String(msg?.text || "").trim();
     const fromChat = msg?.chat?.id;
 
+    // /id — reply with this chat's own id. Placed BEFORE the allowlist so a brand-
+    // new notification group (not yet in the env vars) can still discover its id.
+    if (msg && /^\/id(@\w+)?\b/i.test(text)) {
+      await reply(fromChat, `This chat's ID: ${fromChat}`);
+      return NextResponse.json({ ok: true });
+    }
+
     // 2) Only respond to one of the owner's authorized chats — any configured
     //    channel group (Leads / Bookings / Updates / Replies / the original chat).
     const allowedChats = telegramChatIds();
