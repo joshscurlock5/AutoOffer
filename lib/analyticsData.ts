@@ -1,10 +1,13 @@
 import "server-only";
 import { getLeads, getReferrals, getConversations, getLookups } from "./store";
-import { buildProfiles, computeAggregates, type Profile, type Aggregates } from "./profiles";
+import { buildProfiles, computeAggregates, type Aggregates } from "./profiles";
+import type { Profile } from "./types";
 
 export interface AnalyticsData {
   profiles: Profile[];
   aggregates: Aggregates;
+  /** Total price-lookups (anonymous funnel top; not per-profile filterable). */
+  lookupsTotal: number;
 }
 
 /**
@@ -22,5 +25,5 @@ export async function getAnalytics(): Promise<AnalyticsData> {
   ]);
   const profiles = buildProfiles(leads, referrals, chats);
   const aggregates = computeAggregates(leads, lookups, profiles);
-  return { profiles, aggregates };
+  return { profiles, aggregates, lookupsTotal: lookups.length };
 }

@@ -1,14 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
-import type { Profile } from "@/lib/profiles";
+import type { Profile } from "@/lib/types";
+import {
+  computeView,
+  filterProfiles,
+  computeFilterOptions,
+  segmentTable,
+  SEGMENT_DIMENSIONS,
+  type Filters,
+  type SegmentDimension,
+  type Count,
+} from "@/lib/analyticsView";
 
 // ---------------------------------------------------------------------------
-//  Customer-360 analytics dashboard. Renders per-person profiles + first-party
-//  charts, all from data computed server-side (lib/analyticsData → lib/profiles).
-//  Hand-rolled bars/funnel (CSS width %) — no charting dependency.
+//  Customer-360 analytics dashboard. All data is computed server-side (profiles)
+//  then filtered + re-aggregated in the browser (lib/analyticsView) so the filter
+//  bar is instant. Hand-rolled charts (CSS width %) — no charting dependency.
 // ---------------------------------------------------------------------------
 
 const STAGE_STYLE: Record<string, string> = {
@@ -30,8 +40,7 @@ function timeAgo(iso?: string): string {
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function fmtDur(ms?: number): string {
@@ -41,6 +50,11 @@ function fmtDur(ms?: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${s % 60}s`;
   return `${(m / 60).toFixed(1)}h`;
+}
+
+function fmtMins(m?: number | null): string {
+  if (m == null) return "—";
+  return m < 60 ? `${m}m` : `${(m / 60).toFixed(1)}h`;
 }
 
 function money(n?: number): string {
@@ -57,14 +71,13 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-/** Horizontal labelled bars. */
-function HBars({ title, rows }: { title: string; rows: { label: string; count: number }[] }) {
+function HBars({ title, rows }: { title: string; rows: Count[] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">{title}</h3>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">No data yet.</p>
+        <p className="text-sm text-muted">No data.</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
@@ -82,8 +95,7 @@ function HBars({ title, rows }: { title: string; rows: { label: string; count: n
   );
 }
 
-/** The conversion funnel as descending bars with step-to-step %. */
-function Funnel({ rows }: { rows: { label: string; count: number }[] }) {
+function Funnel({ rows }: { rows: Count[] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card p-4">
@@ -94,7 +106,7 @@ function Funnel({ rows }: { rows: { label: string; count: number }[] }) {
           const pct = i > 0 && prev > 0 ? Math.round((r.count / prev) * 100) : null;
           return (
             <div key={r.label} className="flex items-center gap-2 text-sm">
-              <div className="w-28 shrink-0 text-muted">{r.label}</div>
+              <div className="w-24 shrink-0 text-muted">{r.label}</div>
               <div className="h-5 flex-1 rounded bg-slate-100">
                 <div className="flex h-5 items-center rounded bg-brand-600 px-2 text-xs font-semibold text-white" style={{ width: `${(r.count / max) * 100}%` }}>
                   {r.count}
@@ -109,18 +121,17 @@ function Funnel({ rows }: { rows: { label: string; count: number }[] }) {
   );
 }
 
-/** Compact vertical bars for leads-over-time. */
 function VBars({ title, rows }: { title: string; rows: { date: string; leads: number }[] }) {
   const max = Math.max(1, ...rows.map((r) => r.leads));
   return (
     <div className="card p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">{title}</h3>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">No leads in the last 30 days.</p>
+        <p className="text-sm text-muted">No leads in range.</p>
       ) : (
-        <div className="flex h-28 items-end gap-1">
+        <div className="flex h-28 items-end gap-0.5 overflow-x-auto">
           {rows.map((r) => (
-            <div key={r.date} className="flex-1 rounded-t bg-brand-600/80" style={{ height: `${(r.leads / max) * 100}%` }} title={`${r.date}: ${r.leads}`} />
+            <div key={r.date} className="min-w-[4px] flex-1 rounded-t bg-brand-600/80" style={{ height: `${(r.leads / max) * 100}%` }} title={`${r.date}: ${r.leads}`} />
           ))}
         </div>
       )}
@@ -128,9 +139,133 @@ function VBars({ title, rows }: { title: string; rows: { date: string; leads: nu
   );
 }
 
+function Heatmap({ grid }: { grid: number[][] }) {
+  const max = Math.max(1, ...grid.flat());
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return (
+    <div className="card overflow-x-auto p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, your time)</h3>
+      <div className="min-w-[560px] space-y-0.5">
+        {grid.map((row, d) => (
+          <div key={d} className="flex items-center gap-0.5">
+            <div className="w-8 shrink-0 text-[11px] text-muted">{days[d]}</div>
+            {row.map((c, h) => (
+              <div
+                key={h}
+                className="h-4 flex-1 rounded-sm"
+                style={{ backgroundColor: c ? `rgba(37,99,235,${0.18 + 0.82 * (c / max)})` : "#f1f5f9" }}
+                title={`${days[d]} ${h}:00 — ${c} lead${c === 1 ? "" : "s"}`}
+              />
+            ))}
+          </div>
+        ))}
+        <div className="flex gap-0.5 pl-8 pt-1 text-[10px] text-muted">
+          <span className="flex-1">12a</span>
+          <span className="flex-[6] text-center">6a</span>
+          <span className="flex-[6] text-center">12p</span>
+          <span className="flex-[6] text-center">6p</span>
+          <span className="flex-[5] text-right">11p</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Sel({
+  label,
+  value,
+  onChange,
+  opts,
+}: {
+  label: string;
+  value?: string;
+  onChange: (v?: string) => void;
+  opts: string[];
+}) {
+  return (
+    <label className="flex min-w-[120px] flex-col text-xs">
+      <span className="mb-0.5 font-semibold text-muted">{label}</span>
+      <select className="field py-1.5 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">All</option>
+        {opts.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SegmentView({
+  rows,
+  dim,
+  setDim,
+}: {
+  rows: ReturnType<typeof segmentTable>;
+  dim: SegmentDimension;
+  setDim: (d: SegmentDimension) => void;
+}) {
+  return (
+    <div className="card overflow-x-auto p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-navy">Segment performance — how each group responds</h3>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          Compare by
+          <select className="field py-1 text-sm" value={dim} onChange={(e) => setDim(e.target.value as SegmentDimension)}>
+            {SEGMENT_DIMENSIONS.map((d) => (
+              <option key={d.key} value={d.key}>{d.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <table className="w-full min-w-[680px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+            <th className="py-2 pr-2">Group</th>
+            <th className="px-2 text-right">People</th>
+            <th className="px-2 text-right">Leads</th>
+            <th className="px-2 text-right">Offers</th>
+            <th className="px-2 text-right">Close %</th>
+            <th className="px-2 text-right">Avg offer</th>
+            <th className="px-2 text-right">Revenue</th>
+            <th className="pl-2 text-right">Avg resp</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={8} className="py-3 text-muted">No data.</td></tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.group} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy">{r.group}</td>
+                <td className="px-2 text-right">{r.people}</td>
+                <td className="px-2 text-right">{r.leads}</td>
+                <td className="px-2 text-right">{r.offers}</td>
+                <td className="px-2 text-right font-semibold">{r.closeRate}%</td>
+                <td className="px-2 text-right">{r.avgOffer ? money(r.avgOffer) : "—"}</td>
+                <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
+                <td className="pl-2 text-right">{fmtMins(r.avgResponseMins)}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex gap-2">
+      <span className="w-28 shrink-0 text-muted">{k}</span>
+      <span className="min-w-0 truncate text-ink" title={v}>{v}</span>
+    </div>
+  );
+}
+
 function ProfileRow({ p }: { p: Profile }) {
   const [open, setOpen] = useState(false);
   const a = p.attribution;
+  const loc = [p.geo?.city, p.geo?.region, p.geo?.country].filter(Boolean).join(", ");
   return (
     <div className="card p-4">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-start justify-between gap-3 text-left">
@@ -139,10 +274,10 @@ function ProfileRow({ p }: { p: Profile }) {
             <span className="font-semibold text-navy">{p.name || p.emails[0] || p.phones[0] || "(no name)"}</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STAGE_STYLE[p.stage] || "bg-slate-100 text-slate-600"}`}>{p.stage}</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">via {p.source}</span>
+            {p.device?.type && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">{p.device.type}</span>}
+            {loc && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">{loc}</span>}
           </div>
-          <div className="mt-1 truncate text-sm text-muted">
-            {[...p.phones, ...p.emails].join(" · ") || "no contact"}
-          </div>
+          <div className="mt-1 truncate text-sm text-muted">{[...p.phones, ...p.emails].join(" · ") || "no contact"}</div>
           {p.vehicles.length > 0 && <div className="mt-0.5 truncate text-sm text-ink">{p.vehicles.join(", ")}</div>}
         </div>
         <div className="shrink-0 text-right text-xs text-muted">
@@ -154,7 +289,6 @@ function ProfileRow({ p }: { p: Profile }) {
 
       {open && (
         <div className="mt-3 grid gap-4 border-t border-slate-100 pt-3 md:grid-cols-2">
-          {/* Attribution + behavior */}
           <div className="space-y-1.5 text-sm">
             <div className="text-xs font-bold uppercase tracking-wide text-muted">Where they came from</div>
             <Row k="Source" v={p.source} />
@@ -163,14 +297,16 @@ function ProfileRow({ p }: { p: Profile }) {
             {a?.utmContent && <Row k="Ad / content" v={a.utmContent} />}
             {a?.referrer && <Row k="Referrer" v={a.referrer} />}
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
+            {loc && <Row k="Location" v={loc} />}
+            {p.device?.type && <Row k="Device" v={[p.device.type, p.device.os, p.device.browser].filter(Boolean).join(" · ")} />}
             <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">On-site behavior</div>
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
             <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />
             <Row k="Furthest step" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
             {p.offer && <Row k="Offer" v={`${money(p.offer.low)}–${money(p.offer.high)}`} />}
+            {p.firstResponseMins != null && <Row k="Response time" v={fmtMins(p.firstResponseMins)} />}
             {p.appointmentAt && <Row k="Inspection" v={new Date(p.appointmentAt).toLocaleString("en-CA")} />}
           </div>
-          {/* Timeline */}
           <div>
             <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">Timeline</div>
             <ol className="space-y-1.5">
@@ -185,9 +321,7 @@ function ProfileRow({ p }: { p: Profile }) {
               ))}
             </ol>
             {p.leadIds.length > 0 && (
-              <Link href="/admin" className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline">
-                Open in Leads →
-              </Link>
+              <Link href="/admin" className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline">Open in Leads →</Link>
             )}
           </div>
         </div>
@@ -196,34 +330,43 @@ function ProfileRow({ p }: { p: Profile }) {
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex gap-2">
-      <span className="w-28 shrink-0 text-muted">{k}</span>
-      <span className="min-w-0 truncate text-ink" title={v}>{v}</span>
-    </div>
+    <section className="mt-8">
+      <h2 className="mb-3 text-lg font-bold text-navy">{title}</h2>
+      {children}
+    </section>
   );
 }
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
-  const { profiles, aggregates: agg } = data;
+  const { profiles, lookupsTotal } = data;
+  const [filters, setFilters] = useState<Filters>({});
+  const [dim, setDim] = useState<SegmentDimension>("source");
   const [q, setQ] = useState("");
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return profiles;
-    return profiles.filter((p) =>
-      [p.name, ...p.emails, ...p.phones, p.source, ...p.vehicles, p.attribution?.utmCampaign]
+  const options = useMemo(() => computeFilterOptions(profiles), [profiles]);
+  const filtered = useMemo(() => filterProfiles(profiles, filters), [profiles, filters]);
+  const view = useMemo(() => computeView(filtered), [filtered]);
+  const segments = useMemo(() => segmentTable(filtered, dim), [filtered, dim]);
+  const list = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    if (!n) return filtered;
+    return filtered.filter((p) =>
+      [p.name, ...p.emails, ...p.phones, p.source, ...p.vehicles, p.attribution?.utmCampaign, p.geo?.city, p.geo?.region]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(needle),
+        .includes(n),
     );
-  }, [q, profiles]);
+  }, [q, filtered]);
+
+  const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
+  const activeFilters = Object.values(filters).filter(Boolean).length;
 
   return (
     <div className="container-x py-8">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-navy">Customer Analytics</h1>
           <p className="text-sm text-muted">One profile per person — ad → visit → form → replies → close.</p>
@@ -231,42 +374,83 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Link href="/admin" className="text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
       </div>
 
-      {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="People" value={String(agg.totals.profiles)} />
-        <StatCard label="Leads" value={String(agg.totals.leads)} />
-        <StatCard label="Abandoned" value={String(agg.totals.partials)} sub="started, no submit" />
-        <StatCard label="Lookups" value={String(agg.totals.lookups)} />
-        <StatCard label="Closed" value={String(agg.revenue.closed)} sub={money(agg.revenue.total)} />
-        <StatCard label="Avg response" value={agg.avgFirstResponseMins == null ? "—" : agg.avgFirstResponseMins < 60 ? `${agg.avgFirstResponseMins}m` : `${(agg.avgFirstResponseMins / 60).toFixed(1)}h`} />
+      {/* Filter bar — drives everything below */}
+      <div className="card mb-6 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col text-xs">
+            <span className="mb-0.5 font-semibold text-muted">From</span>
+            <input type="date" className="field py-1.5 text-sm" value={filters.dateFrom || ""} onChange={(e) => set({ dateFrom: e.target.value || undefined })} />
+          </label>
+          <label className="flex flex-col text-xs">
+            <span className="mb-0.5 font-semibold text-muted">To</span>
+            <input type="date" className="field py-1.5 text-sm" value={filters.dateTo || ""} onChange={(e) => set({ dateTo: e.target.value || undefined })} />
+          </label>
+          <Sel label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
+          <Sel label="Province/Region" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
+          <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
+          <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
+          <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
+          {activeFilters > 0 && (
+            <button type="button" onClick={() => setFilters({})} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
+              Clear ({activeFilters})
+            </button>
+          )}
+          <span className="ml-auto self-center text-sm text-muted">{filtered.length} of {profiles.length} people</span>
+        </div>
       </div>
 
-      {/* Charts */}
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
-        <Funnel rows={agg.funnel} />
-        <VBars title="Leads — last 30 days" rows={agg.overTime} />
-        <HBars title="By source" rows={agg.bySource} />
-        <HBars title="By campaign" rows={agg.byCampaign} />
-        <HBars title="By status" rows={agg.byStatus} />
+      {/* Overview */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="People" value={String(view.totals.people)} />
+        <StatCard label="Leads" value={String(view.totals.leads)} />
+        <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" />
+        <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" />
+        <StatCard label="Closed" value={String(view.totals.closed)} sub={money(view.totals.revenue)} />
+        <StatCard label="Avg response" value={fmtMins(view.totals.avgResponseMins)} />
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Funnel rows={view.funnel} />
+        <VBars title="Leads over time" rows={view.overTime} />
       </div>
 
-      {/* Profiles */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-navy">Profiles ({filtered.length})</h2>
-        <input
-          className="field max-w-xs"
-          placeholder="Search name, phone, email, campaign…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </div>
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <p className="text-sm text-muted">No profiles match.</p>
-        ) : (
-          filtered.map((p) => <ProfileRow key={p.id} p={p} />)
-        )}
-      </div>
+      <Section title="Segments — how different groups respond">
+        <SegmentView rows={segments} dim={dim} setDim={setDim} />
+      </Section>
+
+      <Section title="Geography">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <HBars title="By country" rows={view.byCountry} />
+          <HBars title="By province / region" rows={view.byRegion} />
+        </div>
+      </Section>
+
+      <Section title="Acquisition">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <HBars title="By source" rows={view.bySource} />
+          <HBars title="By campaign" rows={view.byCampaign} />
+        </div>
+      </Section>
+
+      <Section title="Behavior & mix">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <HBars title="By device" rows={view.byDevice} />
+          <HBars title="By vehicle make" rows={view.byMake} />
+          <HBars title="By status" rows={view.byStatus} />
+          <HBars title="By contact preference" rows={view.byContactMethod} />
+        </div>
+        <div className="mt-4">
+          <Heatmap grid={view.heatmap} />
+        </div>
+      </Section>
+
+      <Section title={`Profiles (${list.length})`}>
+        <div className="mb-3">
+          <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="space-y-3">
+          {list.length === 0 ? <p className="text-sm text-muted">No profiles match.</p> : list.map((p) => <ProfileRow key={p.id} p={p} />)}
+        </div>
+      </Section>
     </div>
   );
 }

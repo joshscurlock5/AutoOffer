@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLeads, updateLead } from "@/lib/store";
 import { notifyOwner, leadLine } from "@/lib/notify";
+import { resolveGeo } from "@/lib/geo";
 import {
   sendPostOfferFollowup,
   sendAwaitingInfoReminder,
@@ -63,6 +64,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     apptReminders: 0,
     dayOfReminders: 0,
     partialRecovery: 0,
+    geoResolved: 0,
     digestSent: false,
     scoreboardSent: false,
   };
@@ -97,8 +99,22 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  const GEO_CAP = 25; // cap geo lookups per run (free API courtesy)
+  let geoAttempts = 0;
+
   for (const lead of leads) {
     try {
+      // --- Backfill coarse geolocation from the stored IP (best-effort, capped).
+      //     Keeps geo off the lead-submit path; new + historical leads fill in here. ---
+      if (geoAttempts < GEO_CAP && lead.meta?.clientIp && !lead.geo) {
+        geoAttempts += 1;
+        const g = await resolveGeo(lead.meta.clientIp);
+        if (g) {
+          await updateLead(lead.id, { geo: g });
+          summary.geoResolved += 1;
+        }
+      }
+
       // --- Stale-lead SLA alerts: unworked "new" leads, escalating + de-duped ---
       if (lead.status === "new" && lead.createdAt) {
         const age = now - new Date(lead.createdAt).getTime();

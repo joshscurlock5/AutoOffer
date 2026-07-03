@@ -107,6 +107,22 @@ export interface Behavior {
   timeOnSiteMs?: number;
 }
 
+/** Coarse geolocation resolved from the client IP (best-effort, ~province-level). */
+export interface Geo {
+  country?: string;
+  countryCode?: string;
+  region?: string; // province / state
+  city?: string;
+  resolvedAt?: string;
+}
+
+/** Device/browser parsed from the user-agent (computed at read time). */
+export interface DeviceInfo {
+  type?: "mobile" | "desktop" | "tablet";
+  os?: string;
+  browser?: string;
+}
+
 export interface Lead {
   id: string;
   kind: LeadKind;
@@ -192,11 +208,51 @@ export interface Lead {
   landingPath?: string;
   /** External referrer URL at first touch. */
   referrerUrl?: string;
+  /** Coarse geolocation resolved from the client IP (country/province/city). */
+  geo?: Geo;
   /** Inbound-reply signals folded onto the profile by the SMS/email/chat handlers. */
   lastReplyAt?: string;
   repliesCount?: number;
   lastInboundChannel?: "sms" | "email" | "chat";
   source: string;
+}
+
+/** One event on a person's unified timeline. */
+export interface ProfileEvent {
+  at: string;
+  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close";
+  label: string;
+  leadId?: string;
+}
+
+/** One person, stitched from all their leads/partials/referrals/chats. Computed
+ * at read time by lib/profiles.ts; carries everything the dashboard filters on. */
+export interface Profile {
+  id: string;
+  name?: string;
+  emails: string[];
+  phones: string[];
+  stage: LeadStatus;
+  contactMethod?: "call" | "text" | "email";
+  source: string;
+  attribution?: Attribution;
+  behavior?: Behavior;
+  geo?: Geo;
+  device?: DeviceInfo;
+  createdAt?: string;
+  firstSeenAt?: string;
+  lastActivityAt?: string;
+  touchCount: number;
+  vehicles: string[];
+  make?: string;
+  offer?: { low: number; high: number; sentAt: string };
+  offerMid?: number;
+  appointmentAt?: string;
+  purchasePrice?: number;
+  firstResponseMins?: number;
+  repliesCount: number;
+  timeline: ProfileEvent[];
+  leadIds: string[];
 }
 
 export interface Referral {

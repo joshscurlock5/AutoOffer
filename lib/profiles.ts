@@ -7,6 +7,9 @@ import type {
   Attribution,
   Behavior,
   Lookup,
+  Profile,
+  ProfileEvent,
+  DeviceInfo,
 } from "./types";
 
 // ===========================================================================
@@ -35,37 +38,7 @@ const STATUS_RANK: Record<LeadStatus, number> = {
   closed: 6,
 };
 
-export interface ProfileEvent {
-  at: string;
-  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close";
-  label: string;
-  leadId?: string;
-}
-
-export interface Profile {
-  /** Deterministic group key (a normalized email/phone root). Stable given the same data. */
-  id: string;
-  name?: string;
-  emails: string[];
-  phones: string[];
-  /** Furthest lifecycle stage reached across this person's records. */
-  stage: LeadStatus;
-  contactMethod?: "call" | "text" | "email";
-  /** Human label for where they came from (campaign / source / referrer / Direct). */
-  source: string;
-  attribution?: Attribution;
-  behavior?: Behavior;
-  firstSeenAt?: string;
-  lastActivityAt?: string;
-  touchCount: number;
-  vehicles: string[];
-  offer?: { low: number; high: number; sentAt: string };
-  appointmentAt?: string;
-  purchasePrice?: number;
-  repliesCount: number;
-  timeline: ProfileEvent[];
-  leadIds: string[];
-}
+// Profile + ProfileEvent types live in lib/types.ts (shared with the client dashboard).
 
 // ---- union-find over identifier strings ("e:<email>" / "p:<phone>") ----------
 class UnionFind {
@@ -178,6 +151,38 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
 }
 
+/** Parse a user-agent into a coarse device profile (type / OS / browser). */
+function deviceFromUA(ua?: string): DeviceInfo | undefined {
+  if (!ua) return undefined;
+  const s = ua.toLowerCase();
+  const type: DeviceInfo["type"] = /ipad|tablet/.test(s)
+    ? "tablet"
+    : /mobi|iphone|android/.test(s)
+      ? "mobile"
+      : "desktop";
+  const os = /iphone|ipad|ios/.test(s)
+    ? "iOS"
+    : /android/.test(s)
+      ? "Android"
+      : /windows/.test(s)
+        ? "Windows"
+        : /mac os|macintosh/.test(s)
+          ? "macOS"
+          : /linux/.test(s)
+            ? "Linux"
+            : undefined;
+  const browser = /edg\//.test(s)
+    ? "Edge"
+    : /chrome|crios/.test(s)
+      ? "Chrome"
+      : /firefox|fxios/.test(s)
+        ? "Firefox"
+        : /safari/.test(s)
+          ? "Safari"
+          : undefined;
+  return { type, os, browser };
+}
+
 function buildOne(root: string, group: Rec[]): Profile {
   const leads = group.filter((r): r is Extract<Rec, { kind: "lead" }> => r.kind === "lead").map((r) => r.lead);
   const referrals = group
@@ -256,6 +261,16 @@ function buildOne(root: string, group: Rec[]): Profile {
   const firstSeenAt = [behavior?.firstSeenAt, ...times].filter((t): t is string => Boolean(t)).sort()[0];
   const lastActivityAt = [...times].sort().pop();
 
+  const recent = [...sortedLeads].reverse();
+  const geo = recent.find((l) => l.geo)?.geo;
+  const device = deviceFromUA(recent.find((l) => l.meta?.userAgent)?.meta?.userAgent);
+  const make = recent.find((l) => l.vehicle?.make)?.vehicle?.make;
+  const offerMid = offer ? Math.round((offer.low + offer.high) / 2) : undefined;
+  const fl = sortedLeads.find((l) => l.firstTouchAt && l.createdAt);
+  const firstResponseMins = fl
+    ? Math.max(0, Math.round((Date.parse(fl.firstTouchAt as string) - Date.parse(fl.createdAt)) / 60000))
+    : undefined;
+
   return {
     id: root,
     name: [...names][0],
@@ -266,13 +281,19 @@ function buildOne(root: string, group: Rec[]): Profile {
     source: sourceLabel(attribution),
     attribution,
     behavior,
+    geo,
+    device,
+    createdAt: sortedLeads[0]?.createdAt,
     firstSeenAt,
     lastActivityAt,
     touchCount: leads.length + chats.length + referrals.length + repliesCount,
     vehicles: [...vehicles],
+    make,
     offer: offer || undefined,
+    offerMid,
     appointmentAt,
     purchasePrice,
+    firstResponseMins,
     repliesCount,
     timeline,
     leadIds: leads.map((l) => l.id),
