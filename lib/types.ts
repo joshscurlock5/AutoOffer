@@ -139,6 +139,8 @@ export interface Lead {
   bookingToken?: string;
   /** When a "need more info" / question email was last sent (base for the awaiting-info reminders). */
   moreInfoSentAt?: string;
+  /** The questions asked via /moreinfo, so the awaiting-info reminder can repeat them. */
+  infoQuestions?: string[];
   /** Owner stale-lead SLA nudges already sent (idempotency guard for the cron). */
   staleNudges?: number;
   lastNudgedAt?: string;

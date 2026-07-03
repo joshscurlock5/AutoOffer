@@ -111,6 +111,49 @@ function bookingBox(lead: Lead): string {
     <div style="font-size:13px;line-height:1.5;color:#7b8794;margin-top:8px;">Booking a time is optional — the fastest way to finalize is a quick <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:600;">call or text to ${esc(site.phoneDisplay)}</a>. No need to pick a time here unless you'd prefer to.</div>
   </td></tr>`;
 }
+
+/** A pill button linking anywhere — green by default, dark navy when alt=true. */
+function linkButton(url: string, label: string, alt = false): string {
+  return `<tr><td style="padding:0 28px 8px;">
+    <a href="${url}" style="display:inline-block;background:${alt ? "#0e1c2b" : "#1A7F54"};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">${label}</a>
+  </td></tr>`;
+}
+/** A pill button with an optional badge INSIDE it, vertically centered with the label. */
+function pillButton(href: string, label: string, badge: string, dark: boolean): string {
+  const bg = dark ? "#0e1c2b" : "#1A7F54";
+  const badgeHtml = badge
+    ? `<span style="display:inline-block;vertical-align:middle;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:rgba(255,255,255,.24);color:#ffffff;border-radius:999px;padding:2px 7px;margin-left:7px;">${badge}</span>`
+    : "";
+  return `<a href="${href}" style="display:inline-block;background:${bg};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 20px;border-radius:999px;margin:0 8px 8px 0;"><span style="vertical-align:middle;">${label}</span>${badgeHtml}</a>`;
+}
+/** A single "Call or text" button (optional in-button badge), as a full row. */
+function callCta(badge: string): string {
+  return `<tr><td style="padding:0 28px 12px;">${pillButton(`tel:${site.phoneE164}`, `Call or text ${esc(site.phoneDisplay)}`, badge, false)}</td></tr>`;
+}
+/** Call/text (primary, badged) + a secondary action button (optionally badged). No caption. */
+function callFirstCta(callBadge: string, secondUrl: string, secondLabel: string, secondBadge: string): string {
+  const call = pillButton(`tel:${site.phoneE164}`, `Call or text ${esc(site.phoneDisplay)}`, callBadge, false);
+  const second = secondUrl ? pillButton(secondUrl, secondLabel, secondBadge, true) : "";
+  return `<tr><td style="padding:0 28px 12px;">${call}${second}</td></tr>`;
+}
+/** "Call or text is fastest" emphasis line — used to nudge phone contact in every email. */
+function fastestLine(): string {
+  return `<tr><td style="padding:2px 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">
+    &#9889; <strong>Fastest:</strong> call or text <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a> now — we can often sort your offer on the spot.
+  </td></tr>`;
+}
+/** Bulleted list of the questions we asked via /moreinfo (reused by the request + reminder). */
+function questionsBox(qs: string[]): string {
+  if (!qs || !qs.length) return "";
+  const items = qs
+    .map((q) => `<div style="font-size:15px;line-height:1.5;color:#1f2a36;margin:5px 0;">&#8226;&nbsp;&nbsp;${esc(q)}</div>`)
+    .join("");
+  return `<tr><td style="padding:0 28px 6px;">
+    <div style="background:#f3f6f8;border:1px solid #e4e9ed;border-radius:12px;padding:15px 18px;margin-bottom:14px;">
+      <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:#5b6b63;font-weight:700;margin-bottom:4px;">What we still need</div>
+      ${items}
+    </div></td></tr>`;
+}
 function shell(
   innerRows: string,
   footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
@@ -142,14 +185,13 @@ function shell(
 type Email = { subject: string; html: string };
 
 function confirmationEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const v = lead.vehicle;
-  const body = v
-    ? `Thanks, ${first}! We've got the details for your <strong>${carLine(lead)}</strong>. One of our specialists will <strong>${reachVerb(lead)}</strong> shortly with your offer.`
-    : `Thanks, ${first}! We've received your message and a member of our team will be in touch shortly.`;
+  const heading = v ? `We've got your ${carLine(lead)}` : "We've got your details";
+  const head = `<tr><td style="padding:28px 28px 4px;"><h1 style="margin:0;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">${heading}</h1></td></tr>`;
+  const faster = `<tr><td style="padding:0 28px 8px;font-size:14px;line-height:1.55;color:#3a4654;">Want it faster? <strong>Call or text ${esc(site.phoneDisplay)}</strong> now — we can often give you your offer on the spot.</td></tr>`;
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    html: shell(intro(`You're all set, ${first}`, body) + nextStepsBox(lead) + ctaBox()),
+    html: shell(head + nextStepsBox(lead) + faster + callCta("fastest")),
   };
 }
 
@@ -179,7 +221,6 @@ function drip2Email(lead: Lead): Email {
 // booking yet. steps 0/1/2 = +2 / +5 / +10 days. Each pushes call/text as the
 // fastest path and offers the self-booking link.
 function postOfferFollowupEmail(lead: Lead, step: number): Email {
-  const first = firstName(lead);
   const car = carLine(lead) || "your car";
   const plain = carPlain(lead) || "your car";
   const priceText = lead.offer
@@ -188,63 +229,47 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
       : `${money(lead.offer.low)} &ndash; ${money(lead.offer.high)}`
     : "your offer";
   const bodies = [
-    `Hi ${first} — just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you. The fastest way to lock it in is a quick call or text — we can often confirm on the spot. Ready to go? Book a time below and we'll come to you and pay on the spot.`,
-    `Hi ${first} — your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands. Used values shift week to week, so it's worth locking in this week's number. Call or text for the quickest answer, or book your pickup below.`,
-    `Hi ${first} — last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>. Whenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
+    `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you. The fastest way to lock it in is a quick call or text — we can often confirm on the spot. Ready to go? Book a time below and we'll come to you and pay on the spot.`,
+    `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands. Used values shift week to week, so it's worth locking in this week's number. Call or text for the quickest answer, or book your pickup below.`,
+    `Last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>. Whenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
   ];
   const subjects = [
     `Any questions about your ${plain} offer?`,
     `Your offer still stands — ${site.name}`,
     `Last reminder — your offer for ${plain}`,
   ];
-  const headings = [`Your offer's ready, ${first}`, "Still good to go?", "Still here when you're ready"];
+  const headings = ["Your offer's ready", "Still good to go?", "Still here when you're ready"];
   const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
   return {
     subject: subjects[i],
-    html: shell(intro(headings[i], bodies[i]) + bookingBox(lead) + ctaBox() + proofBox()),
+    html: shell(intro(headings[i], bodies[i]) + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + proofBox()),
   };
 }
 
-// Sent by /moreinfo — we need a bit more detail before quoting. Call/text first.
-function moreInfoEmail(lead: Lead): Email {
-  const first = firstName(lead);
+// Sent by /moreinfo — the questions we need answered before quoting. Call/text first.
+function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
-  const body = `Hi ${first} — thanks for sending over ${carRef}! To get you an accurate offer, we just need a couple more details about the car. The fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then. Prefer email? No problem — just reply to this message and we'll take it from there.`;
+  const body = `To get you an accurate offer on ${carRef}, we just need a couple details. The fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then. Prefer email? Just reply with the answers below.`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
-    html: shell(intro(`Almost there, ${first}`, body) + ctaBox() + proofBox()),
-  };
-}
-
-// Sent by /ask — a specific question about the vehicle. Call/text first.
-function askEmail(lead: Lead, question: string): Email {
-  const first = firstName(lead);
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
-  const q = esc(question);
-  const body = `Hi ${first} — quick question about ${carRef} so we can finalize your offer:<br/><br/><strong>${q}</strong><br/><br/>The fastest way to answer is a quick <strong>call or text</strong> — we can often wrap up your offer on the spot. Or just reply to this email, whatever's easiest.`;
-  return {
-    subject: v ? `Quick question about your ${v.make} ${v.model}` : `Quick question about your vehicle — ${site.name}`,
-    html: shell(intro(`One quick thing, ${first}`, body) + ctaBox() + proofBox()),
+    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest")),
   };
 }
 
 // Cron reminder while we're awaiting the customer's info (after /moreinfo or /ask).
 function awaitingInfoReminderEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Hi ${first} — we're ready to send your offer on ${carRef} as soon as we get the last detail or two. The fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot. Prefer email? Just reply and we'll take it from there.`;
+  const body = `We're ready to send your offer on ${carRef} as soon as we get the final details. The fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot. Prefer email? Just reply with the answers below and we'll take it from there.`;
   return {
     subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
-    html: shell(intro(`Let's finish your offer, ${first}`, body) + ctaBox() + proofBox()),
+    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest")),
   };
 }
 
 // Confirmation after the customer self-books an inspection.
 function bookingConfirmationEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
   const when = lead.appointmentAt
@@ -264,16 +289,16 @@ function bookingConfirmationEmail(lead: Lead): Email {
       <div style="font-size:18px;font-weight:800;color:#0f5132;margin-top:6px;">${when}</div>
       <div style="font-size:15px;color:#1f2a36;margin-top:6px;">&#128205; ${where}</div>
     </div></td></tr>`;
-  const body = `You're booked, ${first}! A ${esc(site.name)} rep will come to ${carRef} at the time and place below, confirm your offer on the spot, and — if it's a yes — pay you right there (e-transfer or bank draft). Need to change it? Just call or text.`;
+  const confirmNote = `<tr><td style="padding:0 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">We'll send you a reminder the morning of — <strong>please tap &ldquo;Confirm&rdquo; so we know you're still on.</strong> We only send a rep out to bookings that are confirmed.</td></tr>`;
+  const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft). Need to change it? Just call or text.`;
   return {
     subject: `Booked — your ${site.name} inspection`,
-    html: shell(intro("You're booked!", body) + detailBox + ctaBox() + proofBox()),
+    html: shell(intro("You're booked!", body) + detailBox + confirmNote + ctaBox()),
   };
 }
 
 // Morning-of reminder with a one-tap "Confirm I'll be there" button.
 function bookingDayOfEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const time = lead.appointmentAt
     ? new Date(lead.appointmentAt).toLocaleString("en-CA", { timeZone: "America/Edmonton", hour: "numeric", minute: "2-digit" })
     : "today";
@@ -283,7 +308,7 @@ function bookingDayOfEmail(lead: Lead): Email {
         <a href="${site.url}/api/book/confirm?token=${lead.bookingToken}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">&#10003; Confirm I'll be there</a>
       </td></tr>`
     : "";
-  const body = `Hi ${first} — quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot if it's a yes. Tap below to confirm you'll be there — or call/text us if anything's changed.`;
+  const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot. <strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit. Something changed? Just call or text.`;
   return {
     subject: `Today: your ${site.name} inspection at ${time}`,
     html: shell(intro("See you today!", body) + confirmBtn + ctaBox()),
@@ -304,13 +329,12 @@ function extendedNurtureEmail(lead: Lead): Email {
 
 // Day-21 win-back for a lead marked "lost" (declined / went cold), cron-driven, once.
 function winbackEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Hi ${first} — still have ${carRef}? Prices have moved since we last talked, and we'd be glad to take another look and re-quote — no obligation at all. If you've already sold it, no worries; just ignore this.`;
+  const body = `Still have ${carRef}? Prices have moved, and we'd be glad to take another look and re-quote — no obligation at all. If you've already sold it, no worries; just ignore this.`;
   return {
     subject: v ? `Still have your ${v.make} ${v.model}? Happy to re-quote` : `Happy to re-quote — ${site.name}`,
-    html: shell(intro(`Want a fresh offer, ${first}?`, body) + ctaBox() + proofBox()),
+    html: shell(intro("Want a fresh offer?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "")),
   };
 }
 
@@ -339,13 +363,12 @@ function appointmentReminderEmail(lead: Lead): Email {
 // Abandoned-cart recovery: a single, transactional nudge to someone who typed
 // their contact but never submitted (cron-driven off a "partial" lead).
 function partialRecoveryEmail(lead: Lead): Email {
-  const first = firstName(lead);
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Hi ${first} — looks like you started getting an offer for ${carRef} but didn't finish. Want us to pick it up? It takes about a minute — reply, call, or text and we'll get you a firm, no-obligation number. We come to you and pay on the spot.`;
+  const body = `Looks like you started getting an offer on ${carRef} but didn't finish. Pick up where you left off — it only takes a minute, and we come to you and pay on the spot.`;
   return {
-    subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Want us to finish your offer? — ${site.name}`,
-    html: shell(intro(`Your offer's almost ready, ${first}`, body) + ctaBox() + proofBox()),
+    subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Finish your offer — ${site.name}`,
+    html: shell(intro("Your offer is almost ready", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Finish online &rarr;", "")),
   };
 }
 
@@ -355,7 +378,7 @@ function referralConfirmationEmail(ref: Referral): Email {
   const first = esc((ref.referrer.name || "there").trim().split(" ")[0] || "there");
   const friend = ref.friend?.name ? esc(ref.friend.name.trim().split(" ")[0]) : "";
   const who = friend || "your friend";
-  const body = `Thanks for spreading the word, ${first}! We've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon. When ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
+  const body = `Thanks for spreading the word! We've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon. When ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
   const codeBox = `<tr><td style="padding:0 28px;">
     <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your referral code</div>
@@ -365,7 +388,7 @@ function referralConfirmationEmail(ref: Referral): Email {
   return {
     subject: `Thanks for referring ${friend || "a friend"} — ${site.name}`,
     html: shell(
-      intro(`Thanks, ${first}!`, body) + codeBox + ctaBox(),
+      intro(`Thanks, ${first}!`, body) + codeBox + linkButton(site.url, "Visit DriveOffer") + ctaBox(),
       "You're receiving this because you referred a friend at driveoffer.ca.",
     ),
   };
@@ -375,31 +398,25 @@ function referralConfirmationEmail(ref: Referral): Email {
 // number is whatever the owner decided; we present it and note it's confirmed
 // at a quick, no-obligation inspection. Signed by the owner from site-config.
 function offerEmail(lead: Lead, low: number, high: number): Email {
-  const first = firstName(lead);
   const car = carLine(lead); // escaped, for HTML
+  const plain = carPlain(lead);
   const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
   const leadIn = car
-    ? `Thanks for sending over your <strong>${car}</strong>. Based on the basics, here's our range:`
-    : `Thanks for the details on your vehicle. Based on the basics, here's our range:`;
+    ? `We looked at similar vehicles — here's your offer for your <strong>${car}</strong>:`
+    : `We looked at similar vehicles — here's your offer:`;
 
-  const rangeBox = `<tr><td style="padding:0 28px;">
-    <div style="background:#EAF5EF;border:1px solid #cfe6da;border-radius:12px;padding:20px 18px;margin-bottom:18px;text-align:center;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5b6b63;font-weight:600;">Your offer range</div>
-      <div style="font-size:32px;font-weight:800;color:#0f5132;margin-top:6px;line-height:1.1;">${priceText}</div>
-      <div style="font-size:13px;color:#5b6b63;margin-top:8px;">A quick estimate from the details so far.</div>
+  const offerBox = `<tr><td style="padding:0 28px;">
+    <div style="background:#EAF5EF;border:1px solid #cfe6da;border-radius:12px;padding:20px 18px;margin-bottom:14px;text-align:center;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5b6b63;font-weight:600;">Your offer</div>
+      <div style="font-size:34px;font-weight:800;color:#0f5132;margin-top:6px;line-height:1.1;">${priceText}</div>
+      <div style="font-size:13px;color:#5b6b63;margin-top:8px;">Based on the details you gave us — it'd only change if something about the car turns out different than described.</div>
     </div></td></tr>`;
 
-  const phone = `<a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>`;
-  const actionBox = `<tr><td style="padding:0 28px;">
-    <div style="background:#f3f6f8;border:1px solid #e4e9ed;border-radius:12px;padding:18px;margin-bottom:18px;">
-      <div style="font-size:15px;line-height:1.5;color:#3a4654;margin-bottom:12px;">Want your exact, firm number? Just reach out and we'll lock it in:</div>
-      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_FAST} Fastest &mdash; text or call</div>
-      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0 0 14px;padding-left:22px;">Reach us at ${phone} and we'll send your exact offer back in minutes.</div>
-      <div style="font-size:15px;font-weight:700;color:#1f2a36;margin-bottom:3px;">${ICON_MAIL} Not a phone person?</div>
-      <div style="font-size:15px;line-height:1.55;color:#3a4654;margin:0;padding-left:22px;">Just reply to this email and you'll have it within the hour.</div>
-    </div></td></tr>`;
+  const questionsLine = `<tr><td style="padding:0 28px 6px;font-size:14px;line-height:1.55;color:#3a4654;">
+    Questions? You can always reply to this email, or <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:600;">call or text us</a> — whatever's easiest.
+  </td></tr>`;
 
-  const noPressure = `<tr><td style="padding:0 28px 4px;font-size:15px;line-height:1.6;color:#3a4654;">
+  const noPressure = `<tr><td style="padding:2px 28px 4px;font-size:15px;line-height:1.6;color:#3a4654;">
     No pressure &mdash; once you see it, it's your call. If it's a yes, we come to you and pay on the spot.
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
@@ -408,8 +425,8 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
     <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; <a href="mailto:${esc(site.email)}" style="color:#1A7F54;text-decoration:none;">${esc(site.email)}</a>
   </td></tr>`;
   return {
-    subject: carPlain(lead) ? `Your offer range for your ${carPlain(lead)} — ${site.name}` : `Your offer range is ready — ${site.name}`,
-    html: shell(intro(`Your offer range is ready, ${first}`, leadIn) + rangeBox + actionBox + bookingBox(lead) + noPressure + signoff),
+    subject: plain ? `Your offer for your ${plain} — ${site.name}` : `Your offer is ready — ${site.name}`,
+    html: shell(intro("Your offer is ready", leadIn) + offerBox + questionsLine + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + noPressure + signoff),
   };
 }
 
@@ -527,22 +544,13 @@ export async function sendAwaitingInfoReminder(lead: Lead): Promise<void> {
   await postEmail(to, awaitingInfoReminderEmail(lead));
 }
 
-/** /moreinfo — email the customer that we need a bit more detail. Returns a result
- * so the Telegram reply can tell Samir what happened (mirrors sendOfferEmail). */
-export async function sendMoreInfo(lead: Lead): Promise<{ ok: boolean; reason?: string }> {
+/** /moreinfo — email the customer the questions we need answered before quoting.
+ * Returns a result so the Telegram reply can tell Samir what happened. */
+export async function sendMoreInfo(lead: Lead, questions: string[]): Promise<{ ok: boolean; reason?: string }> {
   if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
   const to = validEmail(lead);
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
-  const id = await postEmail(to, moreInfoEmail(lead));
-  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
-}
-
-/** /ask <question> — email the customer a specific question. Returns a result. */
-export async function sendAsk(lead: Lead, question: string): Promise<{ ok: boolean; reason?: string }> {
-  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
-  const to = validEmail(lead);
-  if (!to) return { ok: false, reason: "this lead has no valid email address" };
-  const id = await postEmail(to, askEmail(lead, question));
+  const id = await postEmail(to, moreInfoEmail(lead, questions));
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
