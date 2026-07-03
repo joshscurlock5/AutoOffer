@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, cancelScheduledEmails } from "@/lib/email";
+import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import type { Lead } from "@/lib/types";
@@ -195,6 +196,8 @@ export async function POST(req: NextRequest) {
         dripEmailIds: [],
         status: lead.status === "new" ? "contacted" : lead.status,
       });
+      // Text the customer too (best-effort; no-op without a phone / Twilio config).
+      await smsOfferReady(lead, low, high);
       await reply(fromChat, `✅ Offer sent — ${fmtRange(low, high)} to ${lead.contact.name || lead.contact.email} for their ${carText(lead)}.`);
       return NextResponse.json({ ok: true });
     }
@@ -262,6 +265,8 @@ export async function POST(req: NextRequest) {
         contactedAt: lead.contactedAt || nowISO,
         status: lead.status === "new" ? "contacted" : lead.status,
       });
+      // Text the customer the "we need a detail" nudge too (best-effort).
+      await smsMoreInfo(lead);
       const who = lead.contact.name || lead.contact.email;
       await reply(
         fromChat,

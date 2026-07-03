@@ -9,6 +9,7 @@ import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead, splitName } from "@/lib/metaCapi";
 import { sendGa4Lead } from "@/lib/ga4Mp";
 import { sendLeadConfirmation } from "@/lib/email";
+import { smsLeadConfirmation } from "@/lib/sms";
 
 export const runtime = "nodejs";
 
@@ -178,6 +179,8 @@ export async function POST(req: NextRequest) {
     // they gave an email — phone-only call/text leads have none). Never blocks
     // or fails the lead.
     await sendLeadConfirmation(lead);
+    // Instant confirmation TEXT too (best-effort; no-op without a phone / Twilio config).
+    await smsLeadConfirmation(lead);
     // NOTE: no automatic "still want an offer?" drip on submit. The flow now
     // assumes we have enough to quote — the owner drives follow-up from Telegram
     // (/offer sends the offer, /moreinfo requests detail), and the scheduled cron

@@ -8,6 +8,14 @@ import {
   sendBookingDayOf,
   sendPartialRecovery,
 } from "@/lib/email";
+import {
+  smsPostOfferFollowup,
+  smsAwaitingInfo,
+  smsWinback,
+  smsBookingDayOf,
+  smsPartialRecovery,
+  smsConfigured,
+} from "@/lib/sms";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -120,6 +128,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         for (let i = 0; i < dues.length; i += 1) {
           if (now >= dues[i] && lastNurture < dues[i]) {
             await sendPostOfferFollowup(lead, i);
+            await smsPostOfferFollowup(lead);
             await updateLead(lead.id, { lastNurtureAt: nowISO });
             summary.postOffer += 1;
             break;
@@ -132,6 +141,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         for (let i = 0; i < dues.length; i += 1) {
           if (now >= dues[i] && lastNurture < dues[i]) {
             await sendAwaitingInfoReminder(lead);
+            await smsAwaitingInfo(lead);
             await updateLead(lead.id, { lastNurtureAt: nowISO });
             summary.awaitingInfo += 1;
             break;
@@ -142,6 +152,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         const due = created + 21 * DAY;
         if (now >= due) {
           await sendWinback(lead);
+          await smsWinback(lead);
           await updateLead(lead.id, { nurtureStage: "winback_sent", lastNurtureAt: nowISO });
           summary.winback += 1;
         }
@@ -153,6 +164,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         // Day-of morning reminder to the customer (with the "Confirm" button), once.
         if (!lead.dayOfRemindedAt && mtHour >= 7 && mtDate(apptMs) === todayMT) {
           await sendBookingDayOf(lead);
+          await smsBookingDayOf(lead);
           await updateLead(lead.id, { dayOfRemindedAt: nowISO });
           summary.dayOfReminders += 1;
         }
@@ -182,8 +194,14 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         } else {
           if (lead.contact.email) {
             await sendPartialRecovery(lead);
-          } else if (lead.contact.phone) {
-            await notifyOwner(`🛒 Abandoned offer — reach out:\n${leadLine(lead)}`);
+          }
+          if (lead.contact.phone) {
+            if (smsConfigured()) {
+              await smsPartialRecovery(lead);
+            } else if (!lead.contact.email) {
+              // No SMS yet and no email — fall back to the owner ping (unchanged behavior).
+              await notifyOwner(`🛒 Abandoned offer — reach out:\n${leadLine(lead)}`);
+            }
           }
           await updateLead(lead.id, { nurtureStage: "partial_done", lastNurtureAt: nowISO });
           summary.partialRecovery += 1;

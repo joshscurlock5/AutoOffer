@@ -149,6 +149,8 @@ export interface Lead {
   nurtureStage?: string;
   nurturePausedUntil?: string;
   lastNurtureAt?: string;
+  /** True once the customer texted STOP (or Twilio flagged them) — suppresses ALL further SMS. */
+  smsOptOut?: boolean;
   source: string;
 }
 
