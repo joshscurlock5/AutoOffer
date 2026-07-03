@@ -251,9 +251,9 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
       : `${money(lead.offer.low)} &ndash; ${money(lead.offer.high)}`
     : "your offer";
   const bodies = [
-    `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you. The fastest way to lock it in is a quick call or text — we can often confirm on the spot. Ready to go? Book a time below and we'll come to you and pay on the spot.`,
-    `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands. Used values shift week to week, so it's worth locking in this week's number. Call or text for the quickest answer, or book your pickup below.`,
-    `Last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>. Whenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
+    `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you.\nThe fastest way to lock it in is a quick call or text — we can often confirm on the spot.\nReady to go? Book a time below and we'll come to you and pay on the spot.`,
+    `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands.\nUsed values shift week to week, so it's worth locking in this week's number.\nCall or text for the quickest answer, or book your pickup below.`,
+    `Last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>.\nWhenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
   ];
   const subjects = [
     `Any questions about your ${plain} offer?`,
@@ -283,7 +283,7 @@ function moreInfoEmail(lead: Lead, questions: string[]): Email {
 function awaitingInfoReminderEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `We're ready to send your offer on ${carRef} as soon as we get the final details. The fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot. Prefer email? Just reply with the answers below and we'll take it from there.`;
+  const body = `We're ready to send your offer on ${carRef} as soon as we get the final details.\nThe fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot.\nPrefer email? Just reply with the answers below and we'll take it from there.`;
   return {
     subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
     html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + refRow(lead)),
@@ -312,7 +312,7 @@ function bookingConfirmationEmail(lead: Lead): Email {
       <div style="font-size:15px;color:#1f2a36;margin-top:6px;">&#128205; ${where}</div>
     </div></td></tr>`;
   const confirmNote = `<tr><td style="padding:0 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">We'll send you a reminder the morning of — <strong>please tap &ldquo;Confirm&rdquo; so we know you're still on.</strong> We only send a rep out to bookings that are confirmed.</td></tr>`;
-  const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft). Need to change it? Just call or text.`;
+  const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft).\nNeed to change it? Just call or text.`;
   return {
     subject: `Booked — your ${site.name} inspection`,
     html: shell(intro("You're booked!", body) + detailBox + confirmNote + ctaBox()),
@@ -330,7 +330,7 @@ function bookingDayOfEmail(lead: Lead): Email {
         <a href="${site.url}/api/book/confirm?token=${lead.bookingToken}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">&#10003; Confirm I'll be there</a>
       </td></tr>`
     : "";
-  const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot. <strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit. Something changed? Just call or text.`;
+  const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot.\n<strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit.\nSomething changed? Just call or text.`;
   return {
     subject: `Today: your ${site.name} inspection at ${time}`,
     html: shell(intro("See you today!", body) + confirmBtn + ctaBox()),
@@ -353,7 +353,7 @@ function extendedNurtureEmail(lead: Lead): Email {
 function winbackEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Still have ${carRef}? Prices have moved, and we'd be glad to take another look and re-quote — no obligation at all. If you've already sold it, no worries; just ignore this.`;
+  const body = `Still have ${carRef}?\nPrices have moved, and we'd be glad to take another look and re-quote — no obligation at all.\nIf you've already sold it, no worries; just ignore this.`;
   return {
     subject: v ? `Still have your ${v.make} ${v.model}? Happy to re-quote` : `Happy to re-quote — ${site.name}`,
     html: shell(intro("Want a fresh offer?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "")),
@@ -387,7 +387,7 @@ function appointmentReminderEmail(lead: Lead): Email {
 function partialRecoveryEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Looks like you started getting an offer on ${carRef} but didn't finish. Pick up where you left off — it only takes a minute, and we come to you and pay on the spot.`;
+  const body = `Looks like you started getting an offer on ${carRef} but didn't finish.\nPick up where you left off — it only takes a minute, and we come to you and pay on the spot.`;
   return {
     subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Finish your offer — ${site.name}`,
     html: shell(intro("Your offer is almost ready", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Finish online &rarr;", "")),
@@ -400,7 +400,7 @@ function referralConfirmationEmail(ref: Referral): Email {
   const first = esc((ref.referrer.name || "there").trim().split(" ")[0] || "there");
   const friend = ref.friend?.name ? esc(ref.friend.name.trim().split(" ")[0]) : "";
   const who = friend || "your friend";
-  const body = `Thanks for spreading the word! We've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon. When ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
+  const body = `Thanks for spreading the word!\nWe've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon.\nWhen ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
   const codeBox = `<tr><td style="padding:0 28px;">
     <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your referral code</div>
