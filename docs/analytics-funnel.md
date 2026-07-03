@@ -139,10 +139,11 @@ so a new lead gets NO automatic "still want an offer?" drip** — the owner driv
 
 **Customer (email), keyed on `nurtureStage`:**
 - **Submit →** instant confirmation only (method-aware copy). No drip.
-- **`/moreinfo <id> [codes] [question]` → `awaiting_info`:** one email with the
-  questions (preset codes like `trans`/`keys`/`tires` + free text; stored on the
-  lead as `infoQuestions`). Reminders at **+2d / +5d** from `moreInfoSentAt` that
-  RE-SEND the same questions, then stop.
+- **`/moreinfo <id> <questions, one per line>` → `awaiting_info`:** one email with
+  the questions (each line after the id becomes a bullet in the "What we still need"
+  box; **at least one question is required** — with nothing to ask, send an offer
+  instead; stored on the lead as `infoQuestions`). Reminders at **+2d / +5d** from
+  `moreInfoSentAt` that RE-SEND the same questions, then stop.
 - **`/offer`→`/confirm` → `offer_sent`:** offer reminders at **+2d / +5d / +10d**
   from `offerSentAt` (each restates the offer, pushes call/text, includes the
   booking link), then stop.
@@ -153,8 +154,8 @@ so a new lead gets NO automatic "still want an offer?" drip** — the owner driv
 **Owner (Telegram):** stale-lead SLA alerts (~30m/2h/12h) for unworked "new"
 leads; a daily **needs-action digest** (8am MT); **T-2h** inspection ping
 (owner-only); a **weekly scoreboard** (Mon 8am MT). Commands: `/offer`→`/confirm`
-(send offer + mint booking link), **`/moreinfo <id> [codes] [question]`** (one email
-with the questions), `/schedule <id> <YYYY-MM-DD HH:MM>` (Mountain Time), `/cancel`, `/usage`.
+(send offer + mint booking link), **`/moreinfo <id> <questions, one per line>`** (one
+email; at least one question required, one bullet per line), `/schedule <id> <YYYY-MM-DD HH:MM>` (Mountain Time), `/cancel`, `/usage`.
 
 **Customer self-booking:** the offer email + reminders link to `/book/<token>`
 (unguessable token minted on `/confirm`). The page shows the car/offer and 45-min

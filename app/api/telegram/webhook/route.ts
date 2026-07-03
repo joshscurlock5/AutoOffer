@@ -52,19 +52,7 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const EMOJI_USAGE = String.fromCodePoint(0x1f4ca); // 📊 bar chart
 
-// Preset question shortcuts for /moreinfo (mix-and-match "mad libs"). Leading codes
-// expand to full questions; any trailing text becomes a custom question.
-const INFO_PRESETS: Record<string, string> = {
-  trans: "Is it automatic or manual?",
-  keys: "How many keys does it come with?",
-  accidents: "Has it been in any accidents?",
-  tires: "How are the tires — any that need replacing soon?",
-  warning: "Are there any warning lights on the dash?",
-  service: "Is the maintenance/service up to date?",
-  title: "Is the title clean (not salvage or rebuilt)?",
-  smoke: "Was it a non-smoking vehicle?",
-  drive: "Does it drive well — any issues you've noticed?",
-};
+// (/moreinfo takes free-text questions, one per line — no preset codes.)
 
 async function reply(chatId: number | string, text: string): Promise<void> {
   if (!BOT_TOKEN) return;
@@ -224,26 +212,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // 6b) /moreinfo <id> [codes] [free-text question] — ONE email with the questions
-    // we need before quoting. Preset codes expand to full questions; any trailing
-    // text becomes a custom question. Replaces the old separate /ask.
+    // 6b) /moreinfo <id> [questions, one per line] — ONE email with the questions we
+    // need before quoting. Everything after the id is split into bullets by line;
+    // leave it blank to send the email with an empty "What we still need" section.
     const moreInfoCmd = text.match(/^\/moreinfo(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
     if (moreInfoCmd) {
       const code = (moreInfoCmd[2] || "").trim();
-      const rest = (moreInfoCmd[3] || "").trim();
-      const tokens = rest ? rest.split(/\s+/) : [];
-      const questions: string[] = [];
-      let ti = 0;
-      while (ti < tokens.length && INFO_PRESETS[tokens[ti].toLowerCase()]) {
-        questions.push(INFO_PRESETS[tokens[ti].toLowerCase()]);
-        ti += 1;
-      }
-      const custom = tokens.slice(ti).join(" ").trim();
-      if (custom) questions.push(custom);
+      const questions = (moreInfoCmd[3] || "")
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
       if (!code || !questions.length) {
         await reply(
           fromChat,
-          `Usage: /moreinfo <id> [codes] [your own question]\nMix any codes: ${Object.keys(INFO_PRESETS).join(", ")}\nExamples:\n/moreinfo ${code || "a1b2c3d4"} trans keys\n/moreinfo ${code || "a1b2c3d4"} trans Does it have winter tires?`,
+          `/moreinfo needs at least one question. Type the ID, then your questions, one per line.\nNothing to ask? Send the offer instead: /offer ${code || "<id>"} <price>\nExample:\n/moreinfo ${code || "a1b2c3d4"} Is it automatic or manual?\nHow many keys does it have?`,
         );
         return NextResponse.json({ ok: true });
       }
@@ -271,9 +253,10 @@ export async function POST(req: NextRequest) {
         contactedAt: lead.contactedAt || nowISO,
         status: lead.status === "new" ? "contacted" : lead.status,
       });
+      const who = lead.contact.name || lead.contact.email;
       await reply(
         fromChat,
-        `📩 Sent ${questions.length} question${questions.length > 1 ? "s" : ""} to ${lead.contact.name || lead.contact.email} about their ${carText(lead)}. If they go quiet, we'll re-send the same questions in 2 and 5 days.`,
+        `📩 Sent ${questions.length} question${questions.length > 1 ? "s" : ""} to ${who} about their ${carText(lead)}. If they go quiet, we'll re-send the same questions in 2 and 5 days.`,
       );
       return NextResponse.json({ ok: true });
     }
