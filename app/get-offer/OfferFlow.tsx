@@ -542,7 +542,7 @@ export default function OfferFlow() {
                   type="button"
                   onClick={() => setContactMethod(m)}
                   aria-pressed={active}
-                  className={`flex w-full items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-sm font-semibold capitalize transition ${
+                  className={`flex w-full items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-sm font-semibold capitalize transition ${
                     active
                       ? "border-brand-600 bg-brand-600 text-white"
                       : preferred
@@ -553,7 +553,7 @@ export default function OfferFlow() {
                   {m}
                   {m === "call" && (
                     <span
-                      className={`whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                      className={`whitespace-nowrap rounded-full px-1 py-0.5 text-[8px] font-bold uppercase leading-none ${
                         active ? "bg-white/25 text-white" : "bg-emerald-600 text-white"
                       }`}
                     >
