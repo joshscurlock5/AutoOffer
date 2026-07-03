@@ -154,6 +154,12 @@ function questionsBox(qs: string[]): string {
       ${items}
     </div></td></tr>`;
 }
+/** A tiny reference line so a customer's reply can be traced back to the lead —
+ * the Gmail→Telegram script reads this to prefill the /offer command. */
+function refRow(lead: Lead): string {
+  const sid = lead.id.split("-")[0];
+  return `<tr><td style="padding:4px 28px 10px;font-size:11px;color:#c2c8cf;">Ref: ${esc(sid)}</td></tr>`;
+}
 function shell(
   innerRows: string,
   footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
@@ -253,7 +259,7 @@ function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const body = `To get you an accurate offer on ${carRef}, we just need a couple details. The fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then. Prefer email? Just reply with the answers below.`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
-    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest")),
+    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest") + refRow(lead)),
   };
 }
 
@@ -264,7 +270,7 @@ function awaitingInfoReminderEmail(lead: Lead): Email {
   const body = `We're ready to send your offer on ${carRef} as soon as we get the final details. The fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot. Prefer email? Just reply with the answers below and we'll take it from there.`;
   return {
     subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
-    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest")),
+    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + refRow(lead)),
   };
 }
 
