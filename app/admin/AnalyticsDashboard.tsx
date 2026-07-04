@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
-import type { Profile, AdInsight } from "@/lib/types";
+import type { Profile, AdInsight, Ga4Traffic } from "@/lib/types";
 import {
   computeView,
   filterProfiles,
@@ -434,6 +434,61 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
   );
 }
 
+function TrafficGa4() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<{ configured: boolean; traffic: Ga4Traffic | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/ga4?days=${days}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setData({ configured: false, traffic: null }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [days]);
+
+  if (loading) return <div className="card p-4 text-sm text-muted">Loading traffic…</div>;
+  if (!data?.configured || !data.traffic) {
+    return (
+      <div className="card p-4 text-sm text-muted">
+        <span className="font-semibold text-navy">GA4 not connected yet.</span> Add{" "}
+        <code className="rounded bg-slate-100 px-1">GA4_PROPERTY_ID</code>,{" "}
+        <code className="rounded bg-slate-100 px-1">GA4_SA_CLIENT_EMAIL</code>, and{" "}
+        <code className="rounded bg-slate-100 px-1">GA4_SA_PRIVATE_KEY</code> in Amplify to see total visitors, sources, and traffic here.
+      </div>
+    );
+  }
+  const t = data.traffic;
+  const n = (x: number) => x.toLocaleString("en-CA");
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatCard label="Visitors" value={n(t.totals.users)} />
+          <StatCard label="New visitors" value={n(t.totals.newUsers)} />
+          <StatCard label="Sessions" value={n(t.totals.sessions)} />
+          <StatCard label="Pageviews" value={n(t.totals.pageviews)} />
+          <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} />
+        </div>
+        <select className="field py-1 text-sm" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} />
+        <HBars title="Traffic sources" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} />
+        <HBars title="By country" rows={t.byCountry.map((c) => ({ label: c.label, count: c.users }))} />
+        <HBars title="By device" rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} />
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const { profiles, lookupsTotal } = data;
   const [filters, setFilters] = useState<Filters>({});
@@ -514,6 +569,10 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       <Section title="Ad performance (Meta) — spend & cost-per-lead">
         <AdPerformance profiles={profiles} />
+      </Section>
+
+      <Section title="Traffic (GA4) — everyone who visited">
+        <TrafficGa4 />
       </Section>
 
       <Section title="Geography">

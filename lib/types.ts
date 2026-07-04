@@ -266,6 +266,15 @@ export interface AdInsight {
   reach?: number;
 }
 
+/** Aggregate site traffic pulled from the GA4 Data API. */
+export interface Ga4Traffic {
+  totals: { users: number; newUsers: number; sessions: number; pageviews: number; engagementRate: number };
+  overTime: { date: string; users: number }[];
+  bySource: { label: string; users: number; sessions: number }[];
+  byCountry: { label: string; users: number }[];
+  byDevice: { label: string; users: number }[];
+}
+
 export interface Referral {
   id: string;
   createdAt: string;
