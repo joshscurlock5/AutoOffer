@@ -264,6 +264,8 @@ export interface AdInsight {
   ctr: number; // percent
   cpc: number; // $ per click
   reach?: number;
+  leads?: number; // Meta Pixel "Lead" conversions attributed to this campaign
+  costPerLead?: number; // Meta's cost per lead ($) — matches Ads Manager
 }
 
 /** Aggregate site traffic pulled from the GA4 Data API. */

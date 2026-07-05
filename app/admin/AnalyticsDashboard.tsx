@@ -61,21 +61,49 @@ function money(n?: number): string {
   return n ? `$${Math.round(n).toLocaleString("en-CA")}` : "—";
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+// Like money() but keeps cents — for small figures like cost-per-lead where
+// $14.61 vs $15 matters (so it matches Meta's number exactly).
+function money2(n?: number | null): string {
+  if (!n) return "—";
+  return `$${n.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Provenance strings for the "where's this from?" info dots (an audit aid).
+const SRC = {
+  site: "Your website's own database — form submissions, merged into one record per person.",
+  siteGrouped: "Your website's database, grouped by the source saved on each lead (UTM tag or referrer).",
+  behavior: "First-party tracking on your site — pages viewed, device, and time on site.",
+  geo: "IP-address location lookup (ipwho.is), added shortly after each lead arrives.",
+  ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
+};
+
+// A small ⓘ that reveals, on hover, exactly where a metric's data comes from.
+function InfoDot({ tip }: { tip: string }) {
+  return (
+    <span className="group/info relative ml-1 inline-flex align-middle">
+      <span className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold normal-case leading-none text-slate-500">i</span>
+      <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 hidden w-56 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white shadow-lg group-hover/info:block">
+        {tip}
+      </span>
+    </span>
+  );
+}
+
+function StatCard({ label, value, sub, tip }: { label: string; value: string; sub?: string; tip?: string }) {
   return (
     <div className="card p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}{tip && <InfoDot tip={tip} />}</div>
       <div className="mt-1 text-2xl font-bold text-navy">{value}</div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
     </div>
   );
 }
 
-function HBars({ title, rows }: { title: string; rows: Count[] }) {
+function HBars({ title, rows, tip }: { title: string; rows: Count[]; tip?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">{title}</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No data.</p>
       ) : (
@@ -95,11 +123,11 @@ function HBars({ title, rows }: { title: string; rows: Count[] }) {
   );
 }
 
-function Funnel({ rows }: { rows: Count[] }) {
+function Funnel({ rows, tip }: { rows: Count[]; tip?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">Conversion funnel</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">Conversion funnel{tip && <InfoDot tip={tip} />}</h3>
       <div className="space-y-2">
         {rows.map((r, i) => {
           const prev = i > 0 ? rows[i - 1].count : 0;
@@ -121,11 +149,11 @@ function Funnel({ rows }: { rows: Count[] }) {
   );
 }
 
-function VBars({ title, rows }: { title: string; rows: { date: string; leads: number }[] }) {
+function VBars({ title, rows, tip }: { title: string; rows: { date: string; leads: number }[]; tip?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.leads));
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">{title}</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No leads in range.</p>
       ) : (
@@ -139,12 +167,12 @@ function VBars({ title, rows }: { title: string; rows: { date: string; leads: nu
   );
 }
 
-function Heatmap({ grid }: { grid: number[][] }) {
+function Heatmap({ grid, tip }: { grid: number[][]; tip?: string }) {
   const max = Math.max(1, ...grid.flat());
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return (
     <div className="card overflow-x-auto p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, your time)</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, your time){tip && <InfoDot tip={tip} />}</h3>
       <div className="min-w-[560px] space-y-0.5">
         {grid.map((row, d) => (
           <div key={d} className="flex items-center gap-0.5">
@@ -199,15 +227,17 @@ function SegmentView({
   rows,
   dim,
   setDim,
+  tip,
 }: {
   rows: ReturnType<typeof segmentTable>;
   dim: SegmentDimension;
   setDim: (d: SegmentDimension) => void;
+  tip?: string;
 }) {
   return (
     <div className="card overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-navy">Segment performance — how each group responds</h3>
+        <h3 className="text-sm font-bold text-navy">Segment performance — how each group responds{tip && <InfoDot tip={tip} />}</h3>
         <label className="flex items-center gap-2 text-xs text-muted">
           Compare by
           <select className="field py-1 text-sm" value={dim} onChange={(e) => setDim(e.target.value as SegmentDimension)}>
@@ -330,10 +360,10 @@ function ProfileRow({ p }: { p: Profile }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, tip }: { title: string; children: ReactNode; tip?: string }) {
   return (
     <section className="mt-8">
-      <h2 className="mb-3 text-lg font-bold text-navy">{title}</h2>
+      <h2 className="mb-3 text-lg font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h2>
       {children}
     </section>
   );
@@ -357,10 +387,13 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
 
   const rows = useMemo(() => {
     return (data?.insights || []).map((ins) => {
+      // Leads + cost-per-lead come from Meta's own Pixel numbers (match Ads Manager).
+      // Revenue/ROAS still use YOUR closed-sale data, matched to the campaign by UTM tag.
       const ps = profiles.filter((p) => (p.attribution?.utmCampaign || "") === ins.campaign);
-      const leads = ps.filter((p) => p.stage !== "partial" && p.stage !== "spam").length;
       const revenue = ps.filter((p) => p.stage === "closed").reduce((s, p) => s + (p.purchasePrice || 0), 0);
-      return { ...ins, leads, revenue, cpl: leads ? ins.spend / leads : null, roas: ins.spend ? revenue / ins.spend : null };
+      const leads = ins.leads ?? 0;
+      const cpl = ins.costPerLead ?? (leads ? ins.spend / leads : null);
+      return { ...ins, leads, revenue, cpl, roas: ins.spend ? revenue / ins.spend : null };
     });
   }, [data, profiles]);
 
@@ -382,10 +415,10 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Ad spend" value={money(totalSpend)} />
-          <StatCard label="Leads from ads" value={String(totalLeads)} />
-          <StatCard label="Cost / lead" value={totalLeads ? money(totalSpend / totalLeads) : "—"} />
-          <StatCard label="ROAS" value={totalSpend ? `${(totalRevenue / totalSpend).toFixed(1)}×` : "—"} sub={money(totalRevenue)} />
+          <StatCard label="Ad spend" value={money(totalSpend)} tip="Meta Ads API — total you paid Meta to run this ad." />
+          <StatCard label="Leads from ads" value={String(totalLeads)} tip="Meta Pixel — form-fills Meta attributes to your ad. Same number as Ads Manager." />
+          <StatCard label="Cost / lead" value={money2(totalLeads ? totalSpend / totalLeads : null)} tip="Meta ad spend ÷ Meta Pixel leads — matches Ads Manager's cost per result." />
+          <StatCard label="ROAS" value={totalSpend ? `${(totalRevenue / totalSpend).toFixed(1)}×` : "—"} sub={money(totalRevenue)} tip="Your closed-sale revenue ÷ Meta spend. Fills in when an ad-tagged lead becomes a sale." />
         </div>
         <select className="field py-1 text-sm" value={range} onChange={(e) => setRange(e.target.value)}>
           <option value="last_7d">Last 7 days</option>
@@ -397,15 +430,15 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
         <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
-              <th className="py-2 pr-2">Campaign</th>
-              <th className="px-2 text-right">Spend</th>
-              <th className="px-2 text-right">Impr.</th>
-              <th className="px-2 text-right">Clicks</th>
-              <th className="px-2 text-right">CTR</th>
-              <th className="px-2 text-right">Leads</th>
-              <th className="px-2 text-right">Cost/lead</th>
-              <th className="px-2 text-right">Revenue</th>
-              <th className="pl-2 text-right">ROAS</th>
+              <th className="py-2 pr-2" title="Campaign name from Meta.">Campaign</th>
+              <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
+              <th className="px-2 text-right" title="Meta Ads API — times your ad was shown.">Impr.</th>
+              <th className="px-2 text-right" title="Meta Ads API — link clicks.">Clicks</th>
+              <th className="px-2 text-right" title="Meta Ads API — click-through rate.">CTR</th>
+              <th className="px-2 text-right" title="Meta Pixel — leads Meta attributes to the ad.">Leads</th>
+              <th className="px-2 text-right" title="Meta ad spend ÷ Meta Pixel leads.">Cost/lead</th>
+              <th className="px-2 text-right" title="Your closed-sale prices for leads UTM-tagged to this campaign.">Revenue</th>
+              <th className="pl-2 text-right" title="Revenue ÷ spend.">ROAS</th>
             </tr>
           </thead>
           <tbody>
@@ -420,7 +453,7 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
                   <td className="px-2 text-right">{r.clicks.toLocaleString("en-CA")}</td>
                   <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
                   <td className="px-2 text-right">{r.leads}</td>
-                  <td className="px-2 text-right font-semibold">{r.cpl != null ? money(r.cpl) : "—"}</td>
+                  <td className="px-2 text-right font-semibold">{money2(r.cpl)}</td>
                   <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
                   <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
                 </tr>
@@ -428,7 +461,7 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
             )}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">Cost/lead + ROAS join ad spend to your leads by campaign — fills in as UTM-tagged ads bring in leads.</p>
+        <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Revenue &amp; ROAS use your own closed-sale data, matched to this campaign by UTM tag.</p>
       </div>
     </div>
   );
@@ -467,11 +500,11 @@ function TrafficGa4() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard label="Visitors" value={n(t.totals.users)} />
-          <StatCard label="New visitors" value={n(t.totals.newUsers)} />
-          <StatCard label="Sessions" value={n(t.totals.sessions)} />
-          <StatCard label="Pageviews" value={n(t.totals.pageviews)} />
-          <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} />
+          <StatCard label="Visitors" value={n(t.totals.users)} tip={SRC.ga4} />
+          <StatCard label="New visitors" value={n(t.totals.newUsers)} tip={SRC.ga4} />
+          <StatCard label="Sessions" value={n(t.totals.sessions)} tip={SRC.ga4} />
+          <StatCard label="Pageviews" value={n(t.totals.pageviews)} tip={SRC.ga4} />
+          <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} tip="Google Analytics 4 — share of engaged sessions (GA4's engagement rate)." />
         </div>
         <select className="field py-1 text-sm" value={days} onChange={(e) => setDays(Number(e.target.value))}>
           <option value={7}>Last 7 days</option>
@@ -480,10 +513,10 @@ function TrafficGa4() {
         </select>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} />
-        <HBars title="Traffic sources" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} />
-        <HBars title="By country" rows={t.byCountry.map((c) => ({ label: c.label, count: c.users }))} />
-        <HBars title="By device" rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} />
+        <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} tip={SRC.ga4} />
+        <HBars title="Traffic sources" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
+        <HBars title="By country" rows={t.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
+        <HBars title="By device" rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
       </div>
     </div>
   );
@@ -551,57 +584,57 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       {/* Overview */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="People" value={String(view.totals.people)} />
-        <StatCard label="Leads" value={String(view.totals.leads)} />
-        <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" />
-        <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" />
-        <StatCard label="Closed" value={String(view.totals.closed)} sub={money(view.totals.revenue)} />
-        <StatCard label="Avg response" value={fmtMins(view.totals.avgResponseMins)} />
+        <StatCard label="People" value={String(view.totals.people)} tip={SRC.site} />
+        <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} />
+        <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." />
+        <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" tip="Your website's database — value-lookup requests, all time." />
+        <StatCard label="Closed" value={String(view.totals.closed)} sub={money(view.totals.revenue)} tip="Your website's database — deals marked closed, with sale price." />
+        <StatCard label="Avg response" value={fmtMins(view.totals.avgResponseMins)} tip="Your website's database — average time from lead to your first reply." />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Funnel rows={view.funnel} />
-        <VBars title="Leads over time" rows={view.overTime} />
+        <Funnel rows={view.funnel} tip="Your website's database — how many reach each step." />
+        <VBars title="Leads over time" rows={view.overTime} tip={SRC.site} />
       </div>
 
       <Section title="Segments — how different groups respond">
-        <SegmentView rows={segments} dim={dim} setDim={setDim} />
+        <SegmentView rows={segments} dim={dim} setDim={setDim} tip={SRC.siteGrouped} />
       </Section>
 
-      <Section title="Ad performance (Meta) — spend & cost-per-lead">
+      <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; revenue & ROAS from your own closed sales.">
         <AdPerformance profiles={profiles} />
       </Section>
 
-      <Section title="Traffic (GA4) — everyone who visited">
+      <Section title="Traffic (GA4) — everyone who visited" tip={SRC.ga4}>
         <TrafficGa4 />
       </Section>
 
       <Section title="Geography">
         <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By country" rows={view.byCountry} />
-          <HBars title="By province / region" rows={view.byRegion} />
+          <HBars title="By country" rows={view.byCountry} tip={SRC.geo} />
+          <HBars title="By province / region" rows={view.byRegion} tip={SRC.geo} />
         </div>
       </Section>
 
       <Section title="Acquisition">
         <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By source" rows={view.bySource} />
-          <HBars title="By campaign" rows={view.byCampaign} />
+          <HBars title="By source" rows={view.bySource} tip={SRC.siteGrouped} />
+          <HBars title="By campaign" rows={view.byCampaign} tip={SRC.siteGrouped} />
         </div>
       </Section>
 
       <Section title="Behavior & mix">
         <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By device" rows={view.byDevice} />
-          <HBars title="By vehicle make" rows={view.byMake} />
-          <HBars title="By status" rows={view.byStatus} />
-          <HBars title="By contact preference" rows={view.byContactMethod} />
+          <HBars title="By device" rows={view.byDevice} tip={SRC.behavior} />
+          <HBars title="By vehicle make" rows={view.byMake} tip={SRC.site} />
+          <HBars title="By status" rows={view.byStatus} tip={SRC.site} />
+          <HBars title="By contact preference" rows={view.byContactMethod} tip={SRC.site} />
         </div>
         <div className="mt-4">
-          <Heatmap grid={view.heatmap} />
+          <Heatmap grid={view.heatmap} tip="Your website's database — the timestamp each lead arrived." />
         </div>
       </Section>
 
-      <Section title={`Profiles (${list.length})`}>
+      <Section title={`Profiles (${list.length})`} tip={SRC.site}>
         <div className="mb-3">
           <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
