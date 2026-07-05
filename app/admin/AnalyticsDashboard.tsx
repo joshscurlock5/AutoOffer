@@ -15,6 +15,7 @@ import {
   type SegmentDimension,
   type Count,
 } from "@/lib/analyticsView";
+import { META_SEGMENTS, segmentProfiles, buildMetaCsv, type MetaSegment } from "@/lib/metaExport";
 
 // ---------------------------------------------------------------------------
 //  Customer-360 analytics dashboard. All data is computed server-side (profiles)
@@ -601,6 +602,50 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
   );
 }
 
+function MetaExport({ profiles }: { profiles: Profile[] }) {
+  const download = (seg: MetaSegment) => {
+    const { filename, csv, rows } = buildMetaCsv(profiles, seg);
+    if (!rows) return;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  return (
+    <div className="card p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {META_SEGMENTS.map((s) => {
+          const n = segmentProfiles(profiles, s.key).length;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              disabled={!n}
+              onClick={() => download(s.key)}
+              className="rounded-xl border border-slate-200 p-3 text-left transition hover:border-brand-600 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-navy">{s.label}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-navy">{n}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted">{s.hint}</p>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-muted">
+        Downloads a CSV in Meta&apos;s customer-list template, built from the currently filtered people. Upload at
+        business.facebook.com → Audiences → Create → Customer list — Ads Manager hashes every field in your browser
+        before anything reaches Meta. Heads-up: audiences under ~100 matched people won&apos;t deliver ads, and
+        lookalikes need a 100+ seed — set them up now so they fill as you grow. Full walkthrough:{" "}
+        <code className="rounded bg-slate-100 px-1">docs/meta-audiences.md</code>.
+      </p>
+    </div>
+  );
+}
+
 function TrafficGa4() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<{ configured: boolean; traffic: Ga4Traffic | null } | null>(null);
@@ -816,6 +861,13 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </div>
           </>
         )}
+      </Section>
+
+      <Section
+        title="Retargeting — export audiences for Meta"
+        tip="Your website's database (respects the filter bar). Meta hashes the uploaded file in your browser; only hashed values reach Meta, used solely for ad matching."
+      >
+        <MetaExport profiles={filtered} />
       </Section>
 
       <Section title="Geography">
