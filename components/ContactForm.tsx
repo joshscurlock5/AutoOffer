@@ -5,6 +5,7 @@ import { Check, ArrowRight, Shield } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics";
+import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
@@ -45,6 +46,10 @@ export default function ContactForm() {
       fd.append("phone", phone);
       fd.append("message", message);
       fd.append("metaEventId", metaEventId);
+      // Same profile enrichment the offer flow sends (attribution/journey/behavior).
+      fd.append("attribution", JSON.stringify(getAttribution()));
+      fd.append("touches", JSON.stringify(getTouches()));
+      fd.append("behavior", JSON.stringify(getBehavior()));
       if (tsToken) fd.append("turnstileToken", tsToken);
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error();

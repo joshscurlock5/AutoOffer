@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
-import type { Profile, AdInsight, Ga4Traffic } from "@/lib/types";
+import type { Profile, AdInsight, Ga4Traffic, Touch } from "@/lib/types";
 import {
   computeView,
   filterProfiles,
@@ -78,7 +78,24 @@ const SRC = {
   comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
   clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
   events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Not affected by the filter bar above.",
+  journey: "Your website's database — every marketing source this person arrived from, oldest to newest. First chip = first touch.",
 };
+
+/** Short display label for one journey touch. */
+function touchLabel(t: Touch): string {
+  if (t.utmCampaign) return t.utmCampaign.slice(0, 30);
+  if (t.utmSource) return t.utmMedium ? `${t.utmSource}/${t.utmMedium}` : t.utmSource;
+  if (t.gclid) return "google ads";
+  if (t.fbclid) return "facebook ad";
+  if (t.referrer) {
+    try {
+      return new URL(t.referrer).hostname.replace(/^www\./, "");
+    } catch {
+      return "referral";
+    }
+  }
+  return "direct";
+}
 
 const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID || "";
 
@@ -336,6 +353,26 @@ function ProfileRow({ p }: { p: Profile }) {
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
             {loc && <Row k="Location" v={loc} />}
             {p.device?.type && <Row k="Device" v={[p.device.type, p.device.os, p.device.browser].filter(Boolean).join(" · ")} />}
+            {p.touchHistory && p.touchHistory.length > 0 && (
+              <>
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  Journey<InfoDot tip={SRC.journey} />
+                </div>
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  {p.touchHistory.map((t, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-slate-300">→</span>}
+                      <span
+                        className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-ink"
+                        title={t.at ? new Date(t.at).toLocaleString("en-CA") : undefined}
+                      >
+                        {touchLabel(t)}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">On-site behavior</div>
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
             <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />

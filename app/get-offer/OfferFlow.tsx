@@ -7,7 +7,7 @@ import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track, trackFunnel } from "@/lib/analytics";
-import { getAttribution, getBehavior, markFunnelStep } from "@/lib/attribution";
+import { getAttribution, getBehavior, getTouches, markFunnelStep } from "@/lib/attribution";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
@@ -258,6 +258,7 @@ export default function OfferFlow() {
         trim: trim === TRIM_UNSURE ? "" : trim,
         mileageKm: kmv,
         attribution: getAttribution(),
+        touches: getTouches(),
         behavior: getBehavior(),
       });
       navigator.sendBeacon("/api/leads/partial", new Blob([payload], { type: "application/json" }));
@@ -471,8 +472,10 @@ export default function OfferFlow() {
       fd.append("metaEventId", metaEventId);
       if (tsToken) fd.append("turnstileToken", tsToken);
       fd.append("condition", JSON.stringify({ tags: damageTags, note: damageNote.trim() }));
-      // First-touch attribution + behavior summary for the per-person profile.
+      // First-touch attribution + multi-touch journey + behavior summary for
+      // the per-person profile.
       fd.append("attribution", JSON.stringify(getAttribution()));
+      fd.append("touches", JSON.stringify(getTouches()));
       fd.append("behavior", JSON.stringify(getBehavior()));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });

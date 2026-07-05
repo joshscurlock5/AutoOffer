@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { getLeads, addLead, updateLead } from "@/lib/store";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import type { Lead, VehicleInfo } from "@/lib/types";
-import { parseAttribution, parseBehavior } from "@/lib/attribution";
+import { parseAttribution, parseBehavior, parseTouches } from "@/lib/attribution";
 import { clientIdFromGaCookie } from "@/lib/ga4Mp";
 
 export const runtime = "nodejs";
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Per-person profile enrichment (mirrors the full lead route).
     const attribution = parseAttribution(body.attribution);
+    const touchHistory = parseTouches(body.touches);
     const behavior = parseBehavior(body.behavior);
     const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
 
@@ -86,6 +87,8 @@ export async function POST(req: NextRequest) {
         ...(attribution && !match.attribution
           ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
           : {}),
+        // The journey GROWS over time (client array is append-only), so newer wins.
+        ...(touchHistory ? { touchHistory } : {}),
         ...(gaClientId && !match.gaClientId ? { gaClientId } : {}),
       });
       return NextResponse.json({ ok: true, updated: true });
@@ -102,6 +105,7 @@ export async function POST(req: NextRequest) {
       ...(attribution
         ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
         : {}),
+      ...(touchHistory ? { touchHistory } : {}),
       ...(behavior ? { behavior } : {}),
       ...(gaClientId ? { gaClientId } : {}),
       source: "web-partial",

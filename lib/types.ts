@@ -94,6 +94,23 @@ export interface Attribution {
   landingAt?: string;
 }
 
+/** One marketing touch — a visit that arrived carrying a NEW source signal
+ * (utm/click-id/external referrer; the very first visit counts even when
+ * direct). Accumulated client-side (localStorage `ao_touches`, capped) so the
+ * lead carries the person's whole journey, not just the first touch. */
+export interface Touch {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  gclid?: string;
+  fbclid?: string;
+  referrer?: string;
+  landingPath?: string;
+  at?: string;
+}
+
 /** Lightweight on-site behavior summary, accumulated client-side in localStorage
  * across the session and sent with the lead. */
 export interface Behavior {
@@ -230,6 +247,8 @@ export interface Lead {
   smsOptOut?: boolean;
   /** First-touch marketing attribution (which ad/campaign/referrer brought them). */
   attribution?: Attribution;
+  /** Every marketing source that brought this person in, oldest first (multi-touch). */
+  touchHistory?: Touch[];
   /** Lightweight on-site behavior summary captured client-side. */
   behavior?: Behavior;
   /** GA4 client_id (from the _ga cookie) captured at submission, for GA session stitching. */
@@ -296,6 +315,8 @@ export interface Profile {
   contactMethod?: "call" | "text" | "email";
   source: string;
   attribution?: Attribution;
+  /** Merged multi-touch journey across this person's leads, oldest first. */
+  touchHistory?: Touch[];
   behavior?: Behavior;
   geo?: Geo;
   device?: DeviceInfo;

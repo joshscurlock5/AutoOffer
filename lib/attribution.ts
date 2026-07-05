@@ -1,4 +1,4 @@
-import type { Attribution, Behavior } from "./types";
+import type { Attribution, Behavior, Touch } from "./types";
 
 // ===========================================================================
 //  Client-side first-touch attribution + lightweight behavior tracking.
@@ -15,6 +15,8 @@ import type { Attribution, Behavior } from "./types";
 
 const ATTR_KEY = "ao_attribution";
 const BEHAVIOR_KEY = "ao_behavior";
+const TOUCHES_KEY = "ao_touches";
+const MAX_TOUCHES = 20;
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -81,6 +83,10 @@ export function captureFirstTouch(): void {
     write(ATTR_KEY, attr);
   }
 
+  // Multi-touch history — unlike the first-touch block above, this appends a
+  // NEW entry every time a visit arrives with a fresh source signal.
+  recordTouch(url, p);
+
   // Behavior session — create once, then bump pageviews + lastSeenAt each call.
   const now = new Date().toISOString();
   const b: Behavior = read<Behavior>(BEHAVIOR_KEY) || {
@@ -92,6 +98,62 @@ export function captureFirstTouch(): void {
   b.lastSeenAt = now;
   b.pageviews = (b.pageviews || 0) + 1;
   write(BEHAVIOR_KEY, b);
+}
+
+/** Same source signals? Used to dedupe consecutive touches (internal SPA
+ * navigations keep the same document.referrer, so without this every route
+ * change would re-append the entry). */
+function sameTouchSource(a: Touch, b: Touch): boolean {
+  return (
+    (a.utmSource || "") === (b.utmSource || "") &&
+    (a.utmMedium || "") === (b.utmMedium || "") &&
+    (a.utmCampaign || "") === (b.utmCampaign || "") &&
+    (a.utmContent || "") === (b.utmContent || "") &&
+    (a.utmTerm || "") === (b.utmTerm || "") &&
+    (a.gclid || "") === (b.gclid || "") &&
+    (a.fbclid || "") === (b.fbclid || "") &&
+    (a.referrer || "") === (b.referrer || "")
+  );
+}
+
+/** Append a touch when this navigation carries a NEW source signal (any utm /
+ * click id / external referrer). The very first visit records even when direct
+ * (so the journey has a start); plain direct RETURN visits don't append — a
+ * revisit with no signal isn't a new marketing source. Capped + deduped. */
+function recordTouch(url: URL, p: URLSearchParams): void {
+  let referrer = document.referrer || "";
+  try {
+    if (referrer && new URL(referrer).host === window.location.host) referrer = "";
+  } catch {
+    /* keep referrer as-is */
+  }
+  const touch: Touch = {
+    utmSource: p.get("utm_source") || undefined,
+    utmMedium: p.get("utm_medium") || undefined,
+    utmCampaign: p.get("utm_campaign") || undefined,
+    utmContent: p.get("utm_content") || undefined,
+    utmTerm: p.get("utm_term") || undefined,
+    gclid: p.get("gclid") || undefined,
+    fbclid: p.get("fbclid") || undefined,
+    referrer: referrer || undefined,
+    landingPath: url.pathname + (url.search || ""),
+    at: new Date().toISOString(),
+  };
+  const hasSignal = Boolean(
+    touch.utmSource || touch.utmMedium || touch.utmCampaign || touch.utmContent ||
+    touch.utmTerm || touch.gclid || touch.fbclid || touch.referrer,
+  );
+  const touches = read<Touch[]>(TOUCHES_KEY) || [];
+  if (touches.length && !hasSignal) return;
+  const last = touches[touches.length - 1];
+  if (last && sameTouchSource(last, touch)) return;
+  touches.push(touch);
+  write(TOUCHES_KEY, touches.slice(-MAX_TOUCHES));
+}
+
+/** The stored multi-touch journey (oldest first; [] if none). */
+export function getTouches(): Touch[] {
+  return read<Touch[]>(TOUCHES_KEY) || [];
 }
 
 /** Record the furthest offer-flow step the visitor reached (monotonic). */
@@ -157,6 +219,36 @@ export function parseAttribution(raw: unknown): Attribution | undefined {
       landingAt: S(o.landingAt, 40),
     };
     return Object.values(a).some(Boolean) ? a : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Parse + clamp the touch-history JSON the client sent. undefined when empty. */
+export function parseTouches(raw: unknown): Touch[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(arr)) return undefined;
+    const out: Touch[] = [];
+    for (const item of arr.slice(0, 20)) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const t: Touch = {
+        utmSource: S(o.utmSource, 120),
+        utmMedium: S(o.utmMedium, 120),
+        utmCampaign: S(o.utmCampaign, 200),
+        utmContent: S(o.utmContent, 200),
+        utmTerm: S(o.utmTerm, 200),
+        gclid: S(o.gclid, 400),
+        fbclid: S(o.fbclid, 400),
+        referrer: S(o.referrer, 400),
+        landingPath: S(o.landingPath, 400),
+        at: S(o.at, 40),
+      };
+      if (Object.values(t).some(Boolean)) out.push(t);
+    }
+    return out.length ? out : undefined;
   } catch {
     return undefined;
   }

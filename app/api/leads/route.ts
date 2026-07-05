@@ -10,7 +10,7 @@ import { sendCapiLead, splitName } from "@/lib/metaCapi";
 import { sendGa4Lead, clientIdFromGaCookie } from "@/lib/ga4Mp";
 import { sendLeadConfirmation } from "@/lib/email";
 import { smsLeadConfirmation } from "@/lib/sms";
-import { parseAttribution, parseBehavior } from "@/lib/attribution";
+import { parseAttribution, parseBehavior, parseTouches } from "@/lib/attribution";
 
 export const runtime = "nodejs";
 
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
     // Per-person profile enrichment: first-touch attribution + on-site behavior
     // (sent by the client) + the GA4 client_id (for GA session stitching).
     const attribution = parseAttribution(str(form.get("attribution")));
+    const touchHistory = parseTouches(str(form.get("touches")));
     const behavior = parseBehavior(str(form.get("behavior")));
     const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
 
@@ -178,6 +179,7 @@ export async function POST(req: NextRequest) {
       ...(attribution
         ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
         : {}),
+      ...(touchHistory ? { touchHistory } : {}),
       ...(behavior ? { behavior } : {}),
       ...(gaClientId ? { gaClientId } : {}),
       source: "web",

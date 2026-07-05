@@ -13,6 +13,7 @@ import type {
   EmailEngagement,
   SmsEngagement,
   SiteEvent,
+  Touch,
 } from "./types";
 
 // ===========================================================================
@@ -179,6 +180,21 @@ function shortUrl(u: string): string {
   } catch {
     return u.slice(0, 40);
   }
+}
+
+/** Merge every lead's touch history into one deduped, oldest-first journey. */
+function mergeTouches(leads: Lead[]): Touch[] | undefined {
+  const seen = new Map<string, Touch>();
+  for (const l of leads) {
+    for (const t of l.touchHistory || []) {
+      const key = `${t.at || ""}|${t.utmSource || ""}|${t.utmCampaign || ""}|${t.gclid || ""}|${t.fbclid || ""}|${t.referrer || ""}`;
+      if (!seen.has(key)) seen.set(key, t);
+    }
+  }
+  if (!seen.size) return undefined;
+  return [...seen.values()]
+    .sort((a, b) => (a.at || "").localeCompare(b.at || ""))
+    .slice(-40);
 }
 
 /** Sum the per-lead email receipts (Resend webhook) into one profile view. */
@@ -423,6 +439,7 @@ function buildOne(
     contactMethod: sortedLeads[0]?.contact.contactMethod,
     source: sourceLabel(attribution),
     attribution,
+    touchHistory: mergeTouches(sortedLeads),
     behavior,
     geo,
     device,
