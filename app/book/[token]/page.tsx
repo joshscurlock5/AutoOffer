@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { cad } from "@/lib/format";
 import { site } from "@/lib/site-config";
+import { logEvent } from "@/lib/events";
 
 type Slot = { iso: string; timeLabel: string };
 type Day = { date: string; dateLabel: string; slots: Slot[] };
@@ -31,6 +32,9 @@ export default function BookPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // First-party "opened the booking page" — the server resolves the token to
+    // the lead, so this stitches even when opened from an email on a new device.
+    if (token) logEvent("booking_view", { bookingToken: token });
     fetch(`/api/book?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
       .then((d: BookData) => {

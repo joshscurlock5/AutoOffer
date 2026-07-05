@@ -23,6 +23,7 @@ export const ddb = DynamoDBDocumentClient.from(
 export const s3 = new S3Client({ region, credentials });
 
 export const LEADS_TABLE = process.env.LEADS_TABLE || "AutoOfferLeads";
+export const EVENTS_TABLE = process.env.EVENTS_TABLE || "AutoOfferEvents";
 export const REFERRALS_TABLE =
   process.env.REFERRALS_TABLE || "AutoOfferReferrals";
 export const CHATS_TABLE = process.env.CHATS_TABLE || "AutoOfferChats";

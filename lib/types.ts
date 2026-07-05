@@ -257,10 +257,30 @@ export interface Lead {
   source: string;
 }
 
+/** One row in the first-party events table (AutoOfferEvents). Written by
+ * /api/events from the client beacon (lib/events.ts); expired by DynamoDB TTL
+ * after ~12 months. */
+export interface SiteEvent {
+  /** Partition key — the same behavior.sessionId stored on leads. */
+  sessionId: string;
+  /** Sort key: `${at}#${rand}` so same-millisecond events don't collide. */
+  sk: string;
+  /** Event name (page_view, offer_flow_start, form_error, …). */
+  n: string;
+  /** Clamped event params. */
+  p?: Record<string, string | number | boolean>;
+  path?: string;
+  at: string;
+  /** Present when the event carried a booking token the server resolved. */
+  leadId?: string;
+  /** Epoch-seconds TTL attribute. */
+  ttl: number;
+}
+
 /** One event on a person's unified timeline. */
 export interface ProfileEvent {
   at: string;
-  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close" | "comms";
+  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close" | "comms" | "site";
   label: string;
   leadId?: string;
 }

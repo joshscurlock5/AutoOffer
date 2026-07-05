@@ -6,6 +6,7 @@
 // ===========================================================================
 
 import { trackMeta } from "./metaPixel";
+import { logEvent } from "./events";
 
 declare global {
   interface Window {
@@ -20,6 +21,9 @@ type Params = Record<string, string | number | boolean | undefined>;
 
 export function track(event: string, params: Params = {}): void {
   if (typeof window === "undefined") return;
+  // First-party tee (lib/events.ts) BEFORE the gtag guard, so our own events
+  // table still fills when an ad-blocker keeps GA from ever loading.
+  logEvent(event, params);
   if (typeof window.gtag !== "function") return;
   window.gtag("event", event, params);
 }

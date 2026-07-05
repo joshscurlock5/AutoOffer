@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { captureFirstTouch } from "@/lib/attribution";
+import { logEvent } from "@/lib/events";
 
 /**
  * Fires a GA4 page_view on every client-side route change. App Router SPA
@@ -21,6 +22,9 @@ export default function Analytics() {
     captureFirstTouch();
     const qs = searchParams?.toString();
     const path = qs ? `${pathname}?${qs}` : pathname;
+    // First-party page_view (page_view is fired via raw gtag below, not track(),
+    // so the events-table tee needs its own call here).
+    logEvent("page_view", { page_path: path });
     if (typeof window.gtag === "function") {
       window.gtag("event", "page_view", {
         page_path: path,

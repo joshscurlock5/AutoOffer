@@ -77,6 +77,7 @@ const SRC = {
   ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
   comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
   clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
+  events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Not affected by the filter bar above.",
 };
 
 const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID || "";
@@ -127,11 +128,11 @@ function HBars({ title, rows, tip }: { title: string; rows: Count[]; tip?: strin
   );
 }
 
-function Funnel({ rows, tip }: { rows: Count[]; tip?: string }) {
+function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip?: string; title?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">Conversion funnel{tip && <InfoDot tip={tip} />}</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       <div className="space-y-2">
         {rows.map((r, i) => {
           const prev = i > 0 ? rows[i - 1].count : 0;
@@ -572,7 +573,7 @@ function TrafficGa4() {
 }
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
-  const { profiles, lookupsTotal } = data;
+  const { profiles, lookupsTotal, events: ev } = data;
   const [filters, setFilters] = useState<Filters>({});
   const [dim, setDim] = useState<SegmentDimension>("source");
   const [q, setQ] = useState("");
@@ -655,6 +656,78 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       <Section title="Traffic (GA4) — everyone who visited" tip={SRC.ga4}>
         <TrafficGa4 />
+      </Section>
+
+      <Section title="Site funnel & form friction — every visitor" tip={SRC.events}>
+        {!ev || ev.totalEvents === 0 ? (
+          <div className="card p-4 text-sm text-muted">
+            <span className="font-semibold text-navy">No events collected yet.</span> Data starts flowing
+            automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
+            exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Funnel
+                rows={ev.funnel}
+                tip={SRC.events}
+                title={`Every session, step by step (${ev.totalSessions.toLocaleString("en-CA")} sessions)`}
+              />
+              <div className="card p-4">
+                <h3 className="mb-3 text-sm font-bold text-navy">
+                  Median time between steps<InfoDot tip={SRC.events} />
+                </h3>
+                {ev.stepMedianMins.length === 0 ? (
+                  <p className="text-sm text-muted">Not enough sessions yet.</p>
+                ) : (
+                  <div className="space-y-1.5 text-sm">
+                    {ev.stepMedianMins.map((s) => (
+                      <div key={s.label} className="flex justify-between gap-2">
+                        <span className="text-muted">{s.label}</span>
+                        <span className="font-semibold text-navy">
+                          {s.mins < 1 ? `${Math.round(s.mins * 60)}s` : `${s.mins}m`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="card overflow-x-auto p-4">
+                <h3 className="mb-3 text-sm font-bold text-navy">
+                  Form friction — where people stop<InfoDot tip={SRC.events} />
+                </h3>
+                {ev.friction.length === 0 ? (
+                  <p className="text-sm text-muted">No field interactions recorded yet.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+                        <th className="py-2 pr-2">Field</th>
+                        <th className="px-2 text-right" title="Sessions that focused this field">Touched by</th>
+                        <th className="pl-2 text-right" title="Abandoning sessions whose LAST touched field was this one">Abandoned here</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ev.friction.map((f) => (
+                        <tr key={f.field} className="border-b border-slate-100">
+                          <td className="py-2 pr-2 font-semibold capitalize text-navy">{f.field}</td>
+                          <td className="px-2 text-right">{f.focuses}</td>
+                          <td className="pl-2 text-right font-semibold">{f.abandons || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <HBars title="Form errors by reason" rows={ev.errorsByReason} tip={SRC.events} />
+            </div>
+            <div className="mt-4">
+              <HBars title="Top events — what's being captured" rows={ev.topEvents} tip={SRC.events} />
+            </div>
+          </>
+        )}
       </Section>
 
       <Section title="Geography">

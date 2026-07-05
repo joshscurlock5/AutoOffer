@@ -12,6 +12,7 @@ import type {
   DeviceInfo,
   EmailEngagement,
   SmsEngagement,
+  SiteEvent,
 } from "./types";
 
 // ===========================================================================
@@ -79,11 +80,14 @@ type Rec =
   | { kind: "referral"; keys: string[]; referral: Referral }
   | { kind: "chat"; keys: string[]; chat: ChatConversation };
 
-/** Build one Profile per person from all leads (+ partials) + referrers + chats. */
+/** Build one Profile per person from all leads (+ partials) + referrers + chats.
+ * Pass the first-party events scan to interleave each person's on-site activity
+ * (matched via lead.behavior.sessionId, or a server-resolved leadId). */
 export function buildProfiles(
   leads: Lead[],
   referrals: Referral[] = [],
   chats: ChatConversation[] = [],
+  siteEvents: SiteEvent[] = [],
 ): Profile[] {
   const uf = new UnionFind();
   const recs: Rec[] = [];
@@ -116,8 +120,22 @@ export function buildProfiles(
     else groups.set(root, [rec]);
   }
 
+  // Index the event stream once: by sessionId and by server-resolved leadId.
+  const eventsBySession = new Map<string, SiteEvent[]>();
+  const eventsByLeadId = new Map<string, SiteEvent[]>();
+  for (const e of siteEvents) {
+    const s = eventsBySession.get(e.sessionId);
+    if (s) s.push(e);
+    else eventsBySession.set(e.sessionId, [e]);
+    if (e.leadId) {
+      const l = eventsByLeadId.get(e.leadId);
+      if (l) l.push(e);
+      else eventsByLeadId.set(e.leadId, [e]);
+    }
+  }
+
   const profiles: Profile[] = [];
-  for (const [root, group] of groups) profiles.push(buildOne(root, group));
+  for (const [root, group] of groups) profiles.push(buildOne(root, group, eventsBySession, eventsByLeadId));
   profiles.sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""));
   return profiles;
 }
@@ -183,6 +201,52 @@ function aggregateEmailEngagement(leads: Lead[]): EmailEngagement | undefined {
   };
 }
 
+/** Timeline labels for site events worth showing on a person's file. Everything
+ * not listed (scroll_depth, field_focus, …) stays in the aggregates only. */
+const SITE_EVENT_LABELS: Record<string, string> = {
+  offer_flow_start: "Opened the offer form",
+  step1_submitted: "Entered their vehicle",
+  details_submitted: "Entered mileage & condition",
+  contact_started: "Reached the contact step",
+  contact_engaged: "Started typing contact info",
+  estimate_viewed: "Viewed an estimate",
+  booking_view: "Opened the booking page",
+  phone_click: "Clicked to call",
+  chat_opened: "Opened the chat",
+  widget_submit: "Used the value widget",
+  resume_clicked: "Resumed their form",
+};
+
+/** Condense a person's raw event stream into readable timeline entries:
+ * consecutive page_views collapse into one "Viewed N pages", only whitelisted
+ * events get labels, capped at the 50 most recent. */
+function condenseSiteEvents(evs: SiteEvent[]): ProfileEvent[] {
+  const sorted = [...evs].sort((a, b) => a.at.localeCompare(b.at));
+  const out: ProfileEvent[] = [];
+  let pvRun = 0;
+  let pvAt = "";
+  const flushPv = () => {
+    if (!pvRun) return;
+    out.push({ at: pvAt, type: "site", label: pvRun === 1 ? "Viewed a page" : `Viewed ${pvRun} pages` });
+    pvRun = 0;
+  };
+  for (const e of sorted) {
+    if (e.n === "page_view") {
+      if (!pvRun) pvAt = e.at;
+      pvRun += 1;
+      continue;
+    }
+    flushPv();
+    const label =
+      e.n === "form_error"
+        ? `Form error${typeof e.p?.reason === "string" ? ` (${e.p.reason})` : ""}`
+        : SITE_EVENT_LABELS[e.n];
+    if (label) out.push({ at: e.at, type: "site", label, leadId: e.leadId });
+  }
+  flushPv();
+  return out.slice(-50);
+}
+
 /** Sum the per-lead SMS delivery receipts (Twilio callback) into one profile view. */
 function aggregateSmsEngagement(leads: Lead[]): SmsEngagement | undefined {
   const es = leads.map((l) => l.smsEngagement).filter((e): e is SmsEngagement => Boolean(e));
@@ -227,7 +291,12 @@ function deviceFromUA(ua?: string): DeviceInfo | undefined {
   return { type, os, browser };
 }
 
-function buildOne(root: string, group: Rec[]): Profile {
+function buildOne(
+  root: string,
+  group: Rec[],
+  eventsBySession: Map<string, SiteEvent[]> = new Map(),
+  eventsByLeadId: Map<string, SiteEvent[]> = new Map(),
+): Profile {
   const leads = group.filter((r): r is Extract<Rec, { kind: "lead" }> => r.kind === "lead").map((r) => r.lead);
   const referrals = group
     .filter((r): r is Extract<Rec, { kind: "referral" }> => r.kind === "referral")
@@ -318,6 +387,17 @@ function buildOne(root: string, group: Rec[]): Profile {
     }
   }
   for (const rf of referrals) timeline.push({ at: rf.createdAt, type: "referral", label: `Referred a friend (code ${rf.code})` });
+
+  // On-site activity from the first-party event stream: everything under this
+  // person's known session ids, plus events server-stitched by leadId (e.g. a
+  // booking page opened from an email on another device). Deduped by sort key.
+  const siteEvs = new Map<string, SiteEvent>();
+  for (const l of leads) {
+    const sid = l.behavior?.sessionId;
+    for (const e of (sid && eventsBySession.get(sid)) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
+    for (const e of eventsByLeadId.get(l.id) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
+  }
+  timeline.push(...condenseSiteEvents([...siteEvs.values()]));
   timeline.sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
   const times = timeline.map((e) => e.at).filter(Boolean);

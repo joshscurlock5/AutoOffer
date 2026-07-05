@@ -6,14 +6,15 @@ import {
   ScanCommand,
   DeleteCommand,
   UpdateCommand,
+  BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
-import { ddb, s3, LEADS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, ChatConversation, ChatMessage, Lookup } from "./types";
+import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
+import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent } from "./types";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -260,6 +261,47 @@ export async function getLookups(): Promise<Lookup[]> {
 
 export async function addLookup(lookup: Lookup): Promise<void> {
   await ddb.send(new PutCommand({ TableName: LOOKUPS_TABLE, Item: lookup }));
+}
+
+// ---- First-party site events (DynamoDB, TTL-expired) -----------------------
+
+/** Batch-write beacon events. DynamoDB caps BatchWrite at 25 items; the API
+ * already enforces the same cap per request, but chunk defensively anyway.
+ * Best-effort: swallows errors (incl. the table not existing yet) — analytics
+ * writes must never surface to the visitor. */
+export async function addEvents(items: SiteEvent[]): Promise<void> {
+  try {
+    for (let i = 0; i < items.length; i += 25) {
+      const chunk = items.slice(i, i + 25);
+      await ddb.send(
+        new BatchWriteCommand({
+          RequestItems: { [EVENTS_TABLE]: chunk.map((Item) => ({ PutRequest: { Item } })) },
+        }),
+      );
+    }
+  } catch (e) {
+    console.error("[events] write failed:", e);
+  }
+}
+
+/** Every stored event (TTL keeps the table to ~12 months). Paginated scan with
+ * a hard cap so a runaway table can never OOM the admin dashboard. Returns []
+ * until the AutoOfferEvents table exists — the dashboard renders without it. */
+export async function getAllEvents(): Promise<SiteEvent[]> {
+  const out: SiteEvent[] = [];
+  try {
+    let lastKey: Record<string, unknown> | undefined;
+    do {
+      const res = await ddb.send(
+        new ScanCommand({ TableName: EVENTS_TABLE, ExclusiveStartKey: lastKey }),
+      );
+      out.push(...((res.Items || []) as SiteEvent[]));
+      lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (lastKey && out.length < 100_000);
+  } catch {
+    /* table not created yet (or transient) — the dashboard just shows no events */
+  }
+  return out;
 }
 
 /** Mark a lookup as converted (the visitor submitted contact info) + link the lead. */

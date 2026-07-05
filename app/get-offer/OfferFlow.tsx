@@ -584,12 +584,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onBlur={sendPartialBeacon} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone <span className="font-semibold text-emerald-700">(recommended)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onBlur={sendPartialBeacon} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Recommended — sometimes we need a quick detail to finalize an accurate offer, and a call or text is the fastest way to get it.</p>
             </div>
           </>
@@ -597,12 +597,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onBlur={sendPartialBeacon} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
               <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onBlur={sendPartialBeacon} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
@@ -806,7 +806,7 @@ export default function OfferFlow() {
                 </div>
                 <div>
                   <label className="label" htmlFor="km">Mileage (km)</label>
-                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => { if (e.target.value) once("details_mileage_entered"); setKmv(e.target.value); }} />
+                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => { if (e.target.value) once("details_mileage_entered"); setKmv(e.target.value); }} onFocus={() => track("field_focus", { field: "mileage" })} onBlur={() => track("field_blur", { field: "mileage", filled: !!kmv })} />
                   <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
                 </div>
               </div>
