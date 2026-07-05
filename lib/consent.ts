@@ -13,14 +13,17 @@ export const CONSENT_KEY = "ao_consent";
 
 export type ConsentChoice = "granted" | "denied";
 
-/** The stored banner choice, or null if the visitor hasn't chosen (or SSR). */
+/** The stored banner choice, or null if the visitor hasn't chosen (or SSR).
+ * FAIL CLOSED: when storage is blocked entirely (e.g. "block all cookies"),
+ * report "denied" — a prior opt-out would be unreadable, and a banner choice
+ * couldn't persist anyway, so the safe posture is no analytics + no banner. */
 export function consentChoice(): ConsentChoice | null {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return null;
+  if (typeof window === "undefined") return null;
   try {
     const v = window.localStorage.getItem(CONSENT_KEY);
     return v === "granted" || v === "denied" ? v : null;
   } catch {
-    return null;
+    return "denied";
   }
 }
 
@@ -31,10 +34,10 @@ export function consentDenied(): boolean {
 
 /** Store the banner choice (best-effort; storage failures never disrupt the page). */
 export function setConsent(v: ConsentChoice): void {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(CONSENT_KEY, v);
   } catch {
-    /* storage disabled — the banner will just show again */
+    /* storage disabled — consentChoice() fails closed to "denied" anyway */
   }
 }

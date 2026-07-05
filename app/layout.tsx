@@ -83,7 +83,7 @@ export default function RootLayout({
                 the consent banner's opt-out (lib/consent.ts): a stored denial
                 disables GA before it can init. */}
             <Script id="ga4-init" strategy="beforeInteractive">
-              {`try{if(localStorage.getItem('ao_consent')==='denied'){window['ga-disable-${GA_ID}']=true;window.__aoNoTrack=true;}}catch(e){}window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false});`}
+              {`var aoDeny=true;try{aoDeny=localStorage.getItem('ao_consent')==='denied';}catch(e){}if(aoDeny){window['ga-disable-${GA_ID}']=true;window.__aoNoTrack=true;}window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false});`}
             </Script>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
@@ -98,7 +98,7 @@ export default function RootLayout({
                 counted exactly once. Skipped entirely when the consent banner's
                 opt-out is stored (trackMeta no-ops when fbq never loads). */}
             <Script id="meta-pixel" strategy="afterInteractive">
-              {`try{if(localStorage.getItem('ao_consent')==='denied'){window.__aoNoTrack=true;}}catch(e){}if(!window.__aoNoTrack){!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL_ID}');}`}
+              {`var aoDenyPx=true;try{aoDenyPx=localStorage.getItem('ao_consent')==='denied';}catch(e){}if(aoDenyPx){window.__aoNoTrack=true;}if(!window.__aoNoTrack){!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL_ID}');}`}
             </Script>
             <noscript>
               {/* eslint-disable-next-line @next/next/no-img-element */}

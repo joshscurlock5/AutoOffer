@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
   try {
     const raw = await req.text();
     const params = new URLSearchParams(raw);
-    if (!TOKEN) return new NextResponse(null, { status: 200 }); // not configured yet
+    // Dormant until a REAL Twilio auth token is set (always 32 chars) — a
+    // truncated/placeholder value must never become a weak HMAC key.
+    if (!TOKEN || TOKEN.length < 32) return new NextResponse(null, { status: 200 });
     if (!validSignature(req.headers.get("x-twilio-signature") || "", params)) {
       console.warn("[sms status] bad Twilio signature — ignored");
       return new NextResponse(null, { status: 200 });
