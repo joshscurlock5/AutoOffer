@@ -14,7 +14,10 @@ import type {
   SmsEngagement,
   SiteEvent,
   Touch,
+  Enrichment,
+  ScoreFactor,
 } from "./types";
+import { emailType, phoneRegion, vehicleTier } from "./enrich";
 
 // ===========================================================================
 //  Identity stitching — one Profile per PERSON.
@@ -180,6 +183,66 @@ function shortUrl(u: string): string {
   } catch {
     return u.slice(0, 40);
   }
+}
+
+/** The transparent 0–100 lead score. NOT machine learning — an explainable
+ * prioritization aid: every factor is returned so the dashboard can show
+ * exactly why a person scored what they did. Factors from data that hasn't
+ * started flowing yet (engagement receipts, funnel events) simply score 0,
+ * so the score degrades gracefully and improves as the data fills in. */
+function computeScore(
+  p: Omit<Profile, "score" | "scoreBreakdown">,
+  leads: Lead[],
+): { score: number; breakdown: ScoreFactor[] } {
+  const b: ScoreFactor[] = [];
+
+  // Recency of ANY activity (0–25) — a week-old lead is worth calling; a
+  // three-month-old one usually isn't.
+  const last = p.lastActivityAt ? Date.parse(p.lastActivityAt) : NaN;
+  const days = Number.isFinite(last) ? (Date.now() - last) / 86_400_000 : Infinity;
+  const recency = days <= 1 ? 25 : days <= 3 ? 20 : days <= 7 ? 15 : days <= 14 ? 10 : days <= 30 ? 5 : 0;
+  b.push({ label: "Recent activity", points: recency, max: 25 });
+
+  // Engagement (0–25): replies dominate; email opens/clicks + chat add signal.
+  const ee = p.emailEngagement;
+  const chat = p.timeline.some((e) => e.type === "chat");
+  const engagement = Math.min(
+    25,
+    (p.repliesCount || 0) * 10 + (ee?.clicksCount || 0) * 4 + (ee?.opensCount || 0) * 2 + (chat ? 4 : 0),
+  );
+  b.push({ label: "Engagement — replies, clicks, opens, chat", points: engagement, max: 25 });
+
+  // Intent depth (0–20): submitted > reached contact > opened booking page.
+  let intent = 0;
+  if (p.stage !== "partial" && p.stage !== "spam") intent += 10;
+  if ((p.behavior?.maxFunnelStep || 0) >= 3) intent += 4;
+  if (p.appointmentAt || p.timeline.some((e) => e.label === "Opened the booking page")) intent += 6;
+  b.push({ label: "Intent — submitted, funnel depth, booking", points: Math.min(20, intent), max: 20 });
+
+  // Vehicle value tier (0–15) — from the real offer when present, else make+age.
+  const tier = p.enrichment?.vehicleTier;
+  const vehicle = tier === "high" ? 15 : tier === "mid" ? 9 : tier === "low" ? 4 : 0;
+  b.push({ label: "Vehicle value", points: vehicle, max: 15 });
+
+  // Source quality (0–15): referred-in beats organic beats paid beats unknown.
+  const referredIn = leads.some((l) => l.referralCode);
+  const referredOthers = p.timeline.some((e) => e.type === "referral");
+  const a = p.attribution;
+  const paid = Boolean(a?.gclid || a?.fbclid || a?.utmSource);
+  const organic = Boolean(a?.referrer && !paid);
+  const source = referredIn || referredOthers ? 15 : organic ? 12 : paid ? 10 : 8;
+  b.push({ label: "Source quality", points: source, max: 15 });
+
+  // Penalties: dead/complained email is a real barrier to closing.
+  let penalty = 0;
+  if (p.emailBounced) penalty -= 10;
+  if (p.emailOptOut) penalty -= 10;
+  if (penalty) b.push({ label: "Email bounced / opted out", points: penalty, max: 0 });
+
+  let score = b.reduce((s, f) => s + f.points, 0);
+  if (p.stage === "spam") score = 0;
+  if (p.stage === "lost") score = Math.min(score, 25);
+  return { score: Math.max(0, Math.min(100, Math.round(score))), breakdown: b };
 }
 
 /** Merge every lead's touch history into one deduped, oldest-first journey. */
@@ -430,7 +493,21 @@ function buildOne(
     ? Math.max(0, Math.round((Date.parse(fl.firstTouchAt as string) - Date.parse(fl.createdAt)) / 60000))
     : undefined;
 
-  return {
+  // Zero-input enrichment from what we already have (lib/enrich.ts).
+  const recentVehicle = recent.find((l) => l.vehicle)?.vehicle;
+  const et = emailType([...emails][0]);
+  const pr = phoneRegion([...phones][0]);
+  const vt = vehicleTier(recentVehicle?.make, recentVehicle?.year, offerMid);
+  const enrichment: Enrichment | undefined =
+    et || pr || vt
+      ? {
+          ...(et ? { emailType: et } : {}),
+          ...(pr ? { phoneRegion: pr } : {}),
+          ...(vt ? { vehicleTier: vt.tier, ...(vt.age !== undefined ? { vehicleAge: vt.age } : {}) } : {}),
+        }
+      : undefined;
+
+  const base: Omit<Profile, "score" | "scoreBreakdown"> = {
     id: root,
     name: [...names][0],
     emails: [...emails],
@@ -459,9 +536,12 @@ function buildOne(
     smsEngagement: aggregateSmsEngagement(sortedLeads),
     emailOptOut: leads.some((l) => l.emailOptOut) || undefined,
     emailBounced: leads.some((l) => l.emailBounced) || undefined,
+    enrichment,
     timeline,
     leadIds: leads.map((l) => l.id),
   };
+  const { score, breakdown } = computeScore(base, leads);
+  return { ...base, score, scoreBreakdown: breakdown };
 }
 
 // ---- Dashboard aggregates (computed from the same scan) ----------------------

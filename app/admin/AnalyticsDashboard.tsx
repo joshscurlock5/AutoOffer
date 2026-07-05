@@ -9,6 +9,7 @@ import {
   filterProfiles,
   computeFilterOptions,
   segmentTable,
+  scoreBand,
   SEGMENT_DIMENSIONS,
   type Filters,
   type SegmentDimension,
@@ -79,7 +80,24 @@ const SRC = {
   clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
   events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Not affected by the filter bar above.",
   journey: "Your website's database — every marketing source this person arrived from, oldest to newest. First chip = first touch.",
+  score: "Computed from this person's own activity — recency, engagement, funnel depth, vehicle value, and source. Not machine learning; every point is explained in the breakdown inside the profile. A prioritization aid, not a prediction.",
+  enrich: "Derived from data the customer already gave us — email provider type, phone area-code region, and a vehicle value tier. No extra questions asked, no outside services.",
 };
+
+const BAND_STYLE: Record<string, string> = {
+  hot: "bg-emerald-100 text-emerald-800",
+  warm: "bg-amber-100 text-amber-800",
+  cool: "bg-slate-100 text-slate-600",
+};
+
+function ScoreBadge({ score }: { score: number }) {
+  const band = scoreBand(score);
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${BAND_STYLE[band]}`}>
+      {band} {score}
+    </span>
+  );
+}
 
 /** Short display label for one journey touch. */
 function touchLabel(t: Touch): string {
@@ -279,12 +297,13 @@ function SegmentView({
             <th className="px-2 text-right">Close %</th>
             <th className="px-2 text-right">Avg offer</th>
             <th className="px-2 text-right">Revenue</th>
+            <th className="px-2 text-right" title="Average lead score (0-100) across the group">Avg score</th>
             <th className="pl-2 text-right">Avg resp</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={8} className="py-3 text-muted">No data.</td></tr>
+            <tr><td colSpan={9} className="py-3 text-muted">No data.</td></tr>
           ) : (
             rows.map((r) => (
               <tr key={r.group} className="border-b border-slate-100">
@@ -295,6 +314,7 @@ function SegmentView({
                 <td className="px-2 text-right font-semibold">{r.closeRate}%</td>
                 <td className="px-2 text-right">{r.avgOffer ? money(r.avgOffer) : "—"}</td>
                 <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
+                <td className="px-2 text-right">{r.avgScore}</td>
                 <td className="pl-2 text-right">{fmtMins(r.avgResponseMins)}</td>
               </tr>
             ))
@@ -324,6 +344,7 @@ function ProfileRow({ p }: { p: Profile }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-navy">{p.name || p.emails[0] || p.phones[0] || "(no name)"}</span>
+            <ScoreBadge score={p.score} />
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STAGE_STYLE[p.stage] || "bg-slate-100 text-slate-600"}`}>{p.stage}</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">via {p.source}</span>
             {p.device?.type && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">{p.device.type}</span>}
@@ -377,6 +398,32 @@ function ProfileRow({ p }: { p: Profile }) {
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
             <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />
             <Row k="Furthest step" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
+            <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+              Lead score — {p.score}/100<InfoDot tip={SRC.score} />
+            </div>
+            {p.scoreBreakdown.map((f) => (
+              <div key={f.label} className="flex gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-muted" title={f.label}>{f.label}</span>
+                <span className={`shrink-0 font-semibold ${f.points < 0 ? "text-red-600" : "text-navy"}`}>
+                  {f.points}{f.max > 0 ? `/${f.max}` : ""}
+                </span>
+              </div>
+            ))}
+            {p.enrichment && (
+              <>
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  Derived<InfoDot tip={SRC.enrich} />
+                </div>
+                {p.enrichment.emailType && <Row k="Email type" v={p.enrichment.emailType} />}
+                {p.enrichment.phoneRegion && <Row k="Phone region" v={p.enrichment.phoneRegion} />}
+                {p.enrichment.vehicleTier && (
+                  <Row
+                    k="Vehicle tier"
+                    v={`${p.enrichment.vehicleTier}${p.enrichment.vehicleAge !== undefined ? ` (${p.enrichment.vehicleAge} yrs old)` : ""}`}
+                  />
+                )}
+              </>
+            )}
             {(p.emailEngagement || p.smsEngagement) && (
               <>
                 <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
@@ -614,6 +661,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const [filters, setFilters] = useState<Filters>({});
   const [dim, setDim] = useState<SegmentDimension>("source");
   const [q, setQ] = useState("");
+  const [sortByScore, setSortByScore] = useState(false);
 
   const options = useMemo(() => computeFilterOptions(profiles), [profiles]);
   const filtered = useMemo(() => filterProfiles(profiles, filters), [profiles, filters]);
@@ -621,15 +669,17 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const segments = useMemo(() => segmentTable(filtered, dim), [filtered, dim]);
   const list = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return filtered;
-    return filtered.filter((p) =>
-      [p.name, ...p.emails, ...p.phones, p.source, ...p.vehicles, p.attribution?.utmCampaign, p.geo?.city, p.geo?.region]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(n),
-    );
-  }, [q, filtered]);
+    const base = !n
+      ? filtered
+      : filtered.filter((p) =>
+          [p.name, ...p.emails, ...p.phones, p.source, ...p.vehicles, p.attribution?.utmCampaign, p.geo?.city, p.geo?.region]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(n),
+        );
+    return sortByScore ? [...base].sort((a, b) => b.score - a.score) : base;
+  }, [q, filtered, sortByScore]);
 
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
   const activeFilters = Object.values(filters).filter(Boolean).length;
@@ -660,6 +710,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
           <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
           <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
+          <Sel label="Score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} />
           {activeFilters > 0 && (
             <button type="button" onClick={() => setFilters({})} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
               Clear ({activeFilters})
@@ -794,8 +845,12 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       </Section>
 
       <Section title={`Profiles (${list.length})`} tip={SRC.site}>
-        <div className="mb-3">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
           <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            <input type="checkbox" checked={sortByScore} onChange={(e) => setSortByScore(e.target.checked)} />
+            Sort by score
+          </label>
         </div>
         <div className="space-y-3">
           {list.length === 0 ? <p className="text-sm text-muted">No profiles match.</p> : list.map((p) => <ProfileRow key={p.id} p={p} />)}

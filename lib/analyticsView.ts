@@ -17,6 +17,13 @@ export interface Filters {
   stage?: string;
   contactMethod?: string;
   make?: string;
+  /** Lead-score band: hot (70+), warm (40–69), cool (<40). */
+  scoreBand?: string;
+}
+
+/** Score → band, one place so the badge, filter and segments agree. */
+export function scoreBand(score: number): "hot" | "warm" | "cool" {
+  return score >= 70 ? "hot" : score >= 40 ? "warm" : "cool";
 }
 
 export type Count = { label: string; count: number };
@@ -45,6 +52,7 @@ export interface FilterOptions {
   stages: string[];
   contactMethods: string[];
   makes: string[];
+  scoreBands: string[];
 }
 
 const isRealLead = (p: Profile): boolean => p.stage !== "partial" && p.stage !== "spam";
@@ -74,6 +82,7 @@ export function computeFilterOptions(profiles: Profile[]): FilterOptions {
     stages: uniq(profiles.map((p) => p.stage)),
     contactMethods: uniq(profiles.map((p) => p.contactMethod)),
     makes: uniq(profiles.map((p) => p.make)),
+    scoreBands: ["hot", "warm", "cool"],
   };
 }
 
@@ -95,6 +104,7 @@ export function filterProfiles(profiles: Profile[], f: Filters): Profile[] {
     if (f.stage && p.stage !== f.stage) return false;
     if (f.contactMethod && p.contactMethod !== f.contactMethod) return false;
     if (f.make && p.make !== f.make) return false;
+    if (f.scoreBand && scoreBand(p.score) !== f.scoreBand) return false;
     return true;
   });
 }
@@ -178,6 +188,8 @@ export interface SegmentRow {
   avgOffer: number;
   revenue: number;
   avgResponseMins: number | null;
+  /** Average lead score across the group's people. */
+  avgScore: number;
 }
 
 function dimValue(p: Profile, dim: SegmentDimension): string {
@@ -222,6 +234,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
     const avgOffer = offerMids.length ? Math.round(offerMids.reduce((a, b) => a + b, 0) / offerMids.length) : 0;
     const lat = ps.map((p) => p.firstResponseMins).filter((m): m is number => typeof m === "number" && m >= 0);
     const avgResponseMins = lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null;
+    const avgScore = Math.round(ps.reduce((s, p) => s + (p.score || 0), 0) / ps.length);
     rows.push({
       group,
       people: ps.length,
@@ -232,6 +245,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
       avgOffer,
       revenue,
       avgResponseMins,
+      avgScore,
     });
   }
   return rows.sort((a, b) => b.people - a.people);

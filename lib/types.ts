@@ -296,6 +296,22 @@ export interface SiteEvent {
   ttl: number;
 }
 
+/** Zero-input enrichment computed at read time from data the customer already
+ * gave us (lib/enrich.ts) — no extra form fields, no external APIs. */
+export interface Enrichment {
+  emailType?: "personal" | "business" | "disposable";
+  phoneRegion?: string;
+  vehicleTier?: "high" | "mid" | "low";
+  vehicleAge?: number;
+}
+
+/** One explainable factor of the lead score. */
+export interface ScoreFactor {
+  label: string;
+  points: number;
+  max: number;
+}
+
 /** One event on a person's unified timeline. */
 export interface ProfileEvent {
   at: string;
@@ -338,6 +354,12 @@ export interface Profile {
   smsEngagement?: SmsEngagement;
   emailOptOut?: boolean;
   emailBounced?: boolean;
+  /** Zero-input enrichment (email type, phone region, vehicle tier). */
+  enrichment?: Enrichment;
+  /** Transparent 0–100 lead score — a prioritization aid, not ML. */
+  score: number;
+  /** Per-factor breakdown so every point is explainable. */
+  scoreBreakdown: ScoreFactor[];
   timeline: ProfileEvent[];
   leadIds: string[];
 }
