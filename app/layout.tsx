@@ -11,6 +11,8 @@ import ExitIntent from "@/components/ExitIntent";
 import ResumeBanner from "@/components/ResumeBanner";
 import Analytics from "@/components/Analytics";
 import ChatWidget from "@/components/ChatWidget";
+import ConsentBanner from "@/components/ConsentBanner";
+import ClarityScript from "@/components/ClarityScript";
 import JsonLd from "@/components/JsonLd";
 import { site } from "@/lib/site-config";
 import { organizationSchema } from "@/lib/seo";
@@ -77,9 +79,11 @@ export default function RootLayout({
             {/* Define gtag + config BEFORE hydration so early user events aren't
                 dropped. send_page_view:false — <Analytics/> owns page_view so
                 client-side route changes are counted. Ad/remarketing signals
-                off (first-party measurement only). */}
+                off (first-party measurement only). The leading guard honours
+                the consent banner's opt-out (lib/consent.ts): a stored denial
+                disables GA before it can init. */}
             <Script id="ga4-init" strategy="beforeInteractive">
-              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false});`}
+              {`try{if(localStorage.getItem('ao_consent')==='denied'){window['ga-disable-${GA_ID}']=true;window.__aoNoTrack=true;}}catch(e){}window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false,allow_google_signals:false,allow_ad_personalization_signals:false});`}
             </Script>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
@@ -91,9 +95,10 @@ export default function RootLayout({
           <>
             {/* Meta Pixel base — init only. PageView (first render + every route
                 change) is fired by <Analytics/>, mirroring the GA setup, so it's
-                counted exactly once. */}
+                counted exactly once. Skipped entirely when the consent banner's
+                opt-out is stored (trackMeta no-ops when fbq never loads). */}
             <Script id="meta-pixel" strategy="afterInteractive">
-              {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL_ID}');`}
+              {`try{if(localStorage.getItem('ao_consent')==='denied'){window.__aoNoTrack=true;}}catch(e){}if(!window.__aoNoTrack){!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL_ID}');}`}
             </Script>
             <noscript>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -115,6 +120,8 @@ export default function RootLayout({
         <ExitIntent />
         <ResumeBanner />
         <ChatWidget />
+        <ClarityScript />
+        <ConsentBanner />
       </body>
     </html>
   );

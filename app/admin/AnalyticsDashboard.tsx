@@ -76,7 +76,10 @@ const SRC = {
   geo: "IP-address location lookup (ipwho.is), added shortly after each lead arrives.",
   ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
   comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
+  clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
 };
+
+const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID || "";
 
 // A small ⓘ that reveals, on hover, exactly where a metric's data comes from.
 function InfoDot({ tip }: { tip: string }) {
@@ -359,6 +362,29 @@ function ProfileRow({ p }: { p: Profile }) {
             {p.offer && <Row k="Offer" v={`${money(p.offer.low)}–${money(p.offer.high)}`} />}
             {p.firstResponseMins != null && <Row k="Response time" v={fmtMins(p.firstResponseMins)} />}
             {p.appointmentAt && <Row k="Inspection" v={new Date(p.appointmentAt).toLocaleString("en-CA")} />}
+            {p.behavior?.sessionId && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="w-28 shrink-0 text-muted">Session ID</span>
+                <span className="min-w-0 truncate font-mono text-xs text-ink" title={p.behavior.sessionId}>{p.behavior.sessionId}</span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(p.behavior?.sessionId || "").catch(() => {})}
+                  className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-navy hover:bg-slate-200"
+                >
+                  copy
+                </button>
+                {CLARITY_ID && (
+                  <a
+                    href={`https://clarity.microsoft.com/projects/view/${CLARITY_ID}/impressions`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-xs font-semibold text-brand-600 hover:underline"
+                  >
+                    Replays →<InfoDot tip={SRC.clarity} />
+                  </a>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">Timeline</div>

@@ -28,7 +28,15 @@ export default function PrivacyPage() {
         "We use Google Analytics 4, a service provided by Google LLC, to understand how visitors use our site. Google Analytics sets cookies (such as _ga) in your browser and collects technical and usage information including your IP address, device and browser type, the pages you visit, and how you move through our offer process. We use this only in aggregate to measure and improve the site and the offer flow.",
         "We do not send your name, email address, or phone number to Google Analytics — that information is used only to prepare and deliver your offer, as described above.",
         "Google processes this analytics information on servers in the United States, which means it may be stored or accessed outside Canada and is subject to U.S. law.",
-        "You can opt out by blocking or clearing cookies in your browser settings, or by installing Google's Analytics Opt-out Browser Add-on at https://tools.google.com/dlpage/gaoptout.",
+        "You can opt out by blocking or clearing cookies in your browser settings, by installing Google's Analytics Opt-out Browser Add-on at https://tools.google.com/dlpage/gaoptout, or by choosing “Turn off analytics” on the notice shown when you first visit our site (your choice is remembered in your browser's local storage, alongside preferences like your form progress and a random session identifier).",
+      ],
+    },
+    {
+      h: "Session recordings & heatmaps (Microsoft Clarity)",
+      p: [
+        "We use Microsoft Clarity, a service provided by Microsoft Corporation, to understand how visitors interact with our pages — where people click, how far they scroll, and where they get stuck — so we can improve the site. Clarity records page interactions (clicks, scrolling, mouse movement) and produces anonymized session replays and heatmaps. Text you type into forms is masked by default and is not recorded.",
+        "Clarity sets cookies in your browser and processes this information on Microsoft servers in the United States. Recordings are retained by Microsoft for approximately 30 days. Learn more at https://privacy.microsoft.com/privacystatement.",
+        "You can opt out by choosing “Turn off analytics” on the notice shown when you first visit our site, or by blocking cookies in your browser.",
       ],
     },
     {
@@ -50,7 +58,7 @@ export default function PrivacyPage() {
     {
       h: "How we share your information",
       p: [
-        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics provider described in “Analytics & cookies”, the advertising provider described in “Advertising”, and the email and text-message providers described in “Email & text message receipts” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
+        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics and session-recording providers described in “Analytics & cookies” and “Session recordings & heatmaps”, the advertising provider described in “Advertising”, and the email and text-message providers described in “Email & text message receipts” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
       ],
     },
     {
