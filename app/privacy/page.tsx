@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { site, mailHref, fullAddress } from "@/lib/site-config";
+import ConsentControls from "@/components/ConsentControls";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -29,7 +30,7 @@ export default function PrivacyPage() {
         "We do not send your name, email address, or phone number to Google Analytics — that information is used only to prepare and deliver your offer, as described above.",
         "We also record basic usage events in our own database (first-party): the pages you view, how far you get in the offer form, and interface interactions such as button clicks — never the text you type. This includes remembering which ad, search or link brought you to our site, including on return visits, so we know which of our advertising works. We keep these for up to 12 months, use them only to improve the site and our advertising, and do not share them with third parties.",
         "Google processes this analytics information on servers in the United States, which means it may be stored or accessed outside Canada and is subject to U.S. law.",
-        "You can opt out by blocking or clearing cookies in your browser settings, by installing Google's Analytics Opt-out Browser Add-on at https://tools.google.com/dlpage/gaoptout, or by choosing “Turn off analytics” on the notice shown when you first visit our site (your choice is remembered in your browser's local storage, alongside preferences like your form progress and a random session identifier).",
+        "You can opt out at any time using the “Your privacy choices” control at the bottom of this page (also linked in the site footer), by blocking or clearing cookies in your browser settings, or by installing Google's Analytics Opt-out Browser Add-on at https://tools.google.com/dlpage/gaoptout. Your choice is remembered in your browser's local storage, alongside preferences like your form progress and a random session identifier.",
       ],
     },
     {
@@ -37,7 +38,7 @@ export default function PrivacyPage() {
       p: [
         "We use Microsoft Clarity, a service provided by Microsoft Corporation, to understand how visitors interact with our pages — where people click, how far they scroll, and where they get stuck — so we can improve the site. Clarity records page interactions (clicks, scrolling, mouse movement) and produces anonymized session replays and heatmaps. Text you type into forms is masked by default and is not recorded.",
         "Clarity sets cookies in your browser and processes this information on Microsoft servers in the United States. Recordings are retained by Microsoft for approximately 30 days. Learn more at https://privacy.microsoft.com/privacystatement.",
-        "You can opt out by choosing “Turn off analytics” on the notice shown when you first visit our site, or by blocking cookies in your browser.",
+        "You can opt out at any time using the “Your privacy choices” control at the bottom of this page (also linked in the site footer), or by blocking cookies in your browser.",
       ],
     },
     {
@@ -111,6 +112,8 @@ export default function PrivacyPage() {
               </div>
             ))}
           </div>
+
+          <ConsentControls />
 
           <div className="mt-12 rounded-2xl bg-slate-50 p-6">
             <p className="text-muted">

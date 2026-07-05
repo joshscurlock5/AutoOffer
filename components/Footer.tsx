@@ -28,6 +28,7 @@ const quickLinks = [
   { label: "About Us", href: "/about" },
   { label: "Contact Us", href: "/contact" },
   { label: "Privacy Policy", href: "/privacy" },
+  { label: "Privacy Choices", href: "/privacy#privacy-choices" },
   { label: "Terms of Use", href: "/terms" },
 ];
 

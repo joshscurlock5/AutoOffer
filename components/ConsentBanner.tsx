@@ -5,10 +5,11 @@ import Link from "next/link";
 import { consentChoice, setConsent } from "@/lib/consent";
 
 /**
- * One-time analytics notice (opt-out model — see lib/consent.ts). Shows until
- * the visitor picks either button; "Turn off analytics" stores the denial and
- * reloads so no further analytics runs this session. Sits above the mobile
- * sticky bar (bottom-20) and drops to the true bottom on desktop.
+ * One-time analytics notice (opt-out model — see lib/consent.ts), styled the
+ * way large sites do it: one short generic-purposes sentence + OK, with the
+ * actual opt-out control one click away on the privacy page ("Privacy
+ * choices", also permanently linked in the footer). Vendor names live in the
+ * privacy policy. Compact corner pill; sits above the mobile sticky bar.
  */
 export default function ConsentBanner() {
   const [show, setShow] = useState(false);
@@ -21,37 +22,24 @@ export default function ConsentBanner() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-20 z-[70] px-3 pb-3 lg:bottom-0">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lift sm:flex-row sm:items-center">
-        <p className="flex-1 text-sm leading-relaxed text-muted">
-          We use cookies and analytics — Google Analytics, Meta ads measurement, and Microsoft
-          Clarity session recordings — to improve the site and measure our ads.{" "}
-          <Link href="/privacy" className="font-semibold text-brand-600 hover:underline">
-            Privacy Policy
+    <div className="fixed bottom-20 left-3 right-3 z-[70] sm:right-auto sm:max-w-sm lg:bottom-3">
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 pl-4 shadow-lift">
+        <p className="flex-1 text-[13px] leading-snug text-muted">
+          We use cookies for analytics and ads.{" "}
+          <Link href="/privacy#privacy-choices" className="font-semibold text-brand-600 hover:underline">
+            Privacy choices
           </Link>
         </p>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setConsent("denied");
-              window.location.reload();
-            }}
-            className="rounded-full px-4 py-2 text-sm font-semibold text-muted transition hover:bg-slate-100"
-          >
-            Turn off analytics
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConsent("granted");
-              setShow(false);
-            }}
-            className="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
-          >
-            OK
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setConsent("granted");
+            setShow(false);
+          }}
+          className="shrink-0 rounded-full bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+        >
+          OK
+        </button>
       </div>
     </div>
   );
