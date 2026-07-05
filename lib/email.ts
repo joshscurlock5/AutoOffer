@@ -42,8 +42,17 @@ function carPlain(lead: Lead): string {
   return printable.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 function validEmail(lead: Lead): string {
+  if (lead.emailBounced) return ""; // hard-bounced (Resend webhook) — the address is dead, every send skips it
   const to = (lead.contact.email || "").trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) ? to : "";
+}
+/** Address for a NURTURE/marketing send — additionally empty once the customer
+ * complained (marked-as-spam ⇒ CASL opt-out, stamped by the Resend webhook).
+ * Transactional sends (confirmations, offers they asked for, booking emails)
+ * keep using validEmail. */
+function nurtureEmail(lead: Lead): string {
+  if (lead.emailOptOut) return "";
+  return validEmail(lead);
 }
 function firstName(lead: Lead): string {
   return esc((lead.contact.name || "there").trim().split(" ")[0] || "there");
@@ -526,7 +535,7 @@ export async function sendOfferEmail(
 /** Post-offer follow-up to a lead who received an offer but hasn't replied. step 0=+1d, 1=+4d. */
 export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<void> {
   if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return;
   await postEmail(to, postOfferFollowupEmail(lead, step));
 }
@@ -534,7 +543,7 @@ export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<v
 /** Day-10 extended nurture for a lead still in "new". */
 export async function sendExtendedNurture(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return;
   await postEmail(to, extendedNurtureEmail(lead));
 }
@@ -542,7 +551,7 @@ export async function sendExtendedNurture(lead: Lead): Promise<void> {
 /** Day-21 win-back for a lead marked "lost". */
 export async function sendWinback(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return;
   await postEmail(to, winbackEmail(lead));
 }
@@ -558,7 +567,7 @@ export async function sendAppointmentReminder(lead: Lead): Promise<void> {
 /** One-time abandoned-cart recovery to a "partial" lead that left an email. */
 export async function sendPartialRecovery(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return;
   await postEmail(to, partialRecoveryEmail(lead));
 }
@@ -566,7 +575,7 @@ export async function sendPartialRecovery(lead: Lead): Promise<void> {
 /** Reminder while awaiting the customer's info (cron, after /moreinfo or /ask). */
 export async function sendAwaitingInfoReminder(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return;
   await postEmail(to, awaitingInfoReminderEmail(lead));
 }
@@ -603,7 +612,7 @@ export async function sendBookingDayOf(lead: Lead): Promise<void> {
  */
 export async function scheduleLeadDrip(lead: Lead): Promise<string[]> {
   if (!RESEND_API_KEY) return [];
-  const to = validEmail(lead);
+  const to = nurtureEmail(lead);
   if (!to) return [];
   const at1 = new Date(Date.now() + 2 * DAY).toISOString();
   const at2 = new Date(Date.now() + 5 * DAY).toISOString();

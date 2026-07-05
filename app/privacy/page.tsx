@@ -41,9 +41,16 @@ export default function PrivacyPage() {
       ],
     },
     {
+      h: "Email & text message receipts",
+      p: [
+        "When we email or text you — for example your offer or a booking confirmation — our email provider (Resend) and text-message provider (Twilio) send us delivery receipts: whether the message arrived or bounced, and whether a link in an email was clicked (and, where enabled, whether the email was opened). We use this only to make sure offers actually reach you and to stop contacting addresses that no longer work.",
+        "If you mark one of our emails as spam, we automatically stop sending you follow-up emails. You can also opt out at any time by replying STOP to a text or emailing us.",
+      ],
+    },
+    {
       h: "How we share your information",
       p: [
-        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics provider described in “Analytics & cookies”, and the advertising provider described in “Advertising” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
+        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics provider described in “Analytics & cookies”, the advertising provider described in “Advertising”, and the email and text-message providers described in “Email & text message receipts” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
       ],
     },
     {
@@ -72,7 +79,7 @@ export default function PrivacyPage() {
       <section className="bg-gradient-to-b from-brand-50 to-white">
         <div className="container-x py-14 sm:py-16">
           <h1 className="font-display text-4xl font-extrabold text-navy sm:text-5xl">Privacy Policy</h1>
-          <p className="mt-3 text-muted">Last updated: June 30, 2026</p>
+          <p className="mt-3 text-muted">Last updated: July 5, 2026</p>
         </div>
       </section>
 

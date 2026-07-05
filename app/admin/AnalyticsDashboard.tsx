@@ -75,6 +75,7 @@ const SRC = {
   behavior: "First-party tracking on your site — pages viewed, device, and time on site.",
   geo: "IP-address location lookup (ipwho.is), added shortly after each lead arrives.",
   ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
+  comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
 };
 
 // A small ⓘ that reveals, on hover, exactly where a metric's data comes from.
@@ -306,6 +307,8 @@ function ProfileRow({ p }: { p: Profile }) {
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">via {p.source}</span>
             {p.device?.type && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">{p.device.type}</span>}
             {loc && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-muted">{loc}</span>}
+            {p.emailBounced && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">email bounced</span>}
+            {p.emailOptOut && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">email opt-out</span>}
           </div>
           <div className="mt-1 truncate text-sm text-muted">{[...p.phones, ...p.emails].join(" · ") || "no contact"}</div>
           {p.vehicles.length > 0 && <div className="mt-0.5 truncate text-sm text-ink">{p.vehicles.join(", ")}</div>}
@@ -333,6 +336,26 @@ function ProfileRow({ p }: { p: Profile }) {
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
             <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />
             <Row k="Furthest step" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
+            {(p.emailEngagement || p.smsEngagement) && (
+              <>
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  Engagement<InfoDot tip={SRC.comms} />
+                </div>
+                {p.emailEngagement && (
+                  <Row
+                    k="Emails"
+                    v={`${p.emailEngagement.deliveredCount ?? 0} delivered · ${p.emailEngagement.opensCount ?? 0} opened · ${p.emailEngagement.clicksCount ?? 0} clicked`}
+                  />
+                )}
+                {p.emailEngagement?.lastClickedUrl && <Row k="Last click" v={p.emailEngagement.lastClickedUrl} />}
+                {p.smsEngagement && (
+                  <Row
+                    k="Texts"
+                    v={`${p.smsEngagement.deliveredCount ?? 0} delivered · ${p.smsEngagement.failedCount ?? 0} failed`}
+                  />
+                )}
+              </>
+            )}
             {p.offer && <Row k="Offer" v={`${money(p.offer.low)}–${money(p.offer.high)}`} />}
             {p.firstResponseMins != null && <Row k="Response time" v={fmtMins(p.firstResponseMins)} />}
             {p.appointmentAt && <Row k="Inspection" v={new Date(p.appointmentAt).toLocaleString("en-CA")} />}

@@ -123,6 +123,36 @@ export interface DeviceInfo {
   browser?: string;
 }
 
+/** One delivery/engagement receipt from Resend (email) or Twilio (SMS),
+ * appended to Lead.commsEvents by the webhook handlers. */
+export interface CommsEvent {
+  at: string;
+  channel: "email" | "sms";
+  /** delivered | opened | clicked | bounced | complained | failed | undelivered */
+  type: string;
+  /** The link that was clicked (email.clicked only). */
+  url?: string;
+}
+
+/** Aggregated email receipts from the Resend webhook. */
+export interface EmailEngagement {
+  deliveredCount?: number;
+  opensCount?: number;
+  clicksCount?: number;
+  lastOpenedAt?: string;
+  lastClickedAt?: string;
+  lastClickedUrl?: string;
+}
+
+/** Aggregated SMS delivery receipts from the Twilio status callback. */
+export interface SmsEngagement {
+  deliveredCount?: number;
+  failedCount?: number;
+  lastStatus?: string;
+  lastErrorCode?: string;
+  lastDeliveredAt?: string;
+}
+
 export interface Lead {
   id: string;
   kind: LeadKind;
@@ -214,13 +244,23 @@ export interface Lead {
   lastReplyAt?: string;
   repliesCount?: number;
   lastInboundChannel?: "sms" | "email" | "chat";
+  /** Aggregated email receipts stamped by the Resend webhook (delivery/open/click). */
+  emailEngagement?: EmailEngagement;
+  /** Aggregated SMS delivery receipts stamped by the Twilio status callback. */
+  smsEngagement?: SmsEngagement;
+  /** True once the customer marked an email as spam (CASL: stop nurture email). */
+  emailOptOut?: boolean;
+  /** True once an email hard-bounced — the address is bad; all sends skip it. */
+  emailBounced?: boolean;
+  /** Rolling log of comms receipts (oldest first, capped ~100). */
+  commsEvents?: CommsEvent[];
   source: string;
 }
 
 /** One event on a person's unified timeline. */
 export interface ProfileEvent {
   at: string;
-  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close";
+  type: "lead" | "partial" | "offer" | "booking" | "reply" | "chat" | "referral" | "close" | "comms";
   label: string;
   leadId?: string;
 }
@@ -251,6 +291,12 @@ export interface Profile {
   purchasePrice?: number;
   firstResponseMins?: number;
   repliesCount: number;
+  /** Summed email receipts across this person's leads (Resend webhook). */
+  emailEngagement?: EmailEngagement;
+  /** Summed SMS delivery receipts across this person's leads (Twilio callback). */
+  smsEngagement?: SmsEngagement;
+  emailOptOut?: boolean;
+  emailBounced?: boolean;
   timeline: ProfileEvent[];
   leadIds: string[];
 }

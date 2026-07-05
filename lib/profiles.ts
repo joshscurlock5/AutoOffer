@@ -10,6 +10,8 @@ import type {
   Profile,
   ProfileEvent,
   DeviceInfo,
+  EmailEngagement,
+  SmsEngagement,
 } from "./types";
 
 // ===========================================================================
@@ -151,6 +153,48 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
 }
 
+/** Compact display form of a clicked URL for timeline labels. */
+function shortUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    return (url.pathname === "/" ? url.hostname : url.pathname).slice(0, 40);
+  } catch {
+    return u.slice(0, 40);
+  }
+}
+
+/** Sum the per-lead email receipts (Resend webhook) into one profile view. */
+function aggregateEmailEngagement(leads: Lead[]): EmailEngagement | undefined {
+  const es = leads.map((l) => l.emailEngagement).filter((e): e is EmailEngagement => Boolean(e));
+  if (!es.length) return undefined;
+  const latest = (pick: (e: EmailEngagement) => string | undefined) =>
+    es.map(pick).filter((t): t is string => Boolean(t)).sort().pop();
+  const lastClickedAt = latest((e) => e.lastClickedAt);
+  const withUrl = es
+    .filter((e) => e.lastClickedAt && e.lastClickedUrl)
+    .sort((a, b) => (b.lastClickedAt || "").localeCompare(a.lastClickedAt || ""))[0];
+  return {
+    deliveredCount: es.reduce((s, e) => s + (e.deliveredCount || 0), 0),
+    opensCount: es.reduce((s, e) => s + (e.opensCount || 0), 0),
+    clicksCount: es.reduce((s, e) => s + (e.clicksCount || 0), 0),
+    lastOpenedAt: latest((e) => e.lastOpenedAt),
+    lastClickedAt,
+    lastClickedUrl: withUrl?.lastClickedUrl,
+  };
+}
+
+/** Sum the per-lead SMS delivery receipts (Twilio callback) into one profile view. */
+function aggregateSmsEngagement(leads: Lead[]): SmsEngagement | undefined {
+  const es = leads.map((l) => l.smsEngagement).filter((e): e is SmsEngagement => Boolean(e));
+  if (!es.length) return undefined;
+  return {
+    deliveredCount: es.reduce((s, e) => s + (e.deliveredCount || 0), 0),
+    failedCount: es.reduce((s, e) => s + (e.failedCount || 0), 0),
+    lastStatus: es[es.length - 1]?.lastStatus,
+    lastDeliveredAt: es.map((e) => e.lastDeliveredAt).filter((t): t is string => Boolean(t)).sort().pop(),
+  };
+}
+
 /** Parse a user-agent into a coarse device profile (type / OS / browser). */
 function deviceFromUA(ua?: string): DeviceInfo | undefined {
   if (!ua) return undefined;
@@ -248,6 +292,25 @@ function buildOne(root: string, group: Rec[]): Profile {
       timeline.push({ at: l.appointmentAt, type: "booking", label: "Inspection booked" + (l.appointmentLocation ? ` @ ${l.appointmentLocation}` : ""), leadId: l.id });
     if (l.lastReplyAt) timeline.push({ at: l.lastReplyAt, type: "reply", label: `Replied (${l.lastInboundChannel || "message"})`, leadId: l.id });
     if (l.closedAt) timeline.push({ at: l.closedAt, type: "close", label: l.purchasePrice ? `Closed — ${money(l.purchasePrice)}` : "Closed", leadId: l.id });
+    // Comms receipts (Resend/Twilio webhooks). Email "delivered" stays in the
+    // counters only — one timeline entry per delivery would drown the story.
+    for (const ev of l.commsEvents || []) {
+      const label =
+        ev.channel === "email"
+          ? ev.type === "opened"
+            ? "Opened an email"
+            : ev.type === "clicked"
+              ? `Clicked an email link${ev.url ? ` — ${shortUrl(ev.url)}` : ""}`
+              : ev.type === "bounced" || ev.type === "failed"
+                ? "Email bounced"
+                : ev.type === "complained"
+                  ? "Marked email as spam"
+                  : ""
+          : ev.type === "delivered"
+            ? "Text delivered"
+            : "Text failed to deliver";
+      if (label) timeline.push({ at: ev.at, type: "comms", label, leadId: l.id });
+    }
   }
   for (const ch of chats) {
     for (const m of ch.messages) {
@@ -295,6 +358,10 @@ function buildOne(root: string, group: Rec[]): Profile {
     purchasePrice,
     firstResponseMins,
     repliesCount,
+    emailEngagement: aggregateEmailEngagement(sortedLeads),
+    smsEngagement: aggregateSmsEngagement(sortedLeads),
+    emailOptOut: leads.some((l) => l.emailOptOut) || undefined,
+    emailBounced: leads.some((l) => l.emailBounced) || undefined,
     timeline,
     leadIds: leads.map((l) => l.id),
   };

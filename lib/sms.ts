@@ -51,7 +51,13 @@ async function send(to: string, body: string): Promise<boolean> {
   if (!smsConfigured()) return false;
   try {
     const auth = Buffer.from(`${SID}:${TOKEN}`).toString("base64");
-    const params = new URLSearchParams({ To: to, From: FROM as string, Body: body });
+    const params = new URLSearchParams({
+      To: to,
+      From: FROM as string,
+      Body: body,
+      // Delivery receipts land on the lead via this signed callback.
+      StatusCallback: `${site.url}/api/sms/status`,
+    });
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`, {
       method: "POST",
       headers: {
