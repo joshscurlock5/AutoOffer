@@ -211,6 +211,7 @@ export async function POST(req: NextRequest) {
     const { firstName, lastName } = splitName(name);
     await sendCapiLead({
       eventId: metaEventId,
+      eventName: kind === "inquiry" ? "Contact" : "Lead",
       eventSourceUrl: req.headers.get("referer"),
       user: {
         email,

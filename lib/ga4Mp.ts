@@ -3,15 +3,16 @@ import crypto from "crypto";
 
 // ===========================================================================
 //  GA4 Measurement Protocol (server-side). Mirrors lib/metaCapi.ts: sends a
-//  `generate_lead` event straight from our server to GA4 so the lead conversion
-//  is still counted when the browser gtag is blocked (ad-blockers, privacy
-//  extensions, iOS). The server-side counterpart to the browser generate_lead.
+//  `generate_lead_server` event straight from our server to GA4 so the lead
+//  conversion is still counted when the browser gtag is blocked (ad-blockers,
+//  privacy extensions, iOS). This is ad-blocker-recovery telemetry under its
+//  own event name — GA4 has NO built-in browser<->MP dedup, so only the
+//  browser `generate_lead` should be marked as the GA4 key event.
 //
 //  - No-op until BOTH NEXT_PUBLIC_GA_ID and GA4_MP_API_SECRET are set.
 //  - Never throws — the lead is already saved by the time this runs.
 //  - Carries `transport: "server"` so it can be told apart from the browser
-//    `generate_lead`. GA4 has NO built-in browser<->MP dedup, so pick ONE as the
-//    canonical conversion in GA4 (see docs/analytics-funnel.md).
+//    `generate_lead` (see docs/analytics-funnel.md).
 // ===========================================================================
 
 const MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "";
@@ -33,7 +34,7 @@ export function clientIdFromGaCookie(ga?: string): string | undefined {
 }
 
 /**
- * Send a server-side `generate_lead` to GA4. Best-effort; safe no-op when
+ * Send a server-side `generate_lead_server` to GA4. Best-effort; safe no-op when
  * unconfigured. Pass the raw `_ga` cookie so the event stitches to the user's
  * existing GA session; when it's missing (the very case this recovers) a fresh
  * client_id is used — the conversion is still counted, as a new user.
@@ -49,7 +50,7 @@ export async function sendGa4Lead(opts: {
       client_id: clientId,
       events: [
         {
-          name: "generate_lead",
+          name: "generate_lead_server",
           params: {
             engagement_time_msec: 1,
             transport: "server",

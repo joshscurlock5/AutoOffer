@@ -486,7 +486,7 @@ export default function OfferFlow() {
         make,
         model,
         year: Number(year),
-        contactMethod,
+        contact_method: contactMethod,
         unique: !!estimate?.unique,
         has_damage: hasDamage,
         cta_source: ctaSource,

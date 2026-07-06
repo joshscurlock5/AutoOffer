@@ -77,7 +77,7 @@ export async function PATCH(req: NextRequest) {
 
   // Offline-conversion loop: when a deal actually closes (status "closed" with a
   // real purchase price), tell Meta via a server-side "Purchase" event with the
-  // true sale value, matched to the originating ad click by the fbc/fbp/hashed
+  // expected deal margin, matched to the originating ad click by the fbc/fbp/hashed
   // email captured on the lead at creation. This lets Meta optimize for real
   // sellers, not just form-fills. Fired once (purchaseSyncedAt guards re-sends;
   // a stable eventId also lets Meta dedupe). Best-effort — never fails the PATCH.
@@ -90,9 +90,15 @@ export async function PATCH(req: NextRequest) {
     // concurrent edits from both firing — last-writer-wins on updateLead can't be
     // trusted for a once-only side effect.
     if (isSale && !lead.purchaseSyncedAt && (await claimPurchaseSync(lead.id))) {
+      // value = expected deal margin so Meta value optimization learns profit,
+      // not cost; fallback env META_PURCHASE_MARGIN_FALLBACK.
+      const margin =
+        typeof lead.expectedResale === "number" && typeof lead.purchasePrice === "number"
+          ? Math.max(0, lead.expectedResale - lead.purchasePrice)
+          : Number(process.env.META_PURCHASE_MARGIN_FALLBACK || 1000);
       const ok = await sendCapiPurchase({
         eventId: `purchase-${lead.id}`,
-        value: lead.purchasePrice as number,
+        value: margin,
         user: {
           email: lead.contact.email,
           phone: lead.contact.phone,

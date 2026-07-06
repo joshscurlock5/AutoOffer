@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track, trackPhoneClick } from "@/lib/analytics";
+import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
 import { X, ArrowRight, Phone } from "./icons";
 
 /**
@@ -85,7 +86,13 @@ export default function ExitIntent() {
       fetch("/api/leads/partial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: value, contactMethod: "email" }),
+        body: JSON.stringify({
+          email: value,
+          contactMethod: "email",
+          attribution: getAttribution(),
+          touches: getTouches(),
+          behavior: getBehavior(),
+        }),
         keepalive: true,
       }).catch(() => undefined);
     } catch {

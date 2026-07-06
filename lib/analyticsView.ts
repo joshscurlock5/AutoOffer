@@ -29,7 +29,16 @@ export function scoreBand(score: number): "hot" | "warm" | "cool" {
 export type Count = { label: string; count: number };
 
 export interface View {
-  totals: { people: number; leads: number; partials: number; closed: number; revenue: number; avgResponseMins: number | null };
+  totals: {
+    people: number;
+    leads: number;
+    partials: number;
+    closed: number;
+    cashPaidOut: number;
+    revenue: number;
+    margin: number;
+    avgResponseMins: number | null;
+  };
   funnel: Count[];
   overTime: { date: string; leads: number }[];
   bySource: Count[];
@@ -55,7 +64,7 @@ export interface FilterOptions {
   scoreBands: string[];
 }
 
-const isRealLead = (p: Profile): boolean => p.stage !== "partial" && p.stage !== "spam";
+const isRealLead = (p: Profile): boolean => p.hasRealLead;
 
 function topCounts(labels: (string | undefined)[], limit = 12): Count[] {
   const m = new Map<string, number>();
@@ -114,7 +123,9 @@ export function computeView(profiles: Profile[]): View {
   const leadsP = profiles.filter(isRealLead);
   const partials = profiles.filter((p) => p.stage === "partial");
   const closedP = profiles.filter((p) => p.stage === "closed");
-  const revenue = closedP.reduce((s, p) => s + (p.purchasePrice || 0), 0);
+  const cashPaidOut = closedP.reduce((s, p) => s + (p.cashPaidOut || 0), 0);
+  const revenue = closedP.reduce((s, p) => s + (p.revenue || 0), 0);
+  const margin = closedP.reduce((s, p) => s + (p.margin || 0), 0);
 
   const latencies = profiles
     .map((p) => p.firstResponseMins)
@@ -148,7 +159,16 @@ export function computeView(profiles: Profile[]): View {
   }
 
   return {
-    totals: { people: profiles.length, leads: leadsP.length, partials: partials.length, closed: closedP.length, revenue, avgResponseMins },
+    totals: {
+      people: profiles.length,
+      leads: leadsP.length,
+      partials: partials.length,
+      closed: closedP.length,
+      cashPaidOut,
+      revenue,
+      margin,
+      avgResponseMins,
+    },
     funnel,
     overTime,
     bySource: topCounts(profiles.map((p) => p.source)),
@@ -186,7 +206,7 @@ export interface SegmentRow {
   closed: number;
   closeRate: number; // % of leads that closed
   avgOffer: number;
-  revenue: number;
+  margin: number;
   avgResponseMins: number | null;
   /** Average lead score across the group's people. */
   avgScore: number;
@@ -229,7 +249,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
     const leadsP = ps.filter(isRealLead);
     const offers = leadsP.filter((p) => p.offer);
     const closed = ps.filter((p) => p.stage === "closed");
-    const revenue = closed.reduce((s, p) => s + (p.purchasePrice || 0), 0);
+    const margin = closed.reduce((s, p) => s + (p.margin || 0), 0);
     const offerMids = offers.map((p) => p.offerMid || 0).filter((n) => n > 0);
     const avgOffer = offerMids.length ? Math.round(offerMids.reduce((a, b) => a + b, 0) / offerMids.length) : 0;
     const lat = ps.map((p) => p.firstResponseMins).filter((m): m is number => typeof m === "number" && m >= 0);
@@ -243,7 +263,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
       closed: closed.length,
       closeRate: leadsP.length ? Math.round((closed.length / leadsP.length) * 100) : 0,
       avgOffer,
-      revenue,
+      margin,
       avgResponseMins,
       avgScore,
     });

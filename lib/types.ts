@@ -339,6 +339,8 @@ export interface Profile {
   emails: string[];
   phones: string[];
   stage: LeadStatus;
+  /** True when the person has at least one submitted (non-partial, non-spam) lead. */
+  hasRealLead: boolean;
   contactMethod?: "call" | "text" | "email";
   source: string;
   attribution?: Attribution;
@@ -356,7 +358,18 @@ export interface Profile {
   offer?: { low: number; high: number; sentAt: string };
   offerMid?: number;
   appointmentAt?: string;
+  /** Back-compat: total cost paid out across closed leads (== cashPaidOut). */
   purchasePrice?: number;
+  /** Sum of purchasePrice (cost) across this person's CLOSED leads. */
+  cashPaidOut?: number;
+  /** Sum of actualSalePrice (or expectedResale as a fallback) across CLOSED leads. */
+  revenue?: number;
+  /** Sum of (sale − cost) across CLOSED leads. */
+  margin?: number;
+  /** True when margin includes an estimated (not actual) sale price for at least one closed lead. */
+  marginIsEstimate?: boolean;
+  /** Latest lead.closedAt among this person's closed leads (ISO). */
+  closedAt?: string;
   firstResponseMins?: number;
   repliesCount: number;
   /** Summed email receipts across this person's leads (Resend webhook). */
@@ -365,6 +378,7 @@ export interface Profile {
   smsEngagement?: SmsEngagement;
   emailOptOut?: boolean;
   emailBounced?: boolean;
+  smsOptOut?: boolean;
   /** Zero-input enrichment (email type, phone region, vehicle tier). */
   enrichment?: Enrichment;
   /** Transparent 0–100 lead score — a prioritization aid, not ML. */

@@ -55,7 +55,7 @@ export default function ContactForm() {
       if (!res.ok) throw new Error();
       setState("done");
       track("contact_form_submitted", {});
-      trackMeta("Lead", { currency: "CAD", value: 0 }, metaEventId);
+      trackMeta("Contact", {}, metaEventId);
     } catch {
       setState("error");
       track("contact_form_error", { reason: "network" });

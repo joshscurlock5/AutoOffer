@@ -297,7 +297,7 @@ function SegmentView({
             <th className="px-2 text-right">Offers</th>
             <th className="px-2 text-right">Close %</th>
             <th className="px-2 text-right">Avg offer</th>
-            <th className="px-2 text-right">Revenue</th>
+            <th className="px-2 text-right" title="Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car, summed over the group's closed deals.">Margin</th>
             <th className="px-2 text-right" title="Average lead score (0-100) across the group">Avg score</th>
             <th className="pl-2 text-right">Avg resp</th>
           </tr>
@@ -314,7 +314,7 @@ function SegmentView({
                 <td className="px-2 text-right">{r.offers}</td>
                 <td className="px-2 text-right font-semibold">{r.closeRate}%</td>
                 <td className="px-2 text-right">{r.avgOffer ? money(r.avgOffer) : "—"}</td>
-                <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
+                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
                 <td className="px-2 text-right">{r.avgScore}</td>
                 <td className="pl-2 text-right">{fmtMins(r.avgResponseMins)}</td>
               </tr>
@@ -530,20 +530,27 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
   }, [range]);
 
   const rows = useMemo(() => {
+    // Leads + cost-per-lead come from Meta's own Pixel numbers (match Ads Manager).
+    // Margin still uses YOUR closed-deal data, matched to the campaign by any UTM
+    // touch and bounded to the same range window as the Meta numbers above.
+    const days = range === "last_7d" ? 7 : range === "last_90d" ? 90 : 30;
+    const cutoff = Date.now() - days * 86_400_000;
     return (data?.insights || []).map((ins) => {
-      // Leads + cost-per-lead come from Meta's own Pixel numbers (match Ads Manager).
-      // Revenue/ROAS still use YOUR closed-sale data, matched to the campaign by UTM tag.
-      const ps = profiles.filter((p) => (p.attribution?.utmCampaign || "") === ins.campaign);
-      const revenue = ps.filter((p) => p.stage === "closed").reduce((s, p) => s + (p.purchasePrice || 0), 0);
+      const ps = profiles.filter(
+        (p) => p.attribution?.utmCampaign === ins.campaign || (p.touchHistory || []).some((t) => t.utmCampaign === ins.campaign),
+      );
+      const margin = ps
+        .filter((p) => p.stage === "closed" && p.closedAt && Date.parse(p.closedAt) >= cutoff)
+        .reduce((s, p) => s + (p.margin || 0), 0);
       const leads = ins.leads ?? 0;
       const cpl = ins.costPerLead ?? (leads ? ins.spend / leads : null);
-      return { ...ins, leads, revenue, cpl, roas: ins.spend ? revenue / ins.spend : null };
+      return { ...ins, leads, margin, cpl, roas: ins.spend ? margin / ins.spend : null };
     });
-  }, [data, profiles]);
+  }, [data, profiles, range]);
 
   const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
   const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
-  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+  const totalMargin = rows.reduce((s, r) => s + r.margin, 0);
 
   if (loading) return <div className="card p-4 text-sm text-muted">Loading ad performance…</div>;
   if (!data?.configured) {
@@ -562,7 +569,7 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
           <StatCard label="Ad spend" value={money(totalSpend)} tip="Meta Ads API — total you paid Meta to run this ad." />
           <StatCard label="Leads from ads" value={String(totalLeads)} tip="Meta Pixel — form-fills Meta attributes to your ad. Same number as Ads Manager." />
           <StatCard label="Cost / lead" value={money2(totalLeads ? totalSpend / totalLeads : null)} tip="Meta ad spend ÷ Meta Pixel leads — matches Ads Manager's cost per result." />
-          <StatCard label="ROAS" value={totalSpend ? `${(totalRevenue / totalSpend).toFixed(1)}×` : "—"} sub={money(totalRevenue)} tip="Your closed-sale revenue ÷ Meta spend. Fills in when an ad-tagged lead becomes a sale." />
+          <StatCard label="Margin ROAS" value={totalSpend ? `${(totalMargin / totalSpend).toFixed(1)}×` : "—"} sub={money(totalMargin)} tip="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name})." />
         </div>
         <select className="field py-1 text-sm" value={range} onChange={(e) => setRange(e.target.value)}>
           <option value="last_7d">Last 7 days</option>
@@ -581,8 +588,8 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
               <th className="px-2 text-right" title="Meta Ads API — click-through rate.">CTR</th>
               <th className="px-2 text-right" title="Meta Pixel — leads Meta attributes to the ad.">Leads</th>
               <th className="px-2 text-right" title="Meta ad spend ÷ Meta Pixel leads.">Cost/lead</th>
-              <th className="px-2 text-right" title="Your closed-sale prices for leads UTM-tagged to this campaign.">Revenue</th>
-              <th className="pl-2 text-right" title="Revenue ÷ spend.">ROAS</th>
+              <th className="px-2 text-right" title="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name}).">Margin</th>
+              <th className="pl-2 text-right" title="Margin ÷ spend.">ROAS</th>
             </tr>
           </thead>
           <tbody>
@@ -598,14 +605,14 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
                   <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
                   <td className="px-2 text-right">{r.leads}</td>
                   <td className="px-2 text-right font-semibold">{money2(r.cpl)}</td>
-                  <td className="px-2 text-right">{r.revenue ? money(r.revenue) : "—"}</td>
+                  <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
                   <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Revenue &amp; ROAS use your own closed-sale data, matched to this campaign by UTM tag.</p>
+        <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}).</p>
       </div>
     </div>
   );
@@ -802,7 +809,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} />
         <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." />
         <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" tip="Your website's database — value-lookup requests, all time." />
-        <StatCard label="Closed" value={String(view.totals.closed)} sub={money(view.totals.revenue)} tip="Your website's database — deals marked closed, with sale price." />
+        <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car." />
         <StatCard label="Avg response" value={fmtMins(view.totals.avgResponseMins)} tip="Your website's database — average time from lead to your first reply." />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -814,7 +821,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <SegmentView rows={segments} dim={dim} setDim={setDim} tip={SRC.siteGrouped} />
       </Section>
 
-      <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; revenue & ROAS from your own closed sales.">
+      <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; margin & ROAS from your own closed deals.">
         <AdPerformance profiles={profiles} />
       </Section>
 

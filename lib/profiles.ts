@@ -409,7 +409,10 @@ function buildOne(
   const attribution = sortedLeads.find((l) => l.attribution)?.attribution;
   const behavior = aggregateBehavior(sortedLeads);
 
-  let stage: LeadStatus = leads.length ? "partial" : "new";
+  // Leads are sorted oldest-first: seed from the earliest lead's status (not a
+  // hardcoded "partial") so people whose only leads are lost/spam don't
+  // misclassify as partial — those rank below "partial" in STATUS_RANK.
+  let stage: LeadStatus = sortedLeads.length ? sortedLeads[0].status : "new";
   for (const l of leads) if (STATUS_RANK[l.status] > STATUS_RANK[stage]) stage = l.status;
 
   const offer = leads
@@ -423,8 +426,32 @@ function buildOne(
     .sort()
     .pop();
 
-  const purchasePrice = leads.map((l) => l.purchasePrice || 0).reduce((a, b) => Math.max(a, b), 0) || undefined;
+  // Economics, computed over CLOSED leads only: purchasePrice is cost, revenue
+  // is real sale (falling back to the expected resale when a deal hasn't been
+  // reconciled yet), margin is sale minus cost.
+  const closedLeads = leads.filter((l) => l.status === "closed");
+  let cashPaidOut: number | undefined;
+  let revenue: number | undefined;
+  let margin: number | undefined;
+  let marginIsEstimate = false;
+  let closedAt: string | undefined;
+  if (closedLeads.length) {
+    cashPaidOut = 0;
+    revenue = 0;
+    margin = 0;
+    for (const l of closedLeads) {
+      const cost = l.purchasePrice || 0;
+      const sale = l.actualSalePrice ?? l.expectedResale ?? null;
+      cashPaidOut += cost;
+      revenue += sale || 0;
+      if (sale != null) margin += sale - cost;
+      if (l.actualSalePrice == null) marginIsEstimate = true;
+      if (l.closedAt && (!closedAt || l.closedAt > closedAt)) closedAt = l.closedAt;
+    }
+  }
+  const purchasePrice = cashPaidOut;
   const repliesCount = leads.reduce((s, l) => s + (l.repliesCount || 0), 0);
+  const hasRealLead = leads.some((l) => l.status !== "partial" && l.status !== "spam");
 
   const timeline: ProfileEvent[] = [];
   for (const l of leads) {
@@ -507,12 +534,20 @@ function buildOne(
         }
       : undefined;
 
+  // No-lead profiles (chat/referral only) have no sortedLeads[0] to anchor on —
+  // fall back to the earliest chat/referral createdAt so date filters don't
+  // silently drop them.
+  const earliestNonLeadAt = [...chats.map((c) => c.createdAt), ...referrals.map((r) => r.createdAt)]
+    .filter(Boolean)
+    .sort()[0];
+
   const base: Omit<Profile, "score" | "scoreBreakdown"> = {
     id: root,
     name: [...names][0],
     emails: [...emails],
     phones: [...phones],
     stage,
+    hasRealLead,
     contactMethod: sortedLeads[0]?.contact.contactMethod,
     source: sourceLabel(attribution),
     attribution,
@@ -520,7 +555,7 @@ function buildOne(
     behavior,
     geo,
     device,
-    createdAt: sortedLeads[0]?.createdAt,
+    createdAt: sortedLeads[0]?.createdAt || earliestNonLeadAt,
     firstSeenAt,
     lastActivityAt,
     touchCount: leads.length + chats.length + referrals.length + repliesCount,
@@ -530,12 +565,18 @@ function buildOne(
     offerMid,
     appointmentAt,
     purchasePrice,
+    cashPaidOut,
+    revenue,
+    margin,
+    marginIsEstimate: marginIsEstimate || undefined,
+    closedAt,
     firstResponseMins,
     repliesCount,
     emailEngagement: aggregateEmailEngagement(sortedLeads),
     smsEngagement: aggregateSmsEngagement(sortedLeads),
     emailOptOut: leads.some((l) => l.emailOptOut) || undefined,
     emailBounced: leads.some((l) => l.emailBounced) || undefined,
+    smsOptOut: leads.some((l) => l.smsOptOut) || undefined,
     enrichment,
     timeline,
     leadIds: leads.map((l) => l.id),

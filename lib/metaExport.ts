@@ -36,9 +36,11 @@ export const META_SEGMENTS: { key: MetaSegment; label: string; hint: string }[] 
   },
 ];
 
-/** The profiles a segment covers (spam always excluded). */
+/** The profiles a segment covers (spam + opted-out/bounced contacts always excluded). */
 export function segmentProfiles(profiles: Profile[], seg: MetaSegment): Profile[] {
-  const ok = profiles.filter((p) => p.stage !== "spam" && (p.emails[0] || p.phones[0]));
+  const ok = profiles.filter(
+    (p) => p.stage !== "spam" && !p.emailOptOut && !p.smsOptOut && !p.emailBounced && (p.emails[0] || p.phones[0]),
+  );
   switch (seg) {
     case "abandoned":
       return ok.filter((p) => p.stage === "partial");
@@ -68,7 +70,7 @@ function phoneDigits(p?: string): string {
 }
 
 /** Build the CSV for a segment. `value` (used by value-based audiences) is the
- * purchase price and only fills on the closed segment. */
+ * margin (sale minus cost) and only fills on the closed segment. */
 export function buildMetaCsv(
   profiles: Profile[],
   seg: MetaSegment,
@@ -86,7 +88,7 @@ export function buildMetaCsv(
         (p.geo?.city || "").toLowerCase(),
         (p.geo?.region || "").toLowerCase(),
         (p.geo?.countryCode || "CA").toLowerCase(),
-        seg === "closed" && p.purchasePrice ? String(p.purchasePrice) : "",
+        seg === "closed" && p.margin ? String(p.margin) : "",
       ]
         .map(csvEscape)
         .join(","),

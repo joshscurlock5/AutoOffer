@@ -12,9 +12,9 @@ import crypto from "crypto";
 //   - "Purchase" — fired from the admin/CRM when a deal actually closes
 //                  (action_source "system_generated"; no browser). This is the
 //                  offline-conversion loop: it tells Meta which leads became real
-//                  sales (with the true sale value) so it can optimize for buyers,
-//                  not just form-fills. Matched back to the ad click via the
-//                  fbc/fbp/hashed-email captured on the lead at creation.
+//                  sales (with the expected deal margin, CAD) so it can optimize
+//                  for buyers, not just form-fills. Matched back to the ad click
+//                  via the fbc/fbp/hashed-email captured on the lead at creation.
 //
 //  - No-op until BOTH NEXT_PUBLIC_META_PIXEL_ID and META_CAPI_TOKEN are set.
 //  - Never throws — leads/sales are already saved by the time this runs.
@@ -127,17 +127,19 @@ async function postEvent(event: Record<string, unknown>): Promise<boolean> {
 }
 
 /**
- * Send a server-side "Lead" conversion to Meta. Best-effort; safe no-op when
- * unconfigured. `eventId` MUST match the browser Pixel event's eventID to dedupe.
+ * Send a server-side Lead-family conversion to Meta. Best-effort; safe no-op
+ * when unconfigured. `eventId` MUST match the browser Pixel event's eventID
+ * (and `eventName` MUST match its event name) to dedupe.
  */
 export async function sendCapiLead(opts: {
   eventId: string;
+  eventName?: string;
   eventSourceUrl?: string | null;
   user: CapiUser;
   customData?: Record<string, unknown>;
 }): Promise<void> {
   await postEvent({
-    event_name: "Lead",
+    event_name: opts.eventName || "Lead",
     event_time: Math.floor(Date.now() / 1000),
     event_id: opts.eventId,
     action_source: "website",
@@ -149,8 +151,8 @@ export async function sendCapiLead(opts: {
 
 /**
  * Send a server-side "Purchase" conversion to Meta when a deal actually closes
- * (offline / CRM event). `value` is the real sale price in CAD. Returns true on
- * a successful send so the caller can mark the lead synced and avoid re-firing
+ * (offline / CRM event). `value` is the expected deal margin (CAD). Returns true
+ * on a successful send so the caller can mark the lead synced and avoid re-firing
  * (a stable eventId also lets Meta dedupe if it is retried). Best-effort.
  */
 export async function sendCapiPurchase(opts: {

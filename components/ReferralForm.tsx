@@ -80,7 +80,7 @@ export default function ReferralForm() {
       if (!res.ok) throw new Error();
       setState("done");
       track("referral_submitted", { hasFriendDetails: !!(f.friendName || f.friendPhone) });
-      trackMeta("Lead", { currency: "CAD", value: 0, content_name: "Referral" }, metaEventId);
+      trackMeta("CompleteRegistration", { content_name: "Referral" }, metaEventId);
     } catch {
       track("referral_error");
       setState("error");

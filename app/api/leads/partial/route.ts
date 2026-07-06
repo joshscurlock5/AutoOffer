@@ -63,6 +63,13 @@ export async function POST(req: NextRequest) {
     const behavior = parseBehavior(body.behavior);
     const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
 
+    // Meta ad-match keys (mirrors app/api/leads/route.ts) so a recovered partial's
+    // offline Purchase can still be attributed back to the originating ad click.
+    const fbp = req.cookies.get("_fbp")?.value;
+    const fbc = req.cookies.get("_fbc")?.value;
+    const userAgent = req.headers.get("user-agent") || undefined;
+    const meta = { ...(fbc ? { fbc } : {}), ...(fbp ? { fbp } : {}), clientIp: ip, userAgent };
+
     // Dedupe against existing leads by email/phone (volume is small; a scan is cheap).
     const leads = await getLeads();
     const eKey = validEmail ? email.toLowerCase() : "";
@@ -90,6 +97,7 @@ export async function POST(req: NextRequest) {
         // The journey GROWS over time (client array is append-only), so newer wins.
         ...(touchHistory ? { touchHistory } : {}),
         ...(gaClientId && !match.gaClientId ? { gaClientId } : {}),
+        ...(!match.meta ? { meta } : {}),
       });
       return NextResponse.json({ ok: true, updated: true });
     }
@@ -102,6 +110,7 @@ export async function POST(req: NextRequest) {
       contact: { name, email, phone, contactMethod },
       vehicle,
       photos: [],
+      meta,
       ...(attribution
         ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
         : {}),

@@ -71,9 +71,10 @@ export async function POST(req: NextRequest) {
     await notifyNewReferral(ref);
     // Thank-you email to the referrer (best-effort; no-op without RESEND config).
     await sendReferralConfirmation(ref);
-    // Meta Conversions API "Lead" event (best-effort; after the referral is saved).
+    // Meta Conversions API "CompleteRegistration" event (best-effort; after the referral is saved).
     await sendCapiLead({
       eventId: String(body.metaEventId || "") || crypto.randomUUID(),
+      eventName: "CompleteRegistration",
       eventSourceUrl: req.headers.get("referer"),
       user: {
         email: referrerEmail,
