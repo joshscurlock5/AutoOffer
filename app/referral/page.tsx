@@ -80,7 +80,7 @@ export default function ReferralPage() {
                   </span>
                   <p className="font-semibold leading-snug">Prefer to refer by phone?</p>
                 </div>
-                <PhoneButton variant="dark" className="shrink-0 self-center sm:self-auto" location="referral_hero" />
+                <PhoneButton variant="primary" className="shrink-0 self-center sm:self-auto" location="referral_hero" />
               </div>
             </div>
           </div>
