@@ -58,6 +58,16 @@ export const site = {
   yearsExperience: 5, //                                     years wholesaling
   carsBought: 3000, //  vehicles purchased — single source of truth for the "cars" stat
 
+  // ---- TEAM / OWNERSHIP ---------------------------------------------------
+  // ⚠️ operatedBy MUST match your registered business name exactly — this is
+  // what SMS carriers / Twilio A2P verification check against the site.
+  operatedBy: "Scurlock LLC", //  legal entity that owns & operates DriveOffer
+  team: [
+    { name: "Joshua Scurlock", role: "Founder & Owner" },
+    { name: "Samir Osman", role: "Founder & Owner" },
+    { name: "Aaron Scurlock", role: "Manager" },
+  ],
+
   // ---- REFERRAL PROGRAM ---------------------------------------------------
   referralReward: 100, // dollars paid when a referred friend sells
 

@@ -23,6 +23,10 @@ const stats = [
   { value: "To you", label: "We come to your door" },
 ];
 
+// Initials for the team avatars (no photos needed) — "Joshua Scurlock" -> "JS".
+const initials = (name: string) =>
+  name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
+
 export default function AboutPage() {
   return (
     <>
@@ -109,6 +113,26 @@ export default function AboutPage() {
             </ul>
           </div>
         </div>
+      </Section>
+
+      {/* Team */}
+      <Section className="bg-white">
+        <SectionHeading center eyebrow="Our Team" title="The DriveOffer team" subtitle="The people behind every offer." />
+        <div className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
+          {site.team.map((m) => (
+            <div key={m.name} className="card h-full p-7 text-center">
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-brand-50 font-display text-xl font-extrabold text-brand">
+                {initials(m.name)}
+              </span>
+              <h3 className="mt-4 text-lg font-bold text-navy">{m.name}</h3>
+              <p className="mt-1 text-sm text-muted">{m.role}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mx-auto mt-10 max-w-2xl rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-center text-sm text-muted">
+          {site.name} is owned and operated by{" "}
+          <span className="font-semibold text-navy">{site.operatedBy}</span>.
+        </p>
       </Section>
 
       {/* Values */}
