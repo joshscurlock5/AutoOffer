@@ -33,30 +33,51 @@ const MAX_QUEUE = 200;
 let queue: QueuedEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let listenersBound = false;
+let sending = false; // in-flight guard — prevents overlapping flushes double-sending a batch
 
 function flush(): void {
   if (timer) {
     clearTimeout(timer);
     timer = null;
   }
-  if (!queue.length) return;
+  if (!queue.length || sending) return;
   const sessionId = getBehavior().sessionId;
-  if (!sessionId) {
-    queue = [];
-    return;
-  }
+  if (!sessionId) return; // sessionId may appear after captureFirstTouch runs — leave events queued
+  // Peek (don't remove) so a failed send can be retried by the next flush.
   const batch = queue.slice(0, MAX_BATCH);
-  queue = queue.slice(MAX_BATCH);
+  // Remove by identity, not position — an overflow trim during an in-flight
+  // fetch can shift the queue front, and a positional slice would then discard
+  // events that were never sent.
+  const dequeueBatch = () => {
+    const sentSet = new Set(batch);
+    queue = queue.filter((e) => !sentSet.has(e));
+  };
+  sending = true;
   try {
     const blob = new Blob([JSON.stringify({ sessionId, events: batch })], { type: "application/json" });
     const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon("/api/events", blob);
-    if (!sent) {
-      void fetch("/api/events", { method: "POST", body: blob, keepalive: true }).catch(() => {});
+    if (sent) {
+      // sendBeacon acceptance is a queue-handoff guarantee — safe to drop the batch now.
+      dequeueBatch();
+      sending = false;
+      if (queue.length) schedule(400); // drain oversized queues quickly
+      return;
     }
+    fetch("/api/events", { method: "POST", body: blob, keepalive: true })
+      .then((res) => {
+        if (res.ok) dequeueBatch();
+      })
+      .catch(() => {
+        /* leave the queue untouched — the next 5s flush retries */
+      })
+      .finally(() => {
+        sending = false;
+        if (queue.length) schedule(400);
+      });
   } catch {
     /* analytics must never disrupt the page */
+    sending = false;
   }
-  if (queue.length) schedule(400); // drain oversized queues quickly
 }
 
 function schedule(ms = FLUSH_MS): void {
@@ -77,6 +98,7 @@ function bindLifecycleFlush(): void {
  * or after the consent banner's opt-out. */
 export function logEvent(name: string, params?: Params): void {
   if (typeof window === "undefined") return;
+  if (typeof navigator !== "undefined" && (navigator as any).webdriver) return;
   if (!name || typeof name !== "string") return;
   if (consentDenied()) return;
   queue.push({

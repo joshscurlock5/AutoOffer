@@ -88,8 +88,10 @@ export async function PATCH(req: NextRequest) {
     // Cheap pre-check skips the common already-synced case; claimPurchaseSync is
     // the authoritative atomic guard (conditional write) that prevents two
     // concurrent edits from both firing — last-writer-wins on updateLead can't be
-    // trusted for a once-only side effect.
-    if (isSale && !lead.purchaseSyncedAt && (await claimPurchaseSync(lead.id))) {
+    // trusted for a once-only side effect. consentDenied (submit-time opt-out)
+    // also skips — and must NOT claim the once-only sync, so a later legitimate
+    // change to this lead can't ever trigger the send retroactively.
+    if (isSale && !lead.purchaseSyncedAt && !lead.consentDenied && (await claimPurchaseSync(lead.id))) {
       // value = expected deal margin so Meta value optimization learns profit,
       // not cost; fallback env META_PURCHASE_MARGIN_FALLBACK.
       const margin =

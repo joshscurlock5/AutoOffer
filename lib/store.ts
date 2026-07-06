@@ -19,8 +19,15 @@ import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent }
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
 export async function getLeads(): Promise<Lead[]> {
-  const res = await ddb.send(new ScanCommand({ TableName: LEADS_TABLE }));
-  const leads = (res.Items || []) as Lead[];
+  const leads: Lead[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddb.send(
+      new ScanCommand({ TableName: LEADS_TABLE, ExclusiveStartKey: lastKey }),
+    );
+    leads.push(...((res.Items || []) as Lead[]));
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
   return leads.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 
@@ -135,8 +142,15 @@ export async function deleteLead(id: string): Promise<void> {
 // ---- Referrals (DynamoDB) -------------------------------------------------
 
 export async function getReferrals(): Promise<Referral[]> {
-  const res = await ddb.send(new ScanCommand({ TableName: REFERRALS_TABLE }));
-  const refs = (res.Items || []) as Referral[];
+  const refs: Referral[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddb.send(
+      new ScanCommand({ TableName: REFERRALS_TABLE, ExclusiveStartKey: lastKey }),
+    );
+    refs.push(...((res.Items || []) as Referral[]));
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
   return refs.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 
@@ -191,8 +205,15 @@ export async function readPhoto(
 const MAX_CHAT_MESSAGES = 300;
 
 export async function getConversations(): Promise<ChatConversation[]> {
-  const res = await ddb.send(new ScanCommand({ TableName: CHATS_TABLE }));
-  const items = (res.Items || []) as ChatConversation[];
+  const items: ChatConversation[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddb.send(
+      new ScanCommand({ TableName: CHATS_TABLE, ExclusiveStartKey: lastKey }),
+    );
+    items.push(...((res.Items || []) as ChatConversation[]));
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
   return items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
 }
 
@@ -254,8 +275,15 @@ export async function addChatMessage(opts: {
 // ---- Price-lookup log / "API Calls" (DynamoDB) ----------------------------
 
 export async function getLookups(): Promise<Lookup[]> {
-  const res = await ddb.send(new ScanCommand({ TableName: LOOKUPS_TABLE }));
-  const items = (res.Items || []) as Lookup[];
+  const items: Lookup[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddb.send(
+      new ScanCommand({ TableName: LOOKUPS_TABLE, ExclusiveStartKey: lastKey }),
+    );
+    items.push(...((res.Items || []) as Lookup[]));
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
   return items.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 
@@ -273,11 +301,23 @@ export async function addEvents(items: SiteEvent[]): Promise<void> {
   try {
     for (let i = 0; i < items.length; i += 25) {
       const chunk = items.slice(i, i + 25);
-      await ddb.send(
+      const res = await ddb.send(
         new BatchWriteCommand({
           RequestItems: { [EVENTS_TABLE]: chunk.map((Item) => ({ PutRequest: { Item } })) },
         }),
       );
+      let unprocessed = res.UnprocessedItems?.[EVENTS_TABLE];
+      if (unprocessed && unprocessed.length) {
+        // BatchWrite can throttle silently instead of throwing — retry once after a brief wait.
+        await new Promise((r) => setTimeout(r, 200));
+        const retry = await ddb.send(
+          new BatchWriteCommand({ RequestItems: { [EVENTS_TABLE]: unprocessed } }),
+        );
+        unprocessed = retry.UnprocessedItems?.[EVENTS_TABLE];
+        if (unprocessed && unprocessed.length) {
+          console.error(`[events] ${unprocessed.length} rows dropped after retry`);
+        }
+      }
     }
   } catch (e) {
     console.error("[events] write failed:", e);

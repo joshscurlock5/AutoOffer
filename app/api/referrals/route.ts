@@ -71,24 +71,29 @@ export async function POST(req: NextRequest) {
     await notifyNewReferral(ref);
     // Thank-you email to the referrer (best-effort; no-op without RESEND config).
     await sendReferralConfirmation(ref);
-    // Meta Conversions API "CompleteRegistration" event (best-effort; after the referral is saved).
-    await sendCapiLead({
-      eventId: String(body.metaEventId || "") || crypto.randomUUID(),
-      eventName: "CompleteRegistration",
-      eventSourceUrl: req.headers.get("referer"),
-      user: {
-        email: referrerEmail,
-        phone: ref.referrer.phone,
-        ...splitName(referrerName),
-        externalId: ref.id,
-        country: "ca",
-        clientIp: ip,
-        userAgent: req.headers.get("user-agent"),
-        fbp: req.cookies.get("_fbp")?.value,
-        fbc: req.cookies.get("_fbc")?.value,
-      },
-      customData: { currency: "CAD", value: 0, content_name: "Referral" },
-    });
+    // Meta Conversions API "CompleteRegistration" event (best-effort; after the
+    // referral is saved). Server-side mirror of the banner's opt-out (lib/consent.ts)
+    // — skipped entirely on a stored consent denial.
+    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
+    if (!consentDenied) {
+      await sendCapiLead({
+        eventId: String(body.metaEventId || "") || crypto.randomUUID(),
+        eventName: "CompleteRegistration",
+        eventSourceUrl: req.headers.get("referer"),
+        user: {
+          email: referrerEmail,
+          phone: ref.referrer.phone,
+          ...splitName(referrerName),
+          externalId: ref.id,
+          country: "ca",
+          clientIp: ip,
+          userAgent: req.headers.get("user-agent"),
+          fbp: req.cookies.get("_fbp")?.value,
+          fbc: req.cookies.get("_fbc")?.value,
+        },
+        customData: { currency: "CAD", value: 0, content_name: "Referral" },
+      });
+    }
     return NextResponse.json({ ok: true, code: ref.code });
   } catch (err) {
     console.error("POST /api/referrals failed", err);

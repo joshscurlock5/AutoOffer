@@ -117,6 +117,10 @@ export default function OfferFlow() {
   const submittingRef = useRef(false);
   // Fire the abandoned-cart beacon at most once per session.
   const partialSentRef = useRef(false);
+  // Set once the lead submits successfully — stops a pagehide/visibilitychange
+  // listener from racing the step-5 re-render and firing a partial for someone
+  // who just converted.
+  const submittedRef = useRef(false);
 
   // Load the real trims for the chosen year/make/model.
   useEffect(() => {
@@ -204,6 +208,26 @@ export default function OfferFlow() {
     markFunnelStep(step);
   }, [step]);
 
+  // Abandoned-cart capture for tab-close abandoners: mobile users who type contact
+  // info then swipe the tab away never blur a field, so also listen for the page
+  // being hidden while the contact step is showing. sendPartialBeacon's own
+  // validity/once-per-mount checks remain the single source of truth — these
+  // listeners just invoke it. Re-registered whenever the read fields change so the
+  // closure never fires with stale data.
+  useEffect(() => {
+    if (step !== 3) return;
+    const handler = () => sendPartialBeacon();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") sendPartialBeacon();
+    };
+    window.addEventListener("pagehide", handler);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", handler);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [step, name, email, phone, contactMethod, year, make, model, trim, kmv]);
+
   const models = make ? modelsFor(make) : [];
   const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
@@ -241,11 +265,10 @@ export default function OfferFlow() {
   // step, quietly beacon the already-typed data so we can recover the lead if they
   // leave without submitting. At most once per session; no UI, no new field.
   function sendPartialBeacon() {
-    if (partialSentRef.current) return;
+    if (partialSentRef.current || submittedRef.current) return;
     const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
     const validPhone = phone.replace(/\D/g, "").length >= 10;
     if (!validEmail && !validPhone) return;
-    partialSentRef.current = true;
     try {
       const payload = JSON.stringify({
         name,
@@ -261,10 +284,30 @@ export default function OfferFlow() {
         touches: getTouches(),
         behavior: getBehavior(),
       });
-      navigator.sendBeacon("/api/leads/partial", new Blob([payload], { type: "application/json" }));
-      track("partial_captured", {});
+      // navigator.sendBeacon's boolean return is the real success signal — a
+      // refused beacon (e.g. queue full) must not be treated as delivered.
+      let handedOff = false;
+      if (navigator.sendBeacon) {
+        handedOff = navigator.sendBeacon("/api/leads/partial", new Blob([payload], { type: "application/json" }));
+      }
+      if (!handedOff) {
+        // Fallback for browsers without sendBeacon (or a refused send). keepalive
+        // lets the request survive the page unloading; we can't await it during
+        // pagehide, so dispatching it is the success signal here.
+        fetch("/api/leads/partial", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+        handedOff = true;
+      }
+      if (handedOff) {
+        partialSentRef.current = true;
+        track("partial_captured", {});
+      }
     } catch {
-      /* ignore — never disrupt the form */
+      /* ignore — never disrupt the form; ref stays false so a later attempt can retry */
     }
   }
 
@@ -480,6 +523,7 @@ export default function OfferFlow() {
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
+      submittedRef.current = true;
       track("generate_lead", {
         currency: "CAD",
         value: estimate?.mid ?? 0,

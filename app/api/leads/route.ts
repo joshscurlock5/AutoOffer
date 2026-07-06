@@ -145,11 +145,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Server-side mirror of the banner's opt-out (lib/consent.ts) — localStorage
+    // is invisible here, so a denial rides in on this cookie. When denied, skip
+    // ALL analytics sends for this lead (no Meta CAPI, no GA4 MP, no ad-match keys).
+    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
+
     // Meta ad-match keys. metaEventId is shared with the browser Pixel "Lead" so
     // Meta dedupes; fbc/fbp/ip/ua are persisted on the lead so a later offline
     // "Purchase" conversion can be attributed back to the originating ad click.
     const rawMetaEventId = str(form.get("metaEventId"));
-    if (!rawMetaEventId) {
+    if (!rawMetaEventId && !consentDenied) {
       console.warn("[leads] metaEventId missing — browser/server dedup will not match for this lead");
     }
     const metaEventId = rawMetaEventId || crypto.randomUUID();
@@ -175,7 +180,7 @@ export async function POST(req: NextRequest) {
       photos,
       message: str(form.get("message")) || undefined,
       referralCode: str(form.get("referralCode")) || undefined,
-      meta: { fbc, fbp, eventId: metaEventId, clientIp: ip, userAgent },
+      ...(consentDenied ? { consentDenied: true } : { meta: { fbc, fbp, eventId: metaEventId, clientIp: ip, userAgent } }),
       ...(attribution
         ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
         : {}),
@@ -207,36 +212,39 @@ export async function POST(req: NextRequest) {
     if (lookupId) await markLookupConverted(lookupId, id);
     // Meta Conversions API "Lead" event (server-side; best-effort, after the lead
     // is saved — can never affect it). Shares metaEventId with the browser Pixel
-    // event so Meta dedupes; PII is hashed inside sendCapiLead.
-    const { firstName, lastName } = splitName(name);
-    await sendCapiLead({
-      eventId: metaEventId,
-      eventName: kind === "inquiry" ? "Contact" : "Lead",
-      eventSourceUrl: req.headers.get("referer"),
-      user: {
-        email,
-        phone,
-        firstName,
-        lastName,
-        externalId: id,
-        country: "ca",
-        clientIp: ip,
-        userAgent,
-        fbp,
-        fbc,
-      },
-      customData: {
-        currency: "CAD",
-        value: estimate && !estimate.unique ? estimate.mid : 0,
-        ...(vehicle ? { content_name: `${vehicle.year} ${vehicle.make} ${vehicle.model}` } : {}),
-      },
-    });
+    // event so Meta dedupes; PII is hashed inside sendCapiLead. Skipped entirely
+    // on a stored consent denial.
+    if (!consentDenied) {
+      const { firstName, lastName } = splitName(name);
+      await sendCapiLead({
+        eventId: metaEventId,
+        eventName: kind === "inquiry" ? "Contact" : "Lead",
+        eventSourceUrl: req.headers.get("referer"),
+        user: {
+          email,
+          phone,
+          firstName,
+          lastName,
+          externalId: id,
+          country: "ca",
+          clientIp: ip,
+          userAgent,
+          fbp,
+          fbc,
+        },
+        customData: {
+          currency: "CAD",
+          value: estimate && !estimate.unique ? estimate.mid : 0,
+          ...(vehicle ? { content_name: `${vehicle.year} ${vehicle.make} ${vehicle.model}` } : {}),
+        },
+      });
+    }
     // GA4 Measurement Protocol "generate_lead" (server-side; best-effort). Mirrors
     // the browser generate_lead for vehicle leads so the conversion still counts
     // when gtag is blocked. Reads _ga to stitch to the user's GA session. Tagged
     // transport:"server" — choose one of browser/server as the canonical
-    // conversion in GA4 since they aren't auto-deduped.
-    if (kind === "vehicle") {
+    // conversion in GA4 since they aren't auto-deduped. Skipped on consent denial.
+    if (kind === "vehicle" && !consentDenied) {
       await sendGa4Lead({
         gaCookie: req.cookies.get("_ga")?.value,
         params: {

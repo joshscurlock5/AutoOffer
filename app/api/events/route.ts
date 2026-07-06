@@ -58,11 +58,16 @@ function rand4(): string {
   return Math.random().toString(36).slice(2, 6);
 }
 
+// Bots pass no cookies/consent state and would otherwise burn through the rate
+// limit and pollute the events table; empty/known-bot UAs are dropped silently.
+const BOT_UA_RE =
+  /bot|crawl|spider|slurp|headless|phantomjs|puppeteer|playwright|lighthouse|pingdom|uptime|facebookexternalhit|meta-externalagent|preview|scanner|python-requests|curl|wget/i;
+
 export async function POST(req: NextRequest) {
   try {
-    const ip = clientIpFrom(req);
-    if (!(await allowRequest(ip, "events", 300, 3600))) {
-      return NextResponse.json({ ok: true }); // over-limit — silently drop
+    const ua = req.headers.get("user-agent") || "";
+    if (!ua || BOT_UA_RE.test(ua)) {
+      return NextResponse.json({ ok: true }); // bot UA — silently drop
     }
 
     const body = (await req.json().catch(() => null)) as {
@@ -72,6 +77,19 @@ export async function POST(req: NextRequest) {
     const sessionId = str(body?.sessionId, 60);
     const rawEvents = Array.isArray(body?.events) ? body!.events.slice(0, MAX_EVENTS) : [];
     if (!sessionId || !rawEvents.length) return NextResponse.json({ ok: true });
+
+    // CGNAT means many real Canadian mobile users share one IP, so the per-IP
+    // limit is generous; the per-session limit is the tight one, since a session
+    // is one visitor. Drop (with a logged reason) when either trips.
+    const ip = clientIpFrom(req);
+    if (!(await allowRequest(ip, "events", 3000, 3600))) {
+      console.warn(`[events] rate-limited ip=${ip}`);
+      return NextResponse.json({ ok: true });
+    }
+    if (!(await allowRequest("s:" + sessionId, "events", 300, 3600))) {
+      console.warn(`[events] rate-limited session=${sessionId}`);
+      return NextResponse.json({ ok: true });
+    }
 
     // Resolve a booking token (if any event carries one) to its lead — the only
     // per-request lead lookup, and only when the rare booking_view arrives.

@@ -26,12 +26,28 @@ function str(v: unknown): string {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits = (s: string) => s.replace(/\D/g, "");
 
+// This route has no Turnstile (it fires on every field blur, pre-submit), so
+// form-filling bots/crawlers would otherwise become "Abandoned" partial leads
+// that get real recovery emails and enter the Meta audience CSVs. A missing or
+// obviously-automated UA is rejected before anything is read/written.
+const BOT_UA_RE =
+  /bot|crawl|spider|slurp|headless|phantomjs|puppeteer|playwright|lighthouse|pingdom|uptime|facebookexternalhit|meta-externalagent|preview|scanner|python-requests|curl|wget/i;
+
 export async function POST(req: NextRequest) {
   try {
     const ip = clientIpFrom(req);
     if (!(await allowRequest(ip, "partial", 20, 3600))) {
       return NextResponse.json({ ok: false }, { status: 429 });
     }
+
+    const userAgent = req.headers.get("user-agent") || "";
+    if (!userAgent || BOT_UA_RE.test(userAgent)) {
+      return NextResponse.json({ ok: true, skipped: "bot" });
+    }
+
+    // Server-side mirror of the banner's opt-out (lib/consent.ts) — a denial
+    // skips the Meta ad-match key stamp (mirrors app/api/leads/route.ts).
+    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
 
     const body = await req.json().catch(() => ({}));
     const email = str(body.email);
@@ -65,9 +81,9 @@ export async function POST(req: NextRequest) {
 
     // Meta ad-match keys (mirrors app/api/leads/route.ts) so a recovered partial's
     // offline Purchase can still be attributed back to the originating ad click.
+    // Skipped on a stored consent denial.
     const fbp = req.cookies.get("_fbp")?.value;
     const fbc = req.cookies.get("_fbc")?.value;
-    const userAgent = req.headers.get("user-agent") || undefined;
     const meta = { ...(fbc ? { fbc } : {}), ...(fbp ? { fbp } : {}), clientIp: ip, userAgent };
 
     // Dedupe against existing leads by email/phone (volume is small; a scan is cheap).
@@ -97,7 +113,7 @@ export async function POST(req: NextRequest) {
         // The journey GROWS over time (client array is append-only), so newer wins.
         ...(touchHistory ? { touchHistory } : {}),
         ...(gaClientId && !match.gaClientId ? { gaClientId } : {}),
-        ...(!match.meta ? { meta } : {}),
+        ...(!match.meta && !consentDenied ? { meta } : {}),
       });
       return NextResponse.json({ ok: true, updated: true });
     }
@@ -110,7 +126,7 @@ export async function POST(req: NextRequest) {
       contact: { name, email, phone, contactMethod },
       vehicle,
       photos: [],
-      meta,
+      ...(consentDenied ? { consentDenied: true } : { meta }),
       ...(attribution
         ? { attribution, landingPath: attribution.landingPath, referrerUrl: attribution.referrer }
         : {}),

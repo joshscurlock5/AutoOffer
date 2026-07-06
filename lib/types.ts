@@ -214,6 +214,9 @@ export interface Lead {
     clientIp?: string;
     userAgent?: string;
   };
+  /** Visitor had analytics consent denied at submit time — no Meta/GA4 sends,
+   * no ad-match keys stored; offline Purchase sync also skips. */
+  consentDenied?: boolean;
   /** ISO timestamp set once the offline "Purchase" conversion was sent to Meta (idempotency guard). */
   purchaseSyncedAt?: string;
   /** Offer emailed to the customer via the /offer Telegram command (CAD). */
