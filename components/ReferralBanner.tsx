@@ -32,7 +32,10 @@ export default function ReferralBanner() {
               it, you get ${site.referralReward}.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <ReferralCtaLink location="referral_banner" className="btn-primary">
+              <ReferralCtaLink
+                location="referral_banner"
+                className="btn bg-emerald-600 px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-lift active:translate-y-0"
+              >
                 Refer Someone <ArrowRight className="h-4 w-4" />
               </ReferralCtaLink>
               <ReferralCtaLink

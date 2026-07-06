@@ -55,7 +55,7 @@ export default function ResumeBanner() {
             track("resume_clicked");
             dismiss();
           }}
-          className="btn-primary shrink-0 px-4 py-2 text-sm"
+          className="btn-dark shrink-0 px-4 py-2 text-sm"
         >
           Continue <ArrowRight className="h-4 w-4" />
         </Link>

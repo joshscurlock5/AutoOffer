@@ -38,7 +38,7 @@ function Column({
     <div
       className={`overflow-hidden rounded-2xl ${
         highlight
-          ? "border-2 border-brand bg-white shadow-lift wide:-mt-4"
+          ? "border-2 border-emerald-500 bg-white shadow-lift wide:-mt-4"
           : "border border-slate-200 bg-white"
       } ${className}`}
     >
@@ -51,7 +51,7 @@ function Column({
           <h3 className="font-display text-xl font-bold text-navy">{title}</h3>
         )}
         {highlight && (
-          <span className="shrink-0 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-brand-700">
+          <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
             Best choice
           </span>
         )}

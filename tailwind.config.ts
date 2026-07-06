@@ -39,8 +39,9 @@ const config: Config = {
           600: "#1E7AD8",
           700: "#1763C4",
         },
-        // Section background — set to pure white for a clean, Clutch-like look.
-        cream: "#FFFFFF",
+        // Section background — a cool off-white so white cards/inputs lift off it
+        // (depth). Was pure white; the elevated palette gives sections a ground.
+        cream: "#F5F8FC",
         ink: "#16181D",
         muted: "#4B5563",
 
@@ -135,7 +136,7 @@ const config: Config = {
         "2xl": "20px",
       },
       boxShadow: {
-        card: "0 10px 30px -12px rgba(16,42,76,0.16)",
+        card: "0 12px 34px -14px rgba(16,42,76,0.22)",
         soft: "0 4px 20px -8px rgba(16,42,76,0.14)",
         lift: "0 24px 60px -20px rgba(16,42,76,0.28)",
       },

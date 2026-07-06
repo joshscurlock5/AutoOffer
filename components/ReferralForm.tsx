@@ -100,7 +100,7 @@ export default function ReferralForm() {
   if (state === "done") {
     return (
       <div className="card p-8 text-center">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-50 text-emerald-600">
           <Check className="h-8 w-8" />
         </span>
         <h3 className="mt-5 font-display text-2xl font-bold text-navy">Thank you!</h3>
@@ -121,7 +121,7 @@ export default function ReferralForm() {
         <h3 className="font-display text-2xl font-bold text-navy">Refer a friend</h3>
       </div>
 
-      <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-brand">Your details</p>
+      <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-emerald-700">Your details</p>
       <div className="mt-3 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -134,12 +134,12 @@ export default function ReferralForm() {
           </div>
         </div>
         <div>
-          <label className="label" htmlFor="r-phone">Your phone <span className="font-normal text-muted">(so we can send your $100)</span></label>
+          <label className="label" htmlFor="r-phone">Your phone <span className="font-normal text-muted">(so we can send your <span className="font-semibold text-emerald-700">$100</span>)</span></label>
           <input id="r-phone" type="tel" className="field" value={f.referrerPhone} onChange={set("referrerPhone")} placeholder="(___) ___-____" />
         </div>
       </div>
 
-      <p className="mt-6 text-sm font-semibold uppercase tracking-wide text-brand">Your friend&apos;s details <span className="font-normal normal-case text-muted">(optional)</span></p>
+      <p className="mt-6 text-sm font-semibold uppercase tracking-wide text-emerald-700">Your friend&apos;s details <span className="font-normal normal-case text-muted">(optional)</span></p>
       <div className="mt-3 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -171,7 +171,7 @@ export default function ReferralForm() {
         </p>
       )}
 
-      <button type="submit" disabled={state === "sending"} className="btn-primary mt-6 w-full text-lg disabled:opacity-60">
+      <button type="submit" disabled={state === "sending"} className="btn bg-emerald-600 px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-lift active:translate-y-0 mt-6 w-full text-lg disabled:opacity-60">
         {state === "sending" ? "Submitting…" : "Submit Referral"}
         {state !== "sending" && <ArrowRight className="h-5 w-5" />}
       </button>

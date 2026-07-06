@@ -68,8 +68,8 @@
   --color-secondary-hover: var(--accent-600);
   --color-secondary-active: var(--accent-700);
   /* Backgrounds */
-  --color-bg-page: var(--white);
-  --color-bg-section: var(--white);
+  --color-bg-page: #F5F8FC; /* elevated: cool off-white ground so white surfaces lift */
+  --color-bg-section: #F5F8FC;
   --color-bg-subtle: var(--slate-50);
   --color-bg-app: var(--slate-100);
   --color-bg-hover: var(--slate-100);

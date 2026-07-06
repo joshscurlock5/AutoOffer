@@ -184,7 +184,7 @@ export default function ChatWidget() {
           })
         }
         aria-label={open ? "Close chat" : "Chat with us"}
-        className="chat-fab fixed right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-lift hover:-translate-y-0.5 hover:bg-brand-700 lg:right-5"
+        className="chat-fab fixed right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-navy text-white shadow-lift hover:-translate-y-0.5 hover:bg-navy-700 lg:right-5"
       >
         {open ? <ChevronDown className="h-6 w-6" /> : <Chat className="h-6 w-6" />}
       </button>
@@ -195,7 +195,7 @@ export default function ChatWidget() {
           {/* -------------------- HOME -------------------- */}
           {view === "home" && (
             <>
-              <div className="bg-brand-600 px-5 pb-8 pt-5 text-white">
+              <div className="bg-gradient-to-br from-[#1A3564] to-[#0C1528] px-5 pb-8 pt-5 text-white">
                 <div className="flex items-center justify-between">
                   <span className="font-logo text-lg font-extrabold tracking-tight">DriveOffer</span>
                   <button onClick={() => setOpen(false)} aria-label="Close chat" className="rounded-lg p-1 text-white/80 transition hover:bg-white/10">

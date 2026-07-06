@@ -120,7 +120,7 @@ export function GuideMegaMenu() {
                           aria-current={isActive}
                           className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[15px] transition ${
                             isActive
-                              ? "bg-brand-50 font-semibold text-brand-700"
+                              ? "bg-slate-100 font-semibold text-navy"
                               : "font-medium text-navy/70 hover:bg-slate-50 hover:text-navy"
                           }`}
                         >
@@ -162,10 +162,10 @@ export function GuideMegaMenu() {
                 )}
               </div>
 
-              {/* Right — subtle pale-blue resource box */}
+              {/* Right — neutral "featured" resource box (blue reserved for links) */}
               <div className="p-4">
-                <div className="h-full rounded-lg border border-brand-100 bg-brand-50/70 p-5">
-                  <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-brand-700">
+                <div className="h-full rounded-lg border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-slate-500">
                     Popular Car Selling Guides
                   </p>
                   <ul className="mt-3.5 space-y-0.5">
@@ -176,13 +176,13 @@ export function GuideMegaMenu() {
                           onClick={() => setOpen(false)}
                           className="group flex items-start gap-2 py-1.5 text-[14px] font-medium leading-snug text-navy/80 transition hover:text-brand-700"
                         >
-                          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
+                          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:text-brand-600" />
                           <span>{a.title}</span>
                         </Link>
                       </li>
                     ))}
                   </ul>
-                  <div className="mt-4 border-t border-brand-100 pt-3">
+                  <div className="mt-4 border-t border-slate-200 pt-3">
                     <Link
                       href="/car-selling-guide"
                       onClick={() => setOpen(false)}
