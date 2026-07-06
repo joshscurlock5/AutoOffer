@@ -58,6 +58,8 @@ export default function AdminDashboard({
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
   const [lostModal, setLostModal] = useState<Lead | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [activeChat, setActiveChat] = useState<ChatConversation | null>(null);
   const [lookups, setLookups] = useState<Lookup[]>([]);
@@ -128,6 +130,30 @@ export default function AdminDashboard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "lead", id, patch }),
     });
+  }
+
+  // Create an off-platform lead (phone call, walk-in) by hand. On success the
+  // server returns the built lead; drop it into local state so it appears at once.
+  async function createLead(payload: Record<string, unknown>): Promise<boolean> {
+    setAddError(null);
+    try {
+      const r = await fetch("/api/admin/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.lead) {
+        setAddError(d.error || "Could not save the lead. Please try again.");
+        return false;
+      }
+      setLeads((prev) => [d.lead as Lead, ...prev]);
+      setAddOpen(false);
+      return true;
+    } catch {
+      setAddError("Network error. Please try again.");
+      return false;
+    }
   }
 
   // Soft delete: hide it everywhere + drop it from analytics, but keep it in the
@@ -364,14 +390,22 @@ export default function AdminDashboard({
         {tab === "leads" && (
           <>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative w-full sm:max-w-xs">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="field pl-9"
-                  placeholder="Search name, car, phone…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+              <div className="flex w-full items-center gap-2 sm:max-w-md">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="field pl-9"
+                    placeholder="Search name, car, phone…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => { setAddError(null); setAddOpen(true); }}
+                  className="btn-primary shrink-0 whitespace-nowrap px-3 py-2 text-sm"
+                >
+                  + Add lead
+                </button>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {filterChips.map((s) => (
@@ -538,6 +572,15 @@ export default function AdminDashboard({
             patchLead(lostModal.id, { status: "lost", lostReason: reason || undefined });
             setLostModal(null);
           }}
+        />
+      )}
+
+      {/* manually add an off-platform lead (phone call, walk-in, referral) */}
+      {addOpen && (
+        <AddLeadModal
+          error={addError}
+          onCancel={() => setAddOpen(false)}
+          onSubmit={createLead}
         />
       )}
     </div>
@@ -1058,6 +1101,139 @@ function LostModal({
           <button onClick={onCancel} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
           <button onClick={() => onConfirm(reason.trim())} className="btn-primary px-4 py-2 text-sm">
             <Check className="h-4 w-4" /> Mark Lost
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddLeadModal({
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (payload: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [f, setF] = useState({
+    name: "", phone: "", email: "", contactMethod: "call", source: "phone",
+    year: "", make: "", model: "", trim: "", mileageKm: "", conditionNote: "",
+    status: "closed", purchasePrice: "", expectedResale: "", actualSalePrice: "",
+    notes: "", reportToMeta: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k: string, v: unknown) => setF((p) => ({ ...p, [k]: v }));
+  const hasContact = f.phone.trim() !== "" || f.email.trim() !== "";
+  const isClosed = f.status === "closed";
+  const STATUSES = ["new", "contacted", "scheduled", "closed", "lost"];
+
+  async function submit() {
+    if (!hasContact || saving) return;
+    setSaving(true);
+    const ok = await onSubmit({ ...f });
+    if (!ok) setSaving(false); // on success the modal unmounts
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
+      <div className="card max-h-[88vh] w-full max-w-lg overflow-y-auto p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-xl font-bold text-navy">Add a lead</h3>
+          <button onClick={onCancel} className="rounded-full p-1 text-muted hover:bg-slate-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          A deal that came in off the website — a phone call, walk-in, or referral you took by hand.
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label className="col-span-2 text-xs font-semibold text-muted">
+            Name
+            <input className="field mt-1" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Customer name (optional)" />
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Phone
+            <input className="field mt-1" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="(780) 555-1234" />
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Email
+            <input className="field mt-1" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="name@email.com" />
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Prefers
+            <select className="field mt-1" value={f.contactMethod} onChange={(e) => set("contactMethod", e.target.value)}>
+              <option value="call">Call</option>
+              <option value="text">Text</option>
+              <option value="email">Email</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Source
+            <select className="field mt-1" value={f.source} onChange={(e) => set("source", e.target.value)}>
+              <option value="phone">Phone call</option>
+              <option value="walk-in">Walk-in</option>
+              <option value="referral">Referral</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="text-xs font-bold uppercase tracking-wide text-muted">Vehicle</div>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <input className="field" value={f.year} onChange={(e) => set("year", e.target.value)} placeholder="Year" inputMode="numeric" />
+            <input className="field" value={f.make} onChange={(e) => set("make", e.target.value)} placeholder="Make" />
+            <input className="field" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="Model" />
+            <input className="field" value={f.trim} onChange={(e) => set("trim", e.target.value)} placeholder="Trim (optional)" />
+            <input className="field col-span-2" value={f.mileageKm} onChange={(e) => set("mileageKm", e.target.value)} placeholder="Mileage (km)" inputMode="numeric" />
+            <input className="field col-span-2" value={f.conditionNote} onChange={(e) => set("conditionNote", e.target.value)} placeholder="Condition notes (optional)" />
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-bold uppercase tracking-wide text-muted">Deal</div>
+            <select className="field w-auto py-1 text-sm" value={f.status} onChange={(e) => set("status", e.target.value)}>
+              {STATUSES.map((st) => (
+                <option key={st} value={st}>{labelOf(st)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            <label className="text-xs font-semibold text-muted">
+              Bought for
+              <input className="field mt-1" value={f.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="$" inputMode="numeric" />
+            </label>
+            <label className="text-xs font-semibold text-muted">
+              Est. resale
+              <input className="field mt-1" value={f.expectedResale} onChange={(e) => set("expectedResale", e.target.value)} placeholder="$" inputMode="numeric" />
+            </label>
+            <label className="text-xs font-semibold text-muted">
+              Sold for
+              <input className="field mt-1" value={f.actualSalePrice} onChange={(e) => set("actualSalePrice", e.target.value)} placeholder="$" inputMode="numeric" />
+            </label>
+          </div>
+          <input className="field mt-3" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Note (optional)" />
+          {isClosed && (
+            <label className="mt-3 flex items-start gap-2 text-sm text-navy">
+              <input type="checkbox" className="mt-0.5" checked={f.reportToMeta} onChange={(e) => set("reportToMeta", e.target.checked)} />
+              <span>
+                Report this sale to Meta as a conversion{" "}
+                <span className="text-muted">(helps your ads find more sellers; matched by phone/email if they ever clicked an ad)</span>
+              </span>
+            </label>
+          )}
+        </div>
+
+        {error && <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
+          <button onClick={submit} disabled={!hasContact || saving} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+            <Check className="h-4 w-4" /> {saving ? "Saving…" : "Add lead"}
           </button>
         </div>
       </div>

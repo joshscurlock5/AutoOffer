@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { isAuthed } from "@/lib/auth";
 import {
   getLeads,
   getReferrals,
+  addLead,
   updateLead,
   deleteLead,
   updateReferral,
@@ -12,7 +14,7 @@ import {
 import { cancelScheduledEmails } from "@/lib/email";
 import { sendCapiPurchase, splitName } from "@/lib/metaCapi";
 import { emitLeadContacted, emitBookingConfirmed, emitLeadClosed, emitLeadLost } from "@/lib/leadStages";
-import type { Lead } from "@/lib/types";
+import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
 
 /** Clamp an owner-entered lost-reason to a sane length (mirrors other free-text fields). */
 function sanitizeLostReason(v: unknown): string | undefined {
@@ -29,6 +31,132 @@ export async function GET() {
   }
   const [leads, referrals] = await Promise.all([getLeads(), getReferrals()]);
   return NextResponse.json({ leads, referrals });
+}
+
+const CONTACT_METHODS = new Set(["call", "text", "email"]);
+const SOURCE_VALUES = new Set(["phone", "walk-in", "referral", "other"]);
+
+function s(v: unknown, max = 200): string {
+  return typeof v === "string" ? v.trim().slice(0, max) : "";
+}
+function posMoney(v: unknown): number | undefined {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+// Create a lead by hand — an off-platform deal (phone call, walk-in, referral you
+// took verbally) the owner wants in the dataset. Tagged source "manual" with a
+// synthetic first-touch so it surfaces as its own source in analytics (never joins
+// a Meta ad campaign). A closed manual deal can optionally fire the offline Meta
+// "Purchase" (matched on hashed email/phone — Meta credits it only if this person
+// ever clicked an ad).
+export async function POST(req: NextRequest) {
+  if (!(await isAuthed())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const b = await req.json().catch(() => ({}));
+
+  const email = s(b.email, 200).toLowerCase();
+  const phone = s(b.phone, 40);
+  if (!email && !phone) {
+    return NextResponse.json({ error: "A phone number or email is required." }, { status: 400 });
+  }
+  const name = s(b.name, 120);
+  const cmRaw = s(b.contactMethod, 10);
+  const contactMethod = (CONTACT_METHODS.has(cmRaw) ? cmRaw : "call") as "call" | "text" | "email";
+
+  const statusRaw = s(b.status, 20) as LeadStatus;
+  const status: LeadStatus =
+    LEAD_STATUSES.includes(statusRaw) && statusRaw !== "partial" ? statusRaw : "new";
+  const srcRaw = s(b.source, 20);
+  const srcLabel = SOURCE_VALUES.has(srcRaw) ? srcRaw : "other";
+
+  const year = s(b.year, 10);
+  const make = s(b.make, 60);
+  const model = s(b.model, 60);
+  const trim = s(b.trim, 60);
+  const mileageKm = Number(s(b.mileageKm, 12)) || 0;
+  const conditionNote = s(b.conditionNote, 500);
+  const vehicle =
+    year || make || model
+      ? {
+          year,
+          make,
+          model,
+          trim: trim || undefined,
+          mileageKm,
+          ...(conditionNote ? { condition: { tags: [], note: conditionNote } } : {}),
+        }
+      : undefined;
+
+  const purchasePrice = posMoney(b.purchasePrice);
+  const expectedResale = posMoney(b.expectedResale);
+  const actualSalePrice = posMoney(b.actualSalePrice);
+  const notes = s(b.notes, 1000) || undefined;
+  const reportToMeta = b.reportToMeta === true || b.reportToMeta === "true";
+
+  const id = crypto.randomUUID();
+  const nowISO = new Date().toISOString();
+  const attribution = {
+    utmSource: srcLabel,
+    utmMedium: "manual",
+    landingPath: "(manual entry)",
+    landingAt: nowISO,
+  };
+  const isClosedSale = status === "closed" && !!purchasePrice;
+
+  const lead: Lead = {
+    id,
+    kind: "vehicle",
+    createdAt: nowISO,
+    status,
+    contact: { name, email, phone, contactMethod },
+    vehicle,
+    photos: [],
+    source: "manual",
+    attribution,
+    ...(notes ? { notes } : {}),
+    ...(purchasePrice != null ? { purchasePrice } : {}),
+    ...(expectedResale != null ? { expectedResale } : {}),
+    ...(actualSalePrice != null ? { actualSalePrice, soldAt: nowISO } : {}),
+    // Entered after the fact, so lifecycle stamps all read "now" — keeps the
+    // funnel + back-half metrics consistent with the chosen status.
+    ...(status !== "new" ? { firstTouchAt: nowISO } : {}),
+    ...(status === "contacted" || status === "scheduled" || status === "closed"
+      ? { contactedAt: nowISO }
+      : {}),
+    ...(status === "scheduled" ? { scheduledAt: nowISO } : {}),
+    ...(status === "closed" ? { closedAt: nowISO } : {}),
+    ...(status === "lost" ? { lostAt: nowISO } : {}),
+    // If the owner opted OUT of Meta reporting for a closed sale, pre-stamp the
+    // once-only guard so a later admin edit can never fire the Purchase either.
+    ...(isClosedSale && !reportToMeta ? { purchaseSyncedAt: nowISO } : {}),
+  };
+  await addLead(lead);
+
+  if (isClosedSale) {
+    const margin =
+      typeof expectedResale === "number"
+        ? Math.max(0, expectedResale - (purchasePrice as number))
+        : Number(process.env.META_PURCHASE_MARGIN_FALLBACK) || 1000;
+    // Offline Meta Purchase — only when opted in and we have a match key. Once-only
+    // via claimPurchaseSync; roll back on a failed send so a later edit retries.
+    if (reportToMeta && (email || phone) && (await claimPurchaseSync(id))) {
+      const ok = await sendCapiPurchase({
+        eventId: `purchase-${id}`,
+        value: margin,
+        user: { email, phone, ...splitName(name), externalId: id, country: "ca" },
+        customData: vehicle ? { content_name: `${vehicle.year} ${vehicle.make} ${vehicle.model}` } : undefined,
+      });
+      if (!ok) await releasePurchaseSync(id);
+    }
+    // GA4 close_convert_lead + first-party "Deal closed" timeline entry. GA4
+    // no-ops without a client id (a call-in has no GA session); the timeline
+    // entry still lands. Never throws.
+    await emitLeadClosed(lead, margin);
+  }
+
+  return NextResponse.json({ ok: true, lead });
 }
 
 export async function PATCH(req: NextRequest) {
