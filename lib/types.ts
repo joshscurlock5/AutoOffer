@@ -231,6 +231,10 @@ export interface Lead {
   offerSentAt?: string;
   scheduledAt?: string;
   closedAt?: string;
+  lostAt?: string;
+  spamAt?: string;
+  /** Owner-entered reason when marked lost; flows to GA4 close_unconvert_lead. */
+  lostReason?: string;
   /** Inspection/appointment time — a real field now, not just free-text notes. */
   appointmentAt?: string;
   /** When the T-2h appointment reminder was sent (idempotency for the cron). */
@@ -267,6 +271,8 @@ export interface Lead {
   behavior?: Behavior;
   /** GA4 client_id (from the _ga cookie) captured at submission, for GA session stitching. */
   gaClientId?: string;
+  /** GA4 session id parsed from the _ga_<container> cookie at submit. */
+  gaSessionId?: string;
   /** First landing path (+query) — quick access without digging into `attribution`. */
   landingPath?: string;
   /** External referrer URL at first touch. */

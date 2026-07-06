@@ -21,7 +21,8 @@ All tracking goes through three tiny helpers — never call `gtag`/`fbq` directl
 | GA4 event | Meta standard event | Meaning |
 |---|---|---|
 | `widget_submit` | `Search` | looked up a car's value |
-| `estimate_viewed` | `ViewContent` | **saw their offer** (prime remarketing signal) |
+| `details_submitted` | `ViewContent` | **completed vehicle details** (prime remarketing signal — live) |
+| `estimate_viewed` | `ViewContent` | saw their offer — **dormant**, `SHOW_INSTANT_ESTIMATE=false` gates this off; kept mapped in case that flag returns |
 | `contact_engaged` | `InitiateCheckout` | started filling the contact form |
 | `generate_lead` | `Lead` | submitted — fired inline with a CAPI dedup id |
 
@@ -40,8 +41,13 @@ Server-side conversions (recover ad-blocked users) live in `lib/metaCapi.ts`
 
 ```
 cta_click ─▶ offer_flow_start ─▶ step1_submitted ─▶ details_submitted
-          ─▶ estimate_viewed ─▶ contact_engaged ─▶ generate_lead
+          ─▶ estimate_viewed (dormant) ─▶ contact_engaged ─▶ generate_lead
 ```
+
+`estimate_viewed` is shown for completeness but can't fire today
+(`SHOW_INSTANT_ESTIMATE=false` in `app/get-offer/OfferFlow.tsx` skips straight
+from `details_submitted` to the contact step). `details_submitted` is the Meta
+`ViewContent` mapping in practice — see the table above.
 
 `widget_submit` precedes `offer_flow_start` when the entry was the homepage
 widget. VIN path: `vin_submitted → vin_confirmed` (or `vin_failed`/`vin_rejected`)
@@ -55,9 +61,9 @@ and stamps `?source=<location>` on the URL, which surfaces as `cta_source` on
 `phone_click` (`location`).
 **Vehicle:** `offer_flow_start` (`source`, `cta_source`), `step1_submitted`,
 `vin_submitted`, `vin_confirmed`, `vin_rejected`, `vin_failed` (`reason`).
-**Details:** `details_submitted` (`hasDamage`), `form_error`
-(`step`, `reason`).
-**Value:** `estimate_viewed` (+Meta ViewContent), `estimate_error`.
+**Details:** `details_submitted` (`hasDamage`, +Meta ViewContent — live
+mid-funnel signal), `form_error` (`step`, `reason`).
+**Value:** `estimate_viewed` (+Meta ViewContent, dormant — flag off), `estimate_error`.
 **Contact:** `contact_started` (impression, GA4-only), `contact_engaged`
 (interaction, +Meta InitiateCheckout), `edit_vehicle`, `generate_lead`
 (+Meta Lead +server CAPI +server GA4 MP), `lead_error`, `form_error`.
@@ -75,13 +81,11 @@ and stamps `?source=<location>` on the URL, which surfaces as `cta_source` on
 `generate_lead` (primary), `phone_click`, `widget_submit`, `referral_submitted`,
 `contact_form_submitted`. Optionally `contact_engaged` as a soft/micro conversion.
 
-> **`generate_lead` is counted twice** — once by the browser, once by the server
-> GA4 MP mirror (tagged `transport: server`). They are **not** auto-deduped.
-> Pick one as the canonical conversion: keep the **browser** `generate_lead` as
-> the Key event and treat the server copy as a blocker-recovery comparison (build
-> a `transport = server` segment to see how many conversions gtag missed). If you
-> instead want the server count to be canonical, mark it and filter the browser
-> one out of the conversion. Don't mark both.
+> **Only mark `generate_lead`.** The server-side copy is sent under its own name,
+> `generate_lead_server` (see `lib/ga4Mp.ts`), so the two no longer collide —
+> `generate_lead` alone is the canonical browser conversion. Treat
+> `generate_lead_server` as a blocker-recovery comparison (how many conversions
+> gtag missed, e.g. ad-blockers) — do not mark it as a key event.
 
 ### Drop-off report (Explore → Funnel exploration)
 Add steps in this order, then read the % drop between each:
@@ -105,7 +109,7 @@ These are the "went part-way" audiences — each is *reached a step* **AND NOT**
 
 | Audience | Rule | Who it captures |
 |---|---|---|
-| Saw their offer, didn't submit | `ViewContent` AND NOT `Lead`, last 30 days | hottest — they saw a number |
+| Completed vehicle details, didn't submit | `ViewContent` AND NOT `Lead`, last 30 days | hottest — `ViewContent` now = completed step 2 (vehicle details), not the (dormant) on-screen estimate |
 | Started contact, didn't finish | `InitiateCheckout` AND NOT `Lead`, last 30 days | warmest — form abandoners |
 | Searched a car value | `Search` AND NOT `Lead`, last 14 days | top-of-funnel re-engage |
 

@@ -6,6 +6,7 @@ import { smsBookingConfirmation } from "@/lib/sms";
 import { notifyOwner, leadLine } from "@/lib/notify";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { formatEdmonton } from "@/lib/time";
+import { emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   const nowISO = new Date().toISOString();
+  const wasNewlyScheduled = !lead.scheduledAt;
   const updated = await updateLead(lead.id, {
     appointmentAt: startISO,
     appointmentLocation: location,
@@ -69,5 +71,8 @@ export async function POST(req: NextRequest) {
   await smsBookingConfirmation(finalLead);
   const when = formatEdmonton(startISO, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   await notifyOwner(`📅 Customer booked an inspection\n${leadLine(finalLead)}\n${when}\n📍 ${location}`, "bookings");
+  // Meta/GA4/first-party close-loop event — only on the FIRST time this lead
+  // gets scheduled (wasNewlyScheduled computed from the pre-update lead).
+  if (wasNewlyScheduled) await emitBookingConfirmed(finalLead, "website");
   return NextResponse.json({ ok: true });
 }

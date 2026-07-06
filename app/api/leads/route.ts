@@ -7,7 +7,7 @@ import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/type
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead, splitName } from "@/lib/metaCapi";
-import { sendGa4Lead, clientIdFromGaCookie } from "@/lib/ga4Mp";
+import { sendGa4Lead, clientIdFromGaCookie, parseGa4SessionCookie } from "@/lib/ga4Mp";
 import { sendLeadConfirmation } from "@/lib/email";
 import { smsLeadConfirmation } from "@/lib/sms";
 import { parseAttribution, parseBehavior, parseTouches } from "@/lib/attribution";
@@ -168,6 +168,7 @@ export async function POST(req: NextRequest) {
     const touchHistory = parseTouches(str(form.get("touches")));
     const behavior = parseBehavior(str(form.get("behavior")));
     const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
+    const gaSessionId = consentDenied ? undefined : parseGa4SessionCookie(req.cookies.getAll());
 
     const lead: Lead = {
       id,
@@ -187,6 +188,7 @@ export async function POST(req: NextRequest) {
       ...(touchHistory ? { touchHistory } : {}),
       ...(behavior ? { behavior } : {}),
       ...(gaClientId ? { gaClientId } : {}),
+      ...(gaSessionId ? { gaSessionId } : {}),
       source: "web",
     };
 
@@ -247,6 +249,7 @@ export async function POST(req: NextRequest) {
     if (kind === "vehicle" && !consentDenied) {
       await sendGa4Lead({
         gaCookie: req.cookies.get("_ga")?.value,
+        sessionId: gaSessionId,
         params: {
           currency: "CAD",
           value: estimate && !estimate.unique ? estimate.mid : 0,

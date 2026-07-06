@@ -294,6 +294,11 @@ const SITE_EVENT_LABELS: Record<string, string> = {
   chat_opened: "Opened the chat",
   widget_submit: "Used the value widget",
   resume_clicked: "Resumed their form",
+  lead_contacted: "You made first contact",
+  offer_sent: "Offer sent",
+  booking_confirmed: "Inspection booked",
+  lead_closed: "Deal closed",
+  lead_lost: "Marked lost",
 };
 
 /** Condense a person's raw event stream into readable timeline entries:
@@ -515,9 +520,24 @@ function buildOne(
   const device = deviceFromUA(recent.find((l) => l.meta?.userAgent)?.meta?.userAgent);
   const make = recent.find((l) => l.vehicle?.make)?.vehicle?.make;
   const offerMid = offer ? Math.round((offer.low + offer.high) / 2) : undefined;
-  const fl = sortedLeads.find((l) => l.firstTouchAt && l.createdAt);
+  // Speed-to-lead: firstTouchAt also gets stamped by marking spam/lost and by
+  // customer self-booking, so it doesn't reflect owner response speed. Use the
+  // earliest real lead that was actually contacted or offered instead — the
+  // min of contactedAt/offerSentAt is the owner's first real reply.
+  const fl = sortedLeads
+    .filter((l) => l.status !== "partial" && l.status !== "spam" && (l.contactedAt || l.offerSentAt))
+    .find((l) => l.createdAt);
   const firstResponseMins = fl
-    ? Math.max(0, Math.round((Date.parse(fl.firstTouchAt as string) - Date.parse(fl.createdAt)) / 60000))
+    ? Math.max(
+        0,
+        Math.round(
+          (Math.min(
+            ...[fl.contactedAt, fl.offerSentAt].filter((t): t is string => Boolean(t)).map((t) => Date.parse(t))
+          ) -
+            Date.parse(fl.createdAt)) /
+            60000
+        )
+      )
     : undefined;
 
   // Zero-input enrichment from what we already have (lib/enrich.ts).

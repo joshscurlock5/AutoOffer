@@ -386,7 +386,13 @@ export default function OfferFlow() {
     }
     setError("");
     const yr = Number(year);
-    track("details_submitted", { make, model, year: yr, hasDamage });
+    trackFunnel(
+      "details_submitted",
+      { make, model, year: yr, hasDamage },
+      // Meta ViewContent — details_submitted is the live mid-funnel remarketing
+      // signal now that the instant estimate is off (estimate_viewed can't fire).
+      { content_name: `${yr} ${make} ${model}` },
+    );
     setStep(3);
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (!SHOW_INSTANT_ESTIMATE) {

@@ -150,6 +150,26 @@ export async function sendCapiLead(opts: {
 }
 
 /**
+ * Send a server-side lifecycle-stage conversion to Meta ("Schedule" when an
+ * inspection is booked, "OfferSent" for a custom-events funnel step). No
+ * custom_data value needed — these aren't revenue events. Best-effort.
+ */
+export async function sendCapiStage(opts: {
+  eventName: "Schedule" | "OfferSent";
+  eventId: string;
+  actionSource: "website" | "system_generated";
+  user: CapiUser;
+}): Promise<void> {
+  await postEvent({
+    event_name: opts.eventName,
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: opts.eventId,
+    action_source: opts.actionSource,
+    user_data: buildUserData(opts.user),
+  });
+}
+
+/**
  * Send a server-side "Purchase" conversion to Meta when a deal actually closes
  * (offline / CRM event). `value` is the expected deal margin (CAD). Returns true
  * on a successful send so the caller can mark the lead synced and avoid re-firing

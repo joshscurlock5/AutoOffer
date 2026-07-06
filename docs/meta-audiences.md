@@ -21,7 +21,7 @@ These build themselves from the Meta Pixel already on the site — no uploads ev
 | Name | Rule | Retention | Use |
 |---|---|---|---|
 | `Visited site 90d` | All website visitors | 90 days | broad retargeting |
-| `Viewed estimate 30d` | Event: `ViewContent` | 30 days | mid-funnel retargeting |
+| `Entered vehicle details 30d` | Event: `ViewContent` | 30 days | mid-funnel retargeting |
 | `Started contact form 30d` | Event: `InitiateCheckout` | 30 days | hottest retargeting — they almost finished |
 | `Leads 180d` | Event: `Lead` | 180 days | **exclusion** — add as "Exclude" on acquisition campaigns so you stop paying to reach people already in your pipeline |
 
@@ -61,5 +61,5 @@ Upload steps:
 ## Privacy note
 
 The privacy policy (site → /privacy → "Advertising") discloses hashed list uploads, and anyone can
-opt out by emailing us — if someone does, remove them from future exports by marking their lead
-`spam`/`lost` or just deleting their row from the CSV before upload.
+opt out by emailing us — the code now auto-excludes email/SMS opt-outs and bounces from every
+export, so no manual row-deletion or `spam`/`lost` tagging is needed to honor an opt-out.

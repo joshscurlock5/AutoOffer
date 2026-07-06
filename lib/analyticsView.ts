@@ -37,7 +37,9 @@ export interface View {
     cashPaidOut: number;
     revenue: number;
     margin: number;
-    avgResponseMins: number | null;
+    medianResponseMins: number | null;
+    /** Share (rounded %) of first-responded leads answered within 5 minutes. */
+    pctUnder5Min: number | null;
   };
   funnel: Count[];
   overTime: { date: string; leads: number }[];
@@ -65,6 +67,14 @@ export interface FilterOptions {
 }
 
 const isRealLead = (p: Profile): boolean => p.hasRealLead;
+
+/** Standard even/odd median of a numeric list (undefined when empty). */
+function median(ns: number[]): number | null {
+  if (!ns.length) return null;
+  const sorted = [...ns].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
 
 function topCounts(labels: (string | undefined)[], limit = 12): Count[] {
   const m = new Map<string, number>();
@@ -130,7 +140,10 @@ export function computeView(profiles: Profile[]): View {
   const latencies = profiles
     .map((p) => p.firstResponseMins)
     .filter((m): m is number => typeof m === "number" && m >= 0);
-  const avgResponseMins = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+  const medianResponseMins = median(latencies);
+  const pctUnder5Min = latencies.length
+    ? Math.round((latencies.filter((m) => m <= 5).length / latencies.length) * 100)
+    : null;
 
   const funnel: Count[] = [
     { label: "People", count: profiles.length },
@@ -167,7 +180,8 @@ export function computeView(profiles: Profile[]): View {
       cashPaidOut,
       revenue,
       margin,
-      avgResponseMins,
+      medianResponseMins,
+      pctUnder5Min,
     },
     funnel,
     overTime,
@@ -207,7 +221,7 @@ export interface SegmentRow {
   closeRate: number; // % of leads that closed
   avgOffer: number;
   margin: number;
-  avgResponseMins: number | null;
+  medianResponseMins: number | null;
   /** Average lead score across the group's people. */
   avgScore: number;
 }
@@ -253,7 +267,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
     const offerMids = offers.map((p) => p.offerMid || 0).filter((n) => n > 0);
     const avgOffer = offerMids.length ? Math.round(offerMids.reduce((a, b) => a + b, 0) / offerMids.length) : 0;
     const lat = ps.map((p) => p.firstResponseMins).filter((m): m is number => typeof m === "number" && m >= 0);
-    const avgResponseMins = lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null;
+    const medianResponseMins = median(lat);
     const avgScore = Math.round(ps.reduce((s, p) => s + (p.score || 0), 0) / ps.length);
     rows.push({
       group,
@@ -264,7 +278,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
       closeRate: leadsP.length ? Math.round((closed.length / leadsP.length) * 100) : 0,
       avgOffer,
       margin,
-      avgResponseMins,
+      medianResponseMins,
       avgScore,
     });
   }

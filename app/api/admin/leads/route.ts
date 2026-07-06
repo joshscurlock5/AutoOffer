@@ -11,7 +11,15 @@ import {
 } from "@/lib/store";
 import { cancelScheduledEmails } from "@/lib/email";
 import { sendCapiPurchase, splitName } from "@/lib/metaCapi";
+import { emitLeadContacted, emitBookingConfirmed, emitLeadClosed, emitLeadLost } from "@/lib/leadStages";
 import type { Lead } from "@/lib/types";
+
+/** Clamp an owner-entered lost-reason to a sane length (mirrors other free-text fields). */
+function sanitizeLostReason(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim().slice(0, 300);
+  return t || undefined;
+}
 
 export const runtime = "nodejs";
 
@@ -64,16 +72,44 @@ export async function PATCH(req: NextRequest) {
   // Each is set once. The cron gates customer nurture on status directly, so it
   // keeps working after a lead leaves "new" (only closed/spam get nothing; "lost"
   // still gets the single Day-21 win-back).
+  // Also computes the "wasNewlyX" booleans (from the PRE-update lead) that gate
+  // the Meta/GA4/first-party emissions below, so a repeat PATCH to the same
+  // status can never double-fire an event.
+  let wasNewlyContacted = false;
+  let wasNewlyScheduled = false;
+  let wasNewlyClosed = false;
+  let wasNewlyLost = false;
+  let leadForEmit: Lead | null = null;
   if (type !== "referral" && patch.status) {
     const lead = item as Lead;
     const nowISO = new Date().toISOString();
     const ts: Partial<Lead> = {};
     if (patch.status !== "new" && patch.status !== "partial" && !lead.firstTouchAt) ts.firstTouchAt = nowISO;
-    if (patch.status === "contacted" && !lead.contactedAt) ts.contactedAt = nowISO;
-    if (patch.status === "scheduled" && !lead.scheduledAt) ts.scheduledAt = nowISO;
-    if (patch.status === "closed" && !lead.closedAt) ts.closedAt = nowISO;
-    if (Object.keys(ts).length) await updateLead(id, ts);
+    if (patch.status === "contacted" && !lead.contactedAt) {
+      ts.contactedAt = nowISO;
+      wasNewlyContacted = true;
+    }
+    if (patch.status === "scheduled" && !lead.scheduledAt) {
+      ts.scheduledAt = nowISO;
+      wasNewlyScheduled = true;
+    }
+    if (patch.status === "closed" && !lead.closedAt) {
+      ts.closedAt = nowISO;
+      wasNewlyClosed = true;
+    }
+    if (patch.status === "lost" && !lead.lostAt) {
+      ts.lostAt = nowISO;
+      wasNewlyLost = true;
+      const lostReason = sanitizeLostReason((patch as { lostReason?: unknown }).lostReason);
+      if (lostReason) ts.lostReason = lostReason;
+    }
+    if (patch.status === "spam" && !lead.spamAt) ts.spamAt = nowISO;
+    if (Object.keys(ts).length) leadForEmit = await updateLead(id, ts);
   }
+  const emitLead = leadForEmit || (item as Lead);
+  if (type !== "referral" && wasNewlyContacted) await emitLeadContacted(emitLead);
+  if (type !== "referral" && wasNewlyScheduled) await emitBookingConfirmed(emitLead, "system_generated");
+  if (type !== "referral" && wasNewlyLost) await emitLeadLost(emitLead, emitLead.lostReason);
 
   // Offline-conversion loop: when a deal actually closes (status "closed" with a
   // real purchase price), tell Meta via a server-side "Purchase" event with the
@@ -82,9 +118,17 @@ export async function PATCH(req: NextRequest) {
   // sellers, not just form-fills. Fired once (purchaseSyncedAt guards re-sends;
   // a stable eventId also lets Meta dedupe). Best-effort — never fails the PATCH.
   if (type !== "referral") {
-    const lead = item as Lead;
+    const lead = emitLead;
     const isSale =
       lead.status === "closed" && typeof lead.purchasePrice === "number" && lead.purchasePrice > 0;
+    // value = expected deal margin so Meta value optimization learns profit, not
+    // cost; fallback env META_PURCHASE_MARGIN_FALLBACK. Hoisted so the GA4
+    // close_convert_lead event below reuses the SAME computation even when the
+    // Purchase CAPI itself is skipped (missing purchasePrice, already synced, etc).
+    const margin =
+      typeof lead.expectedResale === "number" && typeof lead.purchasePrice === "number"
+        ? Math.max(0, lead.expectedResale - lead.purchasePrice)
+        : Number(process.env.META_PURCHASE_MARGIN_FALLBACK) || 1000;
     // Cheap pre-check skips the common already-synced case; claimPurchaseSync is
     // the authoritative atomic guard (conditional write) that prevents two
     // concurrent edits from both firing — last-writer-wins on updateLead can't be
@@ -92,12 +136,6 @@ export async function PATCH(req: NextRequest) {
     // also skips — and must NOT claim the once-only sync, so a later legitimate
     // change to this lead can't ever trigger the send retroactively.
     if (isSale && !lead.purchaseSyncedAt && !lead.consentDenied && (await claimPurchaseSync(lead.id))) {
-      // value = expected deal margin so Meta value optimization learns profit,
-      // not cost; fallback env META_PURCHASE_MARGIN_FALLBACK.
-      const margin =
-        typeof lead.expectedResale === "number" && typeof lead.purchasePrice === "number"
-          ? Math.max(0, lead.expectedResale - lead.purchasePrice)
-          : Number(process.env.META_PURCHASE_MARGIN_FALLBACK || 1000);
       const ok = await sendCapiPurchase({
         eventId: `purchase-${lead.id}`,
         value: margin,
@@ -120,6 +158,11 @@ export async function PATCH(req: NextRequest) {
       // stable eventId also lets Meta dedupe should a retry overlap).
       if (!ok) await releasePurchaseSync(lead.id);
     }
+    // GA4 close_convert_lead — separate from (and in addition to) the Meta
+    // Purchase above; fires once on the same first-time "closed" transition,
+    // reusing the same margin value regardless of whether the Purchase CAPI
+    // itself sent (e.g. missing purchasePrice uses the fallback margin).
+    if (wasNewlyClosed) await emitLeadClosed(lead, margin);
   }
   return NextResponse.json({ ok: true, item });
 }

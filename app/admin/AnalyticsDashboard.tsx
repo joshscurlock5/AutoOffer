@@ -299,7 +299,7 @@ function SegmentView({
             <th className="px-2 text-right">Avg offer</th>
             <th className="px-2 text-right" title="Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car, summed over the group's closed deals.">Margin</th>
             <th className="px-2 text-right" title="Average lead score (0-100) across the group">Avg score</th>
-            <th className="pl-2 text-right">Avg resp</th>
+            <th className="pl-2 text-right">Median resp</th>
           </tr>
         </thead>
         <tbody>
@@ -316,7 +316,7 @@ function SegmentView({
                 <td className="px-2 text-right">{r.avgOffer ? money(r.avgOffer) : "—"}</td>
                 <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
                 <td className="px-2 text-right">{r.avgScore}</td>
-                <td className="pl-2 text-right">{fmtMins(r.avgResponseMins)}</td>
+                <td className="pl-2 text-right">{fmtMins(r.medianResponseMins)}</td>
               </tr>
             ))
           )}
@@ -810,7 +810,12 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." />
         <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" tip="Your website's database — value-lookup requests, all time." />
         <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car." />
-        <StatCard label="Avg response" value={fmtMins(view.totals.avgResponseMins)} tip="Your website's database — average time from lead to your first reply." />
+        <StatCard
+          label="Speed to lead"
+          value={fmtMins(view.totals.medianResponseMins)}
+          sub={view.totals.pctUnder5Min != null ? `${view.totals.pctUnder5Min}% under 5 min` : undefined}
+          tip="Median time from lead submitted to your first real contact (offer sent or marked contacted). Industry research: responding inside 5 minutes multiplies qualification rates ~21x."
+        />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Funnel rows={view.funnel} tip="Your website's database — how many reach each step." />

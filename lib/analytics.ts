@@ -54,8 +54,12 @@ export function trackCtaClick(location: string): void {
 // this table — it stays paired inline in OfferFlow because it also carries a
 // CAPI dedup eventId. These mid-funnel Meta events are browser-only (audience
 // membership, not conversion optimization), so no Conversions API.
+// `details_submitted` is the live mid-funnel remarketing signal — the instant
+// estimate is off (SHOW_INSTANT_ESTIMATE=false), so `estimate_viewed` never
+// fires today; it's kept mapped here in case that flag ever flips back on.
 const META_FUNNEL_MIRROR: Record<string, string> = {
   widget_submit: "Search",
+  details_submitted: "ViewContent",
   estimate_viewed: "ViewContent",
   contact_engaged: "InitiateCheckout",
 };

@@ -6,6 +6,7 @@ import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails }
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
+import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -182,7 +183,8 @@ export async function POST(req: NextRequest) {
       }
       if (lead.dripEmailIds?.length) await cancelScheduledEmails(lead.dripEmailIds);
       const nowISO = new Date().toISOString();
-      await updateLead(lead.id, {
+      const wasNewlyContacted = !lead.contactedAt;
+      const updatedLead = await updateLead(lead.id, {
         offer: { low, high, sentAt: nowISO },
         bookingToken,
         // Enroll in the cron-driven offer-reminder track (+2/+5/+10 days).
@@ -198,6 +200,8 @@ export async function POST(req: NextRequest) {
       });
       // Text the customer too (best-effort; no-op without a phone / Twilio config).
       await smsOfferReady(lead, low, high);
+      await emitOfferSent(updatedLead || lead);
+      if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
       await reply(fromChat, `✅ Offer sent — ${fmtRange(low, high)} to ${lead.contact.name || lead.contact.email} for their ${carText(lead)}.`);
       return NextResponse.json({ ok: true });
     }
@@ -256,7 +260,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const nowISO = new Date().toISOString();
-      await updateLead(lead.id, {
+      const wasNewlyContacted = !lead.contactedAt;
+      const updatedLead = await updateLead(lead.id, {
         nurtureStage: "awaiting_info",
         moreInfoSentAt: nowISO,
         infoQuestions: questions,
@@ -267,6 +272,7 @@ export async function POST(req: NextRequest) {
       });
       // Text the customer the "we need a detail" nudge too (best-effort).
       await smsMoreInfo(lead);
+      if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
       const who = lead.contact.name || lead.contact.email;
       await reply(
         fromChat,
@@ -308,11 +314,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const nowISO = new Date().toISOString();
-      await updateLead(lead.id, {
+      const wasNewlyContacted = !lead.contactedAt;
+      const updatedLead = await updateLead(lead.id, {
         firstTouchAt: lead.firstTouchAt || nowISO,
         contactedAt: lead.contactedAt || nowISO,
         status: lead.status === "new" ? "contacted" : lead.status,
       });
+      if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
       await reply(fromChat, `📨 Message sent to ${lead.contact.name || lead.contact.email}.`);
       return NextResponse.json({ ok: true });
     }
@@ -341,13 +349,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const nowISO = new Date().toISOString();
-      await updateLead(lead.id, {
+      const wasNewlyScheduled = !lead.scheduledAt;
+      const updatedLead = await updateLead(lead.id, {
         appointmentAt: appt.toISOString(),
         apptRemindedAt: undefined, // reset so the T-2h reminder fires for this booking
         status: "scheduled",
         scheduledAt: lead.scheduledAt || nowISO,
         firstTouchAt: lead.firstTouchAt || nowISO,
       });
+      if (wasNewlyScheduled) await emitBookingConfirmed(updatedLead || lead, "system_generated");
       const whenLabel = appt.toLocaleString("en-CA", {
         timeZone: "America/Edmonton",
         weekday: "short",

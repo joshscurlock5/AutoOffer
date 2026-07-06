@@ -57,6 +57,7 @@ export default function AdminDashboard({
   const [filter, setFilter] = useState<"all" | "bookmarked" | "deleted" | "inventory" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
+  const [lostModal, setLostModal] = useState<Lead | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [activeChat, setActiveChat] = useState<ChatConversation | null>(null);
   const [lookups, setLookups] = useState<Lookup[]>([]);
@@ -151,10 +152,15 @@ export default function AdminDashboard({
     });
   }
 
-  // Changing status to "Closed" requires a purchase price first.
+  // Changing status to "Closed" requires a purchase price first; "Lost" offers
+  // an optional reason (both via a confirm/cancel modal, same pattern).
   function changeStatus(lead: Lead, status: LeadStatus) {
     if (status === "closed" && lead.purchasePrice == null) {
       setPriceModal(lead);
+      return;
+    }
+    if (status === "lost") {
+      setLostModal(lead);
       return;
     }
     patchLead(lead.id, { status });
@@ -519,6 +525,18 @@ export default function AdminDashboard({
           onConfirm={(price) => {
             patchLead(priceModal.id, { status: "closed", purchasePrice: price });
             setPriceModal(null);
+          }}
+        />
+      )}
+
+      {/* optional reason prompt when marking a lead lost */}
+      {lostModal && (
+        <LostModal
+          lead={lostModal}
+          onCancel={() => setLostModal(null)}
+          onConfirm={(reason) => {
+            patchLead(lostModal.id, { status: "lost", lostReason: reason || undefined });
+            setLostModal(null);
           }}
         />
       )}
@@ -995,6 +1013,51 @@ function PriceModal({
             className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
           >
             <Check className="h-4 w-4" /> Mark Closed
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LostModal({
+  lead,
+  onCancel,
+  onConfirm,
+}: {
+  lead: Lead;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const v = lead.vehicle;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
+      <div className="card w-full max-w-sm p-6">
+        <h3 className="font-display text-xl font-bold text-navy">Marking this lead lost</h3>
+        <p className="mt-1 text-sm text-muted">
+          Any reason for{" "}
+          <span className="font-semibold text-navy">
+            {v ? `the ${v.year} ${v.make} ${v.model}` : "this lead"}
+          </span>{" "}
+          falling through?
+        </p>
+        <div className="relative mt-4">
+          <input
+            autoFocus
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") onConfirm(reason.trim()); }}
+            placeholder="Why lost? e.g. sold elsewhere, offer too low, no-show (optional)"
+            className="field"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
+          <button onClick={() => onConfirm(reason.trim())} className="btn-primary px-4 py-2 text-sm">
+            <Check className="h-4 w-4" /> Mark Lost
           </button>
         </div>
       </div>

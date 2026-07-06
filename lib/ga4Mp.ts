@@ -1,18 +1,19 @@
 import "server-only";
-import crypto from "crypto";
 
 // ===========================================================================
-//  GA4 Measurement Protocol (server-side). Mirrors lib/metaCapi.ts: sends a
-//  `generate_lead_server` event straight from our server to GA4 so the lead
-//  conversion is still counted when the browser gtag is blocked (ad-blockers,
-//  privacy extensions, iOS). This is ad-blocker-recovery telemetry under its
-//  own event name — GA4 has NO built-in browser<->MP dedup, so only the
-//  browser `generate_lead` should be marked as the GA4 key event.
+//  GA4 Measurement Protocol (server-side). Mirrors lib/metaCapi.ts: sends
+//  events straight from our server to GA4 so conversions are still counted
+//  when the browser gtag is blocked (ad-blockers, privacy extensions, iOS).
+//  `generate_lead_server` is ad-blocker-recovery telemetry under its own event
+//  name — GA4 has NO built-in browser<->MP dedup, so only the browser
+//  `generate_lead` should be marked as the GA4 key event. The rest
+//  (working_lead, appointment_booked, close_convert_lead, close_unconvert_lead)
+//  are server-only lifecycle events with no browser equivalent.
 //
 //  - No-op until BOTH NEXT_PUBLIC_GA_ID and GA4_MP_API_SECRET are set.
-//  - Never throws — the lead is already saved by the time this runs.
-//  - Carries `transport: "server"` so it can be told apart from the browser
-//    `generate_lead` (see docs/analytics-funnel.md).
+//  - Never throws — the caller's write is already saved by the time this runs.
+//  - Carries `transport: "server"` so it can be told apart from any browser
+//    equivalent (see docs/analytics-funnel.md).
 // ===========================================================================
 
 const MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "";
@@ -34,26 +35,52 @@ export function clientIdFromGaCookie(ga?: string): string | undefined {
 }
 
 /**
- * Send a server-side `generate_lead_server` to GA4. Best-effort; safe no-op when
- * unconfigured. Pass the raw `_ga` cookie so the event stitches to the user's
- * existing GA session; when it's missing (the very case this recovers) a fresh
- * client_id is used — the conversion is still counted, as a new user.
+ * Recover the GA4 session id from the `_ga_<container>` cookie (distinct from
+ * the plain `_ga` client-id cookie). Value looks like
+ * `GS1.1.1712345678.5.1.1712345999.0.0.0` — the session id is the third
+ * dot-segment (index 2). Defensive: never throws, returns undefined for
+ * anything that doesn't look like a plausible number.
  */
-export async function sendGa4Lead(opts: {
-  gaCookie?: string;
+export function parseGa4SessionCookie(cookies: Array<{ name: string; value: string }>): string | undefined {
+  try {
+    const cookie = cookies.find((c) => c.name.startsWith("_ga_"));
+    if (!cookie) return undefined;
+    const parts = cookie.value.split(".");
+    const sessionId = parts[2];
+    if (sessionId && /^\d+$/.test(sessionId)) return sessionId;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Send one server-side event to GA4 via the Measurement Protocol. Best-effort;
+ * safe no-op when unconfigured. Skips (with a warning) when there's no real
+ * client_id — sending under a random UUID would just create phantom GA4 users
+ * that never resolve to a real session, so we no longer fall back to one.
+ */
+export async function sendGa4Event(opts: {
+  name: string;
+  clientId?: string;
+  sessionId?: string;
   params?: Record<string, unknown>;
 }): Promise<void> {
   if (!MEASUREMENT_ID || !API_SECRET) return;
+  if (!opts.clientId) {
+    console.warn("[ga4] no client id — skipping " + opts.name);
+    return;
+  }
   try {
-    const clientId = clientIdFromGaCookie(opts.gaCookie) || crypto.randomUUID();
     const body = {
-      client_id: clientId,
+      client_id: opts.clientId,
       events: [
         {
-          name: "generate_lead_server",
+          name: opts.name,
           params: {
             engagement_time_msec: 1,
             transport: "server",
+            ...(opts.sessionId ? { ga_session_id: opts.sessionId } : {}),
             ...(opts.params || {}),
           },
         },
@@ -74,4 +101,23 @@ export async function sendGa4Lead(opts: {
   } catch (e) {
     console.error("[ga4-mp] send failed:", e);
   }
+}
+
+/**
+ * Send a server-side `generate_lead_server` to GA4. Best-effort; safe no-op
+ * when unconfigured. Pass the raw `_ga` cookie so the event stitches to the
+ * user's existing GA session; when it's missing, the send is skipped entirely
+ * (no more phantom random-UUID users).
+ */
+export async function sendGa4Lead(opts: {
+  gaCookie?: string;
+  sessionId?: string;
+  params?: Record<string, unknown>;
+}): Promise<void> {
+  await sendGa4Event({
+    name: "generate_lead_server",
+    clientId: clientIdFromGaCookie(opts.gaCookie),
+    sessionId: opts.sessionId,
+    params: opts.params,
+  });
 }
