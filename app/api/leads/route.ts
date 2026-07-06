@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, markLookupConverted, updateLead } from "@/lib/store";
+import { addLead, getLeads, markLookupConverted, updateLead } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
@@ -115,7 +115,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const id = crypto.randomUUID();
+    // If this person left an abandoned-cart "partial" moments ago (the contact
+    // step beacons pre-submit), promote THAT record instead of creating a second
+    // one — reuse its id + original createdAt so there's a single clean lead and
+    // its already-stitched site events/timeline stay attached. Best-effort: a
+    // failed lookup just falls back to a fresh lead.
+    let id: string = crypto.randomUUID();
+    let createdAt = new Date().toISOString();
+    try {
+      const eKey = email ? email.toLowerCase() : "";
+      const pKey = phone.replace(/\D/g, "");
+      const partial = (await getLeads()).find(
+        (l) =>
+          l.status === "partial" &&
+          !l.archived &&
+          ((eKey && (l.contact.email || "").toLowerCase() === eKey) ||
+            (pKey.length >= 10 && (l.contact.phone || "").replace(/\D/g, "") === pKey)),
+      );
+      if (partial) {
+        id = partial.id;
+        createdAt = partial.createdAt || createdAt;
+      }
+    } catch (e) {
+      console.error("[leads] partial-merge lookup failed (creating fresh lead)", e);
+    }
     let vehicle: VehicleInfo | undefined;
     let estimate: OfferEstimate | undefined;
     // Photos are no longer collected; kept as an empty array for back-compat with
@@ -173,7 +196,7 @@ export async function POST(req: NextRequest) {
     const lead: Lead = {
       id,
       kind,
-      createdAt: new Date().toISOString(),
+      createdAt,
       status: "new",
       contact: { name, email, phone, contactMethod, bestTime },
       vehicle,
