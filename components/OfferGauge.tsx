@@ -43,7 +43,7 @@ export default function OfferGauge({
     <div className="animate-fade-up">
       {/* Phone: a clear stacked bar (the SVG legend is illegible this small) */}
       <div className="sm:hidden">
-        <p className="text-center text-xs font-semibold uppercase tracking-wider text-brand">
+        <p className="text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
           Your estimated range
         </p>
         <p className="mt-1 text-center font-display text-3xl font-extrabold text-navy">

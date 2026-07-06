@@ -571,8 +571,8 @@ export default function OfferFlow() {
         aria-pressed={noKnownIssues}
         className={`rounded-full border px-3.5 py-2 text-sm font-semibold transition ${
           noKnownIssues
-            ? "border-brand-600 bg-brand-600 text-white"
-            : "border-slate-200 bg-white text-navy hover:border-brand-600"
+            ? "border-navy bg-navy text-white"
+            : "border-slate-200 bg-white text-navy hover:border-navy"
         }`}
       >
         No known issues
@@ -608,10 +608,10 @@ export default function OfferFlow() {
                   aria-pressed={active}
                   className={`flex w-full items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-sm font-semibold capitalize transition ${
                     active
-                      ? "border-brand-600 bg-brand-600 text-white"
+                      ? "border-navy bg-navy text-white"
                       : preferred
-                        ? "border-brand-600/40 bg-brand-600/5 text-navy hover:border-brand-600"
-                        : "border-slate-200 bg-white text-muted hover:border-brand-600"
+                        ? "border-navy/40 bg-navy/5 text-navy hover:border-navy"
+                        : "border-slate-200 bg-white text-muted hover:border-navy"
                   }`}
                 >
                   {m}
@@ -885,7 +885,7 @@ export default function OfferFlow() {
           {SHOW_INSTANT_ESTIMATE && calculating ? (
             <div className="animate-fade-up">
               <div className="mb-6 flex items-center justify-center gap-3 text-navy">
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" aria-hidden />
                 <span className="font-semibold">Calculating your value…</span>
               </div>
               <OfferSkeleton />
@@ -967,15 +967,15 @@ export default function OfferFlow() {
           </p>
           <ol className="mx-auto mt-5 max-w-md space-y-2.5 text-left text-sm text-navy">
             <li className="flex gap-2.5">
-              <span className="font-bold text-brand">1.</span>
+              <span className="font-bold text-slate-400">1.</span>
               <span>We review your {year} {make} {model} and reach out by <span className="font-semibold capitalize">{contactMethod}</span> with your firm offer — as soon as possible (we&apos;re available 24/7).</span>
             </li>
             <li className="flex gap-2.5">
-              <span className="font-bold text-brand">2.</span>
+              <span className="font-bold text-slate-400">2.</span>
               <span>We arrange a quick inspection at a time and place that works for you.</span>
             </li>
             <li className="flex gap-2.5">
-              <span className="font-bold text-brand">3.</span>
+              <span className="font-bold text-slate-400">3.</span>
               <span>You get paid on the spot — e-transfer or bank draft before we take the keys.</span>
             </li>
           </ol>
@@ -985,16 +985,16 @@ export default function OfferFlow() {
               Skip the wait — our team can finalize your offer right over the phone.
             </p>
             <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <PhoneButton variant="primary" location="offer_success" />
+              <PhoneButton variant="dark" location="offer_success" />
               <Link href="/" className="btn-ghost">Back to home</Link>
             </div>
           </div>
-          <div className="mt-4 rounded-2xl border border-accent/40 bg-accent/10 p-6 text-center">
+          <div className="mt-4 rounded-2xl border border-emerald-200/60 bg-emerald-50 p-6 text-center">
             <p className="font-semibold text-navy">Know someone else selling their car?</p>
             <p className="mt-1 text-sm text-muted">
-              Refer a friend and you each get ${site.referralReward} when they sell to {site.name}.
+              Refer a friend and you each get <span className="font-semibold text-emerald-700">${site.referralReward}</span> when they sell to {site.name}.
             </p>
-            <Link href="/referral" onClick={() => track("referral_cta_click", { location: "offer_success" })} className="btn-primary mt-4 inline-flex px-5 py-2.5 text-sm">
+            <Link href="/referral" onClick={() => track("referral_cta_click", { location: "offer_success" })} className="btn bg-emerald-600 mt-4 inline-flex px-5 py-2.5 text-sm text-white shadow-soft hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-lift active:translate-y-0">
               Refer a friend &amp; earn ${site.referralReward}
             </Link>
           </div>
@@ -1025,7 +1025,7 @@ function Stepper({ step, labels }: { step: Step; labels: string[] }) {
             <div className="flex items-center gap-2">
               <span
                 className={`grid h-9 w-9 place-items-center rounded-full text-sm font-bold transition ${
-                  active ? "bg-brand-600 text-white" : "bg-slate-200 text-slate-500"
+                  active ? "bg-navy text-white" : "bg-slate-200 text-slate-500"
                 }`}
               >
                 {step > n ? <Check className="h-4 w-4" /> : n}
@@ -1035,7 +1035,7 @@ function Stepper({ step, labels }: { step: Step; labels: string[] }) {
               </span>
             </div>
             {i < labels.length - 1 && (
-              <span className={`mx-3 h-0.5 flex-1 rounded ${step > n ? "bg-brand-600" : "bg-slate-200"}`} />
+              <span className={`mx-3 h-0.5 flex-1 rounded ${step > n ? "bg-navy" : "bg-slate-200"}`} />
             )}
           </li>
         );

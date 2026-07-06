@@ -108,7 +108,7 @@ export default function ExitIntent() {
         <a
           href={telHref}
           onClick={() => trackPhoneClick("exit_intent")}
-          className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-brand hover:underline"
+          className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-navy hover:underline"
         >
           <Phone className="h-4 w-4" /> Or call / text {site.phoneDisplay}
         </a>

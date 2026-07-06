@@ -27,7 +27,7 @@ export default function ContactPage() {
 
           <TelLink
             location="contact_hero"
-            className="mx-auto mt-8 inline-flex items-center gap-4 rounded-2xl bg-brand px-8 py-5 text-white shadow-lift transition hover:bg-brand-600"
+            className="mx-auto mt-8 inline-flex items-center gap-4 rounded-2xl bg-navy px-8 py-5 text-white shadow-lift transition hover:bg-navy-700"
           >
             <span className="grid h-14 w-14 place-items-center rounded-full bg-white/20">
               <Phone className="h-7 w-7" />

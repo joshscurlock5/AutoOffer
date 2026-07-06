@@ -25,7 +25,7 @@ export default function PhoneButton({
     dark: "btn-dark",
     accent: "btn-accent",
     ghost: "btn-ghost",
-    white: "btn bg-white text-brand px-6 py-3 hover:bg-brand-50 shadow-soft",
+    white: "btn bg-white text-navy px-6 py-3 hover:bg-slate-50 shadow-soft",
   };
   return (
     <a

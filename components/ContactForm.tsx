@@ -67,7 +67,7 @@ export default function ContactForm() {
   if (state === "done") {
     return (
       <div className="card p-8 text-center">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-50 text-emerald-600">
           <Check className="h-8 w-8" />
         </span>
         <h3 className="mt-5 font-display text-2xl font-bold text-navy">Message sent!</h3>

@@ -87,7 +87,7 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-brand-100 bg-brand-50 p-8 shadow-soft ring-1 ring-brand-100">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-8 shadow-soft ring-1 ring-slate-200">
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand text-white">
                 <Shield className="h-6 w-6" />

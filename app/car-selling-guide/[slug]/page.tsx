@@ -127,7 +127,7 @@ export default async function GuideArticlePage({ params }: Params) {
               <ul className="mt-4 space-y-2.5">
                 {article.keyTakeaways.map((t, i) => (
                   <li key={i} className="flex items-start gap-3 text-[15px] leading-relaxed text-navy">
-                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand text-white">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-400 text-white">
                       <Check className="h-3 w-3" />
                     </span>
                     <span>{t}</span>
@@ -151,7 +151,7 @@ export default async function GuideArticlePage({ params }: Params) {
                   <ul className="mt-4 space-y-2.5">
                     {block.ul.map((item, k) => (
                       <li key={k} className="flex items-start gap-3 text-[17px] leading-relaxed text-ink/80">
-                        <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                        <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
                         <span>{item}</span>
                       </li>
                     ))}

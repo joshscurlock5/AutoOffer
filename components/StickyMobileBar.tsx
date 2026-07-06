@@ -86,7 +86,7 @@ export default function StickyMobileBar() {
           href={telHref}
           onClick={() => trackPhoneClick("sticky_mobile")}
           aria-label="Call or text us"
-          className="btn shrink-0 border-2 border-brand-600 bg-white px-5 py-3 text-brand-700 active:bg-brand-50"
+          className="btn shrink-0 border-2 border-navy bg-white px-5 py-3 text-navy active:bg-slate-50"
         >
           <Phone className="h-5 w-5" /> Call
         </a>

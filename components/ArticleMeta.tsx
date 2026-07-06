@@ -47,8 +47,8 @@ export function Byline({ published, updated }: { published?: string; updated?: s
 export function ExperienceNote({ note }: { note?: string }) {
   if (!note) return null;
   return (
-    <div className="mt-8 flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
-      <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+    <div className="mt-8 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
       <p className="text-[15px] leading-relaxed text-navy">
         <span className="font-semibold">From our experience:</span> {note}
       </p>
@@ -64,7 +64,7 @@ export function AuthorCard() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">About the author</p>
           <p className="mt-1 font-bold text-navy">{GUIDE_AUTHOR.name}</p>
-          <p className="text-sm font-semibold text-brand-700">{GUIDE_AUTHOR.jobTitle}</p>
+          <p className="text-sm font-semibold text-slate-500">{GUIDE_AUTHOR.jobTitle}</p>
           <p className="mt-2 text-sm leading-relaxed text-muted">{GUIDE_AUTHOR.bio}</p>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <Link href="/about" className="font-semibold text-brand hover:text-brand-700">

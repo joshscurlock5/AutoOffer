@@ -126,7 +126,7 @@ export function GuideMegaMenu() {
                         >
                           <span>{r.title}</span>
                           <ChevronRight
-                            className={`h-4 w-4 shrink-0 text-brand-500 transition ${isActive ? "opacity-100" : "opacity-0"}`}
+                            className={`h-4 w-4 shrink-0 text-slate-400 transition ${isActive ? "opacity-100" : "opacity-0"}`}
                           />
                         </button>
                       </li>
@@ -234,7 +234,7 @@ export function GuideMobileAccordion({ onNavigate }: { onNavigate?: () => void }
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[15px] font-semibold text-navy hover:bg-slate-100"
                   aria-expanded={isCatOpen}
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-brand" />
+                  <Icon className="h-4 w-4 shrink-0 text-slate-400" />
                   <span className="flex-1">{r.title}</span>
                   <ChevronDown className={`h-4 w-4 text-navy/40 transition-transform ${isCatOpen ? "rotate-180" : ""}`} />
                 </button>

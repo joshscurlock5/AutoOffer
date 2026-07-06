@@ -44,7 +44,7 @@ export default function ConsentBanner() {
             setConsent("granted");
             setShow(false);
           }}
-          className="shrink-0 rounded-full bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+          className="shrink-0 rounded-full bg-navy px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-navy-700"
         >
           OK
         </button>

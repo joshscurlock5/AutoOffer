@@ -17,7 +17,7 @@ export default function WhySell() {
           <div className="flex flex-col items-center justify-center gap-8 wide:flex-row wide:gap-12">
             {/* Cars purchased */}
             <div className="text-center">
-              <p className="font-display text-4xl font-extrabold text-brand sm:text-5xl">
+              <p className="font-display text-4xl font-extrabold text-navy sm:text-5xl">
                 {site.carsBought.toLocaleString("en-CA")}+
               </p>
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-muted">Cars purchased</p>
@@ -44,7 +44,7 @@ export default function WhySell() {
 
             {/* Paid to sellers */}
             <div className="text-center">
-              <p className="font-display text-4xl font-extrabold text-brand sm:text-5xl">$45M+</p>
+              <p className="font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">$45M+</p>
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-muted">Paid to sellers</p>
             </div>
           </div>

@@ -67,7 +67,7 @@ export default function ContactPopup() {
               <a
                 href={telHref}
                 onClick={() => trackPhoneClick("faq_contact")}
-                className="btn-primary mt-4 w-full"
+                className="btn-dark mt-4 w-full"
               >
                 <Phone className="h-5 w-5" /> {site.phoneDisplay}
               </a>

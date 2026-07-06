@@ -80,7 +80,7 @@ export default function ReferralPage() {
                   </span>
                   <p className="font-semibold leading-snug">Prefer to refer by phone?</p>
                 </div>
-                <PhoneButton variant="primary" className="shrink-0 self-center sm:self-auto" location="referral_hero" />
+                <PhoneButton variant="dark" className="shrink-0 self-center sm:self-auto" location="referral_hero" />
               </div>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function ReferralPage() {
         <SectionHeading title={`Earn $${site.referralReward} in 3 simple steps`} />
         <div className="mx-auto mt-10 max-w-col wide:max-w-none">
           <div className="relative grid gap-6 wide:grid-cols-3">
-            <div className="absolute left-0 right-0 top-9 hidden h-px bg-gradient-to-r from-transparent via-brand-100 to-transparent wide:block" />
+            <div className="absolute left-0 right-0 top-9 hidden h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent wide:block" />
             {steps.map((s) => (
               <div key={s.title} className="card relative p-7 text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -125,7 +125,7 @@ export default function ReferralPage() {
                 q={f.q}
                 a={f.a}
                 summaryClassName="flex cursor-pointer items-center justify-between gap-4 p-5 text-base font-semibold text-navy sm:text-lg"
-                chevronClassName="h-5 w-5 shrink-0 text-brand-600 transition duration-300 group-open:rotate-180"
+                chevronClassName="h-5 w-5 shrink-0 text-slate-400 transition duration-300 group-open:rotate-180"
                 answerClassName="max-w-[60ch] px-5 pb-5 text-muted"
               />
             ))}
@@ -139,7 +139,7 @@ export default function ReferralPage() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {finePrint.map((t) => (
             <div key={t} className="flex items-start gap-2.5 text-sm text-muted">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <span>{t}</span>
             </div>
           ))}
