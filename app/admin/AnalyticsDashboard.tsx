@@ -1100,6 +1100,45 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
   );
 }
 
+// Canada vs foreign split of the filtered people — foreign leads usually can't
+// sell you a car (often you, or organic browsers), and the foreign count is the
+// signal to watch as a US expansion approaches.
+function GeoSplit({ profiles }: { profiles: Profile[] }) {
+  const hasGeo = (p: Profile) => Boolean(p.geo?.countryCode || p.geo?.country);
+  const isCA = (p: Profile) => p.geo?.countryCode === "CA" || p.geo?.country === "Canada";
+  const canadian = profiles.filter((p) => hasGeo(p) && isCA(p)).length;
+  const foreign = profiles.filter((p) => hasGeo(p) && !isCA(p)).length;
+  const unknown = profiles.length - canadian - foreign;
+  const located = canadian + foreign;
+  const caPct = located ? Math.round((canadian / located) * 100) : null;
+  const n = (x: number) => x.toLocaleString("en-CA");
+  return (
+    <div className="card p-4">
+      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+        Canada vs foreign
+        <InfoDot tip="Where your people resolved to by IP address. Foreign visitors usually can't sell you a car (often you, or organic browsers) — worth watching as you plan a US expansion. Unknown = no location resolved yet (partials, or leads the hourly geo lookup hasn't reached)." />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-4">
+        <div>
+          <div className="font-display text-2xl font-extrabold text-green-700">{n(canadian)}</div>
+          <div className="text-xs text-muted">🇨🇦 Canada</div>
+        </div>
+        <div>
+          <div className="font-display text-2xl font-extrabold text-navy">{n(foreign)}</div>
+          <div className="text-xs text-muted">🌎 Foreign</div>
+        </div>
+        <div>
+          <div className="font-display text-2xl font-extrabold text-slate-400">{n(unknown)}</div>
+          <div className="text-xs text-muted">Unknown</div>
+        </div>
+      </div>
+      {caPct != null && (
+        <p className="mt-2 text-xs text-muted">{caPct}% of located people are Canadian.</p>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 //  Data-health strip (Overview) — events/day + sessions/day mini charts, a DB
 //  vs site reconciliation chip, and connector status chips.
@@ -1565,9 +1604,12 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </Section>
 
           <Section title="Geography">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <HBars title="By country" rows={view.byCountry} tip={SRC.geo} />
-              <HBars title="By province / region" rows={view.byRegion} tip={SRC.geo} />
+            <div className="space-y-4">
+              <GeoSplit profiles={filtered} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <HBars title="By country" rows={view.byCountry} tip={SRC.geo} />
+                <HBars title="By province / region" rows={view.byRegion} tip={SRC.geo} />
+              </div>
             </div>
           </Section>
 
