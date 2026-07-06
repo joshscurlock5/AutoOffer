@@ -1020,7 +1020,12 @@ function MetaExport({ profiles }: { profiles: Profile[] }) {
 function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
   const [data, setData] = useState<{ configured: boolean; traffic: Ga4Traffic | null } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [country, setCountry] = useState(""); // "" = all countries
+  const [filtered, setFiltered] = useState<Ga4Traffic | null>(null);
+  const [filtering, setFiltering] = useState(false);
 
+  // Unfiltered load — drives the country dropdown options + the "By country"
+  // breakdown chart (always the full picture).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -1031,6 +1036,20 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [days]);
+
+  // Per-country load — when a country is picked, re-fetch constrained to it so
+  // the totals, sources, and device mix reflect just that country (e.g. US organic).
+  useEffect(() => {
+    if (!country) { setFiltered(null); return; }
+    let cancelled = false;
+    setFiltering(true);
+    fetch(`/api/admin/ga4?days=${days}&country=${encodeURIComponent(country)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setFiltered(d?.traffic || null); })
+      .catch(() => { if (!cancelled) setFiltered(null); })
+      .finally(() => { if (!cancelled) setFiltering(false); });
+    return () => { cancelled = true; };
+  }, [country, days]);
 
   if (loading) return <div className="card p-4 text-sm text-muted">Loading traffic…</div>;
   if (!data?.configured || !data.traffic) {
@@ -1043,13 +1062,26 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
       </div>
     );
   }
-  const t = data.traffic;
+  const full = data.traffic;
+  const t = country ? filtered || full : full;
   const n = (x: number) => x.toLocaleString("en-CA");
+  const countryOptions = full.byCountry.map((c) => c.label).filter((l) => l && l !== "(unknown)");
   return (
     <div className="space-y-4">
       {approx && (
         <p className="text-xs text-amber-700">Approximated to the nearest GA4 window ({days} days) — GA4 here supports 7/30/90-day ranges only.</p>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs font-semibold text-muted">Country</label>
+        <select className="field w-auto py-1 text-sm" value={country} onChange={(e) => setCountry(e.target.value)}>
+          <option value="">All countries</option>
+          {countryOptions.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        {filtering && <span className="text-xs text-muted">updating…</span>}
+        {country && !filtering && <span className="text-xs text-muted">Visitor numbers below are {country} only</span>}
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Visitors" value={n(t.totals.users)} tip={SRC.ga4} />
         <StatCard label="New visitors" value={n(t.totals.newUsers)} tip={SRC.ga4} />
@@ -1059,10 +1091,10 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} tip={SRC.ga4} />
-        <HBars title="Traffic sources — sessions" rows={t.bySource.map((s) => ({ label: s.label, count: s.sessions }))} tip={SRC.ga4} />
-        <HBars title="Traffic sources — visitors" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
-        <HBars title="By country" rows={t.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
-        <HBars title="By device" rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
+        <HBars title={country ? `Traffic sources — sessions (${country})` : "Traffic sources — sessions"} rows={t.bySource.map((s) => ({ label: s.label, count: s.sessions }))} tip={SRC.ga4} />
+        <HBars title={country ? `Traffic sources — visitors (${country})` : "Traffic sources — visitors"} rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
+        <HBars title="By country" rows={full.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
+        <HBars title={country ? `By device (${country})` : "By device"} rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
       </div>
     </div>
   );

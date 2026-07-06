@@ -76,22 +76,30 @@ const num = (v?: string): number => Number(v) || 0;
 const fmtDate = (d?: string): string =>
   d && d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d || "";
 
-let dataCache: { at: number; days: number; data: Ga4Traffic } | null = null;
+const dataCache = new Map<string, { at: number; data: Ga4Traffic }>();
 
-export async function getGa4Traffic(days = 30): Promise<Ga4Traffic | null> {
+export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Traffic | null> {
   if (!ga4Configured()) return null;
-  if (dataCache && dataCache.days === days && Date.now() - dataCache.at < TTL_MS) return dataCache.data;
+  const key = `${days}|${country || ""}`;
+  const cached = dataCache.get(key);
+  if (cached && Date.now() - cached.at < TTL_MS) return cached.data;
   const token = await getAccessToken();
   if (!token) return null;
   try {
     const dateRanges = [{ startDate: `${days}daysAgo`, endDate: "today" }];
+    // When a country is selected, constrain EVERY report to it so the totals,
+    // sources, and device mix reflect just that country's visitors (e.g. US
+    // organic). The value matches GA4's own "By country" dimension labels.
+    const df = country
+      ? { dimensionFilter: { filter: { fieldName: "country", stringFilter: { value: country } } } }
+      : {};
     const body = {
       requests: [
-        { dateRanges, metrics: [{ name: "totalUsers" }, { name: "newUsers" }, { name: "sessions" }, { name: "screenPageViews" }, { name: "engagementRate" }] },
-        { dateRanges, dimensions: [{ name: "date" }], metrics: [{ name: "totalUsers" }], orderBys: [{ dimension: { dimensionName: "date" } }] },
-        { dateRanges, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-        { dateRanges, dimensions: [{ name: "country" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-        { dateRanges, dimensions: [{ name: "deviceCategory" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
+        { dateRanges, ...df, metrics: [{ name: "totalUsers" }, { name: "newUsers" }, { name: "sessions" }, { name: "screenPageViews" }, { name: "engagementRate" }] },
+        { dateRanges, ...df, dimensions: [{ name: "date" }], metrics: [{ name: "totalUsers" }], orderBys: [{ dimension: { dimensionName: "date" } }] },
+        { dateRanges, ...df, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+        { dateRanges, ...df, dimensions: [{ name: "country" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+        { dateRanges, ...df, dimensions: [{ name: "deviceCategory" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
       ],
     };
     const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}:batchRunReports`, {
@@ -101,7 +109,7 @@ export async function getGa4Traffic(days = 30): Promise<Ga4Traffic | null> {
     });
     if (!r.ok) {
       console.error("[ga4] report", r.status, (await r.text().catch(() => "")).slice(0, 300));
-      return dataCache?.data || null;
+      return dataCache.get(key)?.data || null;
     }
     const j = (await r.json()) as { reports?: GaReport[] };
     const reports = j.reports || [];
@@ -119,10 +127,10 @@ export async function getGa4Traffic(days = 30): Promise<Ga4Traffic | null> {
       byCountry: (reports[3]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
       byDevice: (reports[4]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
     };
-    dataCache = { at: Date.now(), days, data };
+    dataCache.set(key, { at: Date.now(), data });
     return data;
   } catch (e) {
     console.error("[ga4] report error", e);
-    return dataCache?.data || null;
+    return dataCache.get(key)?.data || null;
   }
 }

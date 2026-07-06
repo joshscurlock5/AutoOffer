@@ -11,7 +11,9 @@ export async function GET(req: NextRequest) {
   if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const days = Math.max(1, Math.min(365, Number(new URL(req.url).searchParams.get("days")) || 30));
-  const traffic = await getGa4Traffic(days);
+  const params = new URL(req.url).searchParams;
+  const days = Math.max(1, Math.min(365, Number(params.get("days")) || 30));
+  const country = (params.get("country") || "").trim().slice(0, 80) || undefined;
+  const traffic = await getGa4Traffic(days, country);
   return NextResponse.json({ configured: ga4Configured(), traffic });
 }
