@@ -145,7 +145,7 @@ html {
 }
 
 body {
-  @apply bg-white font-sans text-ink antialiased text-[17px] leading-relaxed;
+  @apply bg-canvas font-sans text-content antialiased text-[17px] leading-relaxed;
 }
 
 ::selection {
@@ -205,19 +205,19 @@ body {
     @apply inline-flex select-none items-center justify-center gap-2 rounded-full text-base font-semibold leading-none transition-[transform,background-color,box-shadow,color] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2;
   }
   .btn-primary {
-    @apply btn bg-brand-600 px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lift active:translate-y-0;
+    @apply btn bg-primary px-6 py-3.5 text-content-on-primary shadow-soft hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-lift active:translate-y-0;
   }
   .btn-gold {
-    @apply btn bg-navy px-6 py-3.5 text-white shadow-soft hover:-translate-y-0.5 hover:bg-navy-700 hover:shadow-lift active:translate-y-0;
+    @apply btn bg-surface-dark px-6 py-3.5 text-content-on-primary shadow-soft hover:-translate-y-0.5 hover:bg-surface-dark-hover hover:shadow-lift active:translate-y-0;
   }
   .btn-dark {
-    @apply btn bg-navy px-6 py-3.5 text-white hover:-translate-y-0.5 hover:bg-navy-700 active:translate-y-0;
+    @apply btn bg-surface-dark px-6 py-3.5 text-content-on-primary hover:-translate-y-0.5 hover:bg-surface-dark-hover active:translate-y-0;
   }
   .btn-accent {
     @apply btn-gold;
   }
   .btn-ghost {
-    @apply btn border border-slate-200 bg-white px-6 py-3.5 text-ink hover:-translate-y-0.5 hover:border-navy hover:text-navy active:translate-y-0;
+    @apply btn border border-line bg-surface px-6 py-3.5 text-content hover:-translate-y-0.5 hover:border-line-hover hover:text-content active:translate-y-0;
   }
 
   /* Icon-only control: gives focus ring + decent hit area without .btn padding. */
@@ -227,33 +227,33 @@ body {
 
   /* Forms */
   .field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-4 text-[17px] text-ink outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/20;
+    @apply w-full rounded-xl border border-line bg-surface px-4 py-4 text-[17px] text-content outline-none transition placeholder:text-content-placeholder focus:border-brand focus:ring-2 focus:ring-brand/20;
   }
   select.field {
     @apply appearance-none bg-[length:18px] bg-[right_0.9rem_center] bg-no-repeat pr-10;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .label {
-    @apply mb-1.5 block text-base font-medium text-navy;
+    @apply mb-1.5 block text-base font-medium text-content;
   }
 
   /* Card vocabulary — three distinct surfaces, not one repeated tile. */
   .card {
-    @apply rounded-2xl border border-slate-200 bg-white shadow-card;
+    @apply rounded-2xl border border-line bg-surface shadow-card;
   }
   .card-outline {
-    @apply rounded-2xl border border-slate-200 bg-white;
+    @apply rounded-2xl border border-line bg-surface;
   }
   .card-spotlight {
-    @apply rounded-2xl bg-navy-900 text-white shadow-lift;
+    @apply rounded-2xl bg-surface-inverse text-content-on-primary shadow-lift;
   }
 
   /* Type helpers */
   .eyebrow {
-    @apply text-[0.9375rem] font-semibold uppercase tracking-[0.14em] text-muted;
+    @apply text-[0.9375rem] font-semibold uppercase tracking-[0.14em] text-content-secondary;
   }
   .h-section {
-    @apply font-display text-3xl font-bold leading-tight tracking-tight text-navy sm:text-[2.6rem];
+    @apply font-display text-3xl font-bold leading-tight tracking-tight text-content sm:text-[2.6rem];
   }
 
   /* Subtle dot grid for hero/section backgrounds (replaces blur blobs). */
