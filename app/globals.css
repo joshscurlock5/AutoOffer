@@ -2,6 +2,144 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+ * DRIVEOFFER DESIGN TOKENS
+ * Two layers: (1) primitives = the real brand hexes (mirrors tailwind.config.ts),
+ * (2) semantic aliases that components consume via the tailwind mapping (bg-surface,
+ * text-content, border-line, bg-primary, text-success, etc.). Reverse-engineered
+ * from the existing site — the look is unchanged until components adopt these.
+ * The 4 WCAG-AA fixes are tagged "FIX:" below and only take visual effect on migration.
+ * =========================================================================== */
+:root {
+  /* ---- LAYER 1 — PRIMITIVES (real discovered hexes) ---- */
+  --brand-50: #EFF6FF;
+  --brand-100: #DBEAFE;
+  --brand-200: #BFDBFE;
+  --brand-500: #3B82F6; /* light/decorative only — 3.68:1 as text on white */
+  --brand-600: #2563EB; /* primary action */
+  --brand-700: #1D4FD0; /* logo identity + primary hover */
+  --color-primary-rgb: 37 99 235; /* #2563EB channels — enables bg-primary/40, ring-focus/40 */
+  --navy: #16181D;
+  --navy-700: #2A2D34;
+  --navy-900: #0E0F13;
+  --accent-500: #2E90FA;
+  --accent-600: #1E7AD8;
+  --accent-700: #1763C4;
+  --white: #FFFFFF; /* cream === white */
+  --muted: #4B5563;
+  --slate-50: #F8FAFC;
+  --slate-100: #F1F5F9;
+  --slate-200: #E2E8F0;
+  --slate-300: #CBD5E1;
+  --slate-400: #94A3B8;
+  --slate-500: #64748B;
+  --slate-600: #475569;
+  --slate-800: #1E293B;
+  --red-50: #FEF2F2;
+  --red-100: #FEE2E2;
+  --red-600: #DC2626;
+  --red-700: #B91C1C;
+  --amber-400: #FBBF24;
+  --amber-50: #FFFBEB;
+  --amber-100: #FEF3C7;
+  --amber-700: #B45309;
+  --amber-800: #92400E;
+  --green-50: #F0FDF4;
+  --green-700: #15803D;
+  --emerald-100: #D1FAE5;
+  --emerald-700: #047857;
+  --emerald-800: #065F46;
+  --blue-100: #DBEAFE;
+  --blue-800: #1E40AF;
+  --indigo-100: #E0E7FF;
+  --indigo-800: #3730A3;
+  --purple-50: #FAF5FF;
+  --purple-700: #7E22CE;
+  --shadow-tint-rgb: 16, 42, 76; /* navy-adjacent blue underlying all elevation */
+
+  /* ---- LAYER 2 — SEMANTIC ALIASES ---- */
+  /* Brand */
+  --color-primary: var(--brand-600);
+  --color-primary-hover: var(--brand-700);
+  --color-primary-active: var(--brand-700);
+  --color-primary-emphasis: var(--brand-500); /* decorative/large only */
+  --color-brand-tint: var(--brand-50);
+  --color-secondary: var(--accent-500);
+  --color-secondary-hover: var(--accent-600);
+  --color-secondary-active: var(--accent-700);
+  /* Backgrounds */
+  --color-bg-page: var(--white);
+  --color-bg-section: var(--white);
+  --color-bg-subtle: var(--slate-50);
+  --color-bg-app: var(--slate-100);
+  --color-bg-hover: var(--slate-100);
+  --color-bg-grid-dot: rgba(var(--shadow-tint-rgb), 0.07);
+  /* Surfaces */
+  --color-surface: var(--white);
+  --color-surface-raised: var(--white);
+  --color-surface-inverse: var(--navy-900);
+  --color-surface-dark: var(--navy);
+  --color-surface-dark-hover: var(--navy-700);
+  --color-surface-tooltip: var(--slate-800);
+  --color-skeleton: rgba(226, 232, 240, 0.70);
+  /* Text */
+  --color-text-primary: var(--navy); /* === ink */
+  --color-text-secondary: var(--muted);
+  --color-text-placeholder: var(--slate-500);
+  --color-text-disabled: var(--slate-400);
+  --color-text-on-primary: var(--white);
+  --color-text-on-inverse-muted: rgba(255, 255, 255, 0.80);
+  --color-text-link: var(--brand-600); /* FIX: was brand-500 (3.68:1) */
+  --color-text-link-hover: var(--brand-700);
+  /* Borders */
+  --color-border: var(--slate-200);
+  --color-border-strong: var(--slate-300);
+  --color-border-hover: var(--navy);
+  --color-border-focus: var(--brand-600); /* FIX: was brand-500 */
+  /* Interactive */
+  --color-focus-ring: var(--brand-600); /* FIX: solid, was brand/40 (~1.6:1) */
+  --color-selection: rgba(59, 130, 246, 0.18); /* preserves current tint; brand-600 base optional */
+  /* Status — Success (green-700 unifies green + emerald) */
+  --color-success: var(--green-700);
+  --color-success-bg: var(--green-50);
+  --color-success-strong: var(--emerald-800);
+  --color-success-bg-strong: var(--emerald-100);
+  --color-success-money: var(--emerald-700); /* opt: keep the offer-price teal-green */
+  /* Status — Warning (amber-700, FIX from amber-600) */
+  --color-warning: var(--amber-700); /* FIX: was amber-600 (3.19:1) */
+  --color-warning-bg: var(--amber-50);
+  --color-warning-strong: var(--amber-800);
+  --color-warning-bg-strong: var(--amber-100);
+  /* Status — Error */
+  --color-error: var(--red-600); /* on white — unchanged */
+  --color-error-on-bg: var(--red-700); /* FIX: on red tint, was red-600 (4.41:1) */
+  --color-error-bg: var(--red-50);
+  --color-error-bg-strong: var(--red-100);
+  --color-error-strong: var(--red-700);
+  /* Status — Info (reuses brand) */
+  --color-info: var(--brand-600);
+  --color-info-bg: var(--brand-50);
+  /* Rating */
+  --color-star: var(--amber-400);
+  /* Categorical lead-pipeline badges (non-severity) */
+  --color-badge-new-bg: var(--blue-100);
+  --color-badge-new-text: var(--blue-800);
+  --color-badge-contacted-bg: var(--indigo-100);
+  --color-badge-contacted-text: var(--indigo-800);
+  --color-badge-scheduled-bg: var(--purple-50);
+  --color-badge-scheduled-text: var(--purple-700);
+  --color-badge-neutral-bg: var(--slate-100);
+  --color-badge-neutral-text: var(--slate-600); /* nudged from slate-500 */
+  /* Overlays / scrims */
+  --color-overlay: rgba(0, 0, 0, 0.60);
+  --color-overlay-strong: rgba(0, 0, 0, 0.70);
+  --color-shimmer: rgba(255, 255, 255, 0.65);
+  /* Shadows */
+  --shadow-card: 0 10px 30px -12px rgba(var(--shadow-tint-rgb), 0.16);
+  --shadow-soft: 0 4px 20px -8px rgba(var(--shadow-tint-rgb), 0.14);
+  --shadow-lift: 0 24px 60px -20px rgba(var(--shadow-tint-rgb), 0.28);
+}
+
 html {
   scroll-behavior: smooth;
 }

@@ -43,6 +43,79 @@ const config: Config = {
         cream: "#FFFFFF",
         ink: "#16181D",
         muted: "#4B5563",
+
+        // ---- Semantic design tokens (resolve to CSS vars in app/globals.css) ----
+        // Additive: the objects above stay for back-compat; these enable classes
+        // like bg-primary, bg-surface, text-content, border-line, text-success.
+        // See the design-system doc + docs/design-tokens for the migration map.
+        primary: {
+          DEFAULT: "rgb(var(--color-primary-rgb, 37 99 235) / <alpha-value>)",
+          hover: "var(--color-primary-hover)",
+          active: "var(--color-primary-active)",
+          emphasis: "var(--color-primary-emphasis)",
+          tint: "var(--color-brand-tint)",
+        },
+        secondary: {
+          DEFAULT: "var(--color-secondary)",
+          hover: "var(--color-secondary-hover)",
+          active: "var(--color-secondary-active)",
+        },
+        surface: {
+          DEFAULT: "var(--color-surface)",
+          raised: "var(--color-surface-raised)",
+          inverse: "var(--color-surface-inverse)",
+          dark: "var(--color-surface-dark)",
+          "dark-hover": "var(--color-surface-dark-hover)",
+          tooltip: "var(--color-surface-tooltip)",
+        },
+        canvas: {
+          DEFAULT: "var(--color-bg-page)",
+          section: "var(--color-bg-section)",
+          subtle: "var(--color-bg-subtle)",
+          app: "var(--color-bg-app)",
+          hover: "var(--color-bg-hover)",
+        },
+        content: {
+          DEFAULT: "var(--color-text-primary)",
+          secondary: "var(--color-text-secondary)",
+          placeholder: "var(--color-text-placeholder)",
+          disabled: "var(--color-text-disabled)",
+          "on-primary": "var(--color-text-on-primary)",
+          link: "var(--color-text-link)",
+          "link-hover": "var(--color-text-link-hover)",
+        },
+        line: {
+          DEFAULT: "var(--color-border)",
+          strong: "var(--color-border-strong)",
+          hover: "var(--color-border-hover)",
+          focus: "var(--color-border-focus)",
+        },
+        focus: "rgb(var(--color-primary-rgb, 37 99 235) / <alpha-value>)",
+        success: {
+          DEFAULT: "var(--color-success)",
+          bg: "var(--color-success-bg)",
+          strong: "var(--color-success-strong)",
+          "bg-strong": "var(--color-success-bg-strong)",
+          money: "var(--color-success-money)",
+        },
+        warning: {
+          DEFAULT: "var(--color-warning)",
+          bg: "var(--color-warning-bg)",
+          strong: "var(--color-warning-strong)",
+          "bg-strong": "var(--color-warning-bg-strong)",
+        },
+        error: {
+          DEFAULT: "var(--color-error)",
+          "on-bg": "var(--color-error-on-bg)",
+          bg: "var(--color-error-bg)",
+          "bg-strong": "var(--color-error-bg-strong)",
+          strong: "var(--color-error-strong)",
+        },
+        info: {
+          DEFAULT: "var(--color-info)",
+          bg: "var(--color-info-bg)",
+        },
+        star: "var(--color-star)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Arial", "sans-serif"],
