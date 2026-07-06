@@ -90,6 +90,7 @@ function buildText(lead: Lead): string {
   if (c.email) {
     lines.push(`Send offer → /offer ${sid} 8500-9000`);
     lines.push(`Need info first → /moreinfo ${sid} then your questions, one per line`);
+    lines.push(`Send a message → /message ${sid} then your message`);
   }
 
   return lines.join("\n");

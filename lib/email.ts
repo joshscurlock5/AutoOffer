@@ -466,6 +466,37 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   };
 }
 
+// A free-text message the owner sends from Telegram (/message) — for normal,
+// day-to-day conversation that isn't a quote/offer. Framed as a note from the
+// rep: greeting + a "New message" box holding whatever was typed, then the
+// reply/call nudge. The customer can reply straight to this email (the
+// Gmail->Telegram script routes their reply to the Replies channel).
+function messageEmail(lead: Lead, message: string): Email {
+  const first = firstName(lead);
+  const paras = message
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 10px;font-size:16px;line-height:1.65;color:#1f2a36;">${esc(p)}</p>`)
+    .join("");
+  const head = `<tr><td style="padding:28px 28px 4px;">
+    <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">Hi ${first},</h1>
+    <p style="margin:0;font-size:16px;line-height:1.6;color:#3a4654;">You have a new message from your ${esc(site.name)} representative:</p>
+  </td></tr>`;
+  const box = `<tr><td style="padding:14px 28px 6px;">
+    <div style="background:#f4f7fb;border:1px solid #dbe4ef;border-radius:12px;padding:16px 18px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#5b6b63;font-weight:700;margin-bottom:9px;">New message</div>
+      ${paras}
+    </div></td></tr>`;
+  const fastest = `<tr><td style="padding:12px 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">
+    <strong>Fastest response:</strong> just reply to this email, or call or text us anytime.
+  </td></tr>`;
+  return {
+    subject: `A message from ${site.name}`,
+    html: shell(head + box + fastest + callCta("fastest") + refRow(lead)),
+  };
+}
+
 // ---- Resend transport -----------------------------------------------------
 
 /** POST one email (optionally scheduled). Returns its id, or "" on any failure. */
@@ -587,6 +618,18 @@ export async function sendMoreInfo(lead: Lead, questions: string[]): Promise<{ o
   const to = validEmail(lead);
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
   const id = await postEmail(to, moreInfoEmail(lead, questions));
+  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
+}
+
+/** Send a free-text message email (Telegram /message) — direct rep-to-customer
+ * communication. Uses validEmail (skips a dead/bounced or missing address) but
+ * NOT the nurture gate, since a manual reply is transactional, not marketing.
+ * Returns a result so the Telegram reply can report what happened. */
+export async function sendMessageEmail(lead: Lead, message: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
+  const to = validEmail(lead);
+  if (!to) return { ok: false, reason: "this lead has no valid email address" };
+  const id = await postEmail(to, messageEmail(lead, message));
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 

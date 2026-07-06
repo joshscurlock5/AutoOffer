@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead } from "@/lib/store";
-import { sendOfferEmail, sendMoreInfo, cancelScheduledEmails } from "@/lib/email";
+import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
@@ -272,6 +272,48 @@ export async function POST(req: NextRequest) {
         fromChat,
         `📩 Sent ${questions.length} question${questions.length > 1 ? "s" : ""} to ${who} about their ${carText(lead)}. If they go quiet, we'll re-send the same questions in 2 and 5 days.`,
       );
+      return NextResponse.json({ ok: true });
+    }
+
+    // 6c) /message <id> <text> — send a free-text message email to the customer
+    // (day-to-day conversation, not a quote). Sends immediately; the customer can
+    // reply straight to the email.
+    const messageCmd = text.match(/^\/message(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
+    if (messageCmd) {
+      const code = (messageCmd[2] || "").trim();
+      const message = (messageCmd[3] || "").trim();
+      if (!code || !message) {
+        await reply(
+          fromChat,
+          `Usage: /message <id> <your message>\nType the ID, then whatever you want to say.\nExample:\n/message ${code || "a1b2c3d4"} Hi! Could I grab your phone number for a quick call about your car?`,
+        );
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead.contact.email) {
+        await reply(fromChat, `${lead.contact.name || "That lead"} has no email on file (they chose phone). Reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const res = await sendMessageEmail(lead, message);
+      if (!res.ok) {
+        await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const nowISO = new Date().toISOString();
+      await updateLead(lead.id, {
+        firstTouchAt: lead.firstTouchAt || nowISO,
+        contactedAt: lead.contactedAt || nowISO,
+        status: lead.status === "new" ? "contacted" : lead.status,
+      });
+      await reply(fromChat, `📨 Message sent to ${lead.contact.name || lead.contact.email}.`);
       return NextResponse.json({ ok: true });
     }
 
