@@ -335,7 +335,7 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-function ProfileRow({ p }: { p: Profile }) {
+function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => void }) {
   const [open, setOpen] = useState(false);
   const a = p.attribution;
   const loc = [p.geo?.city, p.geo?.region, p.geo?.country].filter(Boolean).join(", ");
@@ -485,9 +485,18 @@ function ProfileRow({ p }: { p: Profile }) {
                 </li>
               ))}
             </ol>
-            {p.leadIds.length > 0 && (
-              <Link href="/admin" className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline">Open in Leads →</Link>
-            )}
+            <div className="mt-3 flex items-center gap-3 border-t border-slate-100 pt-3">
+              {p.leadIds.length > 0 && (
+                <Link href="/admin" className="text-xs font-semibold text-brand-600 hover:underline">Open in Leads →</Link>
+              )}
+              <button
+                type="button"
+                onClick={() => onDelete(p)}
+                className="ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+              >
+                Delete profile
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -702,11 +711,33 @@ function TrafficGa4() {
 }
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
-  const { profiles, lookupsTotal, events: ev } = data;
+  const { lookupsTotal, events: ev } = data;
   const [filters, setFilters] = useState<Filters>({});
   const [dim, setDim] = useState<SegmentDimension>("source");
   const [q, setQ] = useState("");
   const [sortByScore, setSortByScore] = useState(false);
+  // Profiles deleted this session vanish immediately (also archived server-side,
+  // so they stay gone on refresh and drop out of every chart below).
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const profiles = useMemo(() => data.profiles.filter((p) => !deletedIds.has(p.id)), [data.profiles, deletedIds]);
+
+  async function deleteProfile(p: Profile) {
+    if (!p.leadIds.length) {
+      alert("This person came from a chat or referral only — there's no lead to delete here.");
+      return;
+    }
+    if (!confirm(`Delete ${p.name || p.emails[0] || p.phones[0] || "this profile"}? They're removed from your analytics, but you can restore them from the admin Deleted tab.`)) return;
+    setDeletedIds((prev) => new Set(prev).add(p.id));
+    await Promise.all(
+      p.leadIds.map((id) =>
+        fetch("/api/admin/leads", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "lead", id, patch: { archived: true, archivedAt: new Date().toISOString() } }),
+        }).catch(() => {}),
+      ),
+    );
+  }
 
   const options = useMemo(() => computeFilterOptions(profiles), [profiles]);
   const filtered = useMemo(() => filterProfiles(profiles, filters), [profiles, filters]);
@@ -905,7 +936,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </label>
         </div>
         <div className="space-y-3">
-          {list.length === 0 ? <p className="text-sm text-muted">No profiles match.</p> : list.map((p) => <ProfileRow key={p.id} p={p} />)}
+          {list.length === 0 ? <p className="text-sm text-muted">No profiles match.</p> : list.map((p) => <ProfileRow key={p.id} p={p} onDelete={deleteProfile} />)}
         </div>
       </Section>
     </div>

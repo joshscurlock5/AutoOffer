@@ -54,7 +54,7 @@ export default function AdminDashboard({
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
   const [tab, setTab] = useState<"leads" | "referrals" | "chats" | "lookups">("leads");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "bookmarked" | LeadStatus>("all");
+  const [filter, setFilter] = useState<"all" | "bookmarked" | "deleted" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -65,10 +65,11 @@ export default function AdminDashboard({
 
   const counts = useMemo(
     () => ({
-      total: leads.filter((l) => l.status !== "spam").length,
-      new: leads.filter((l) => l.status === "new").length,
-      closed: leads.filter((l) => l.status === "closed").length,
-      saved: leads.filter((l) => l.bookmarked).length,
+      total: leads.filter((l) => l.status !== "spam" && !l.archived).length,
+      new: leads.filter((l) => l.status === "new" && !l.archived).length,
+      closed: leads.filter((l) => l.status === "closed" && !l.archived).length,
+      saved: leads.filter((l) => l.bookmarked && !l.archived).length,
+      deleted: leads.filter((l) => l.archived).length,
     }),
     [leads],
   );
@@ -76,12 +77,18 @@ export default function AdminDashboard({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return leads.filter((l) => {
-      if (filter === "all") {
-        if (l.status === "spam") return false;
-      } else if (filter === "bookmarked") {
-        if (!l.bookmarked) return false;
-      } else if (l.status !== filter) {
-        return false;
+      // The Deleted view shows ONLY archived leads; every other view hides them.
+      if (filter === "deleted") {
+        if (!l.archived) return false;
+      } else {
+        if (l.archived) return false;
+        if (filter === "all") {
+          if (l.status === "spam") return false;
+        } else if (filter === "bookmarked") {
+          if (!l.bookmarked) return false;
+        } else if (l.status !== filter) {
+          return false;
+        }
       }
       if (!q) return true;
       const hay = [
@@ -102,8 +109,20 @@ export default function AdminDashboard({
     });
   }
 
-  async function removeLead(id: string) {
-    if (!confirm("Delete this lead permanently?")) return;
+  // Soft delete: hide it everywhere + drop it from analytics, but keep it in the
+  // Deleted tab for restore. patchLead flips the flag; `filtered` hides archived
+  // from every non-Deleted view, so it simply vanishes from the current list.
+  async function archiveLead(id: string) {
+    if (!confirm("Move this lead to Deleted? It's hidden from your data, but you can restore it from the Deleted tab.")) return;
+    await patchLead(id, { archived: true, archivedAt: new Date().toISOString() });
+  }
+
+  async function restoreLead(id: string) {
+    await patchLead(id, { archived: false });
+  }
+
+  async function hardDeleteLead(id: string) {
+    if (!confirm("Permanently delete this lead? This CANNOT be undone.")) return;
     setLeads((prev) => prev.filter((l) => l.id !== id));
     await fetch("/api/admin/leads", {
       method: "DELETE",
@@ -237,8 +256,8 @@ export default function AdminDashboard({
     return () => document.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  const filterChips: ("all" | "bookmarked" | LeadStatus)[] = [
-    "all", "bookmarked", ...LEAD_STATUSES,
+  const filterChips: ("all" | "bookmarked" | "deleted" | LeadStatus)[] = [
+    "all", "bookmarked", ...LEAD_STATUSES, "deleted",
   ];
 
   return (
@@ -335,7 +354,13 @@ export default function AdminDashboard({
                     onClick={() => setFilter(s)}
                     className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${filter === s ? "bg-brand text-white" : "bg-white text-muted hover:text-navy"}`}
                   >
-                    {s === "all" ? "All" : s === "bookmarked" ? "★ Saved" : labelOf(s)}
+                    {s === "all"
+                      ? "All"
+                      : s === "bookmarked"
+                        ? "★ Saved"
+                        : s === "deleted"
+                          ? `🗑 Deleted${counts.deleted ? ` (${counts.deleted})` : ""}`
+                          : labelOf(s)}
                   </button>
                 ))}
               </div>
@@ -344,9 +369,11 @@ export default function AdminDashboard({
             <div className="mt-5 space-y-4">
               {filtered.length === 0 && (
                 <div className="card p-12 text-center text-muted">
-                  {filter === "spam"
-                    ? "No spam leads. Mark fake submissions as Spam to move them here."
-                    : "No leads here yet. New submissions appear automatically."}
+                  {filter === "deleted"
+                    ? "Nothing deleted. Deleted leads land here and can be restored anytime."
+                    : filter === "spam"
+                      ? "No spam leads. Mark fake submissions as Spam to move them here."
+                      : "No leads here yet. New submissions appear automatically."}
                 </div>
               )}
               {filtered.map((lead) => (
@@ -358,7 +385,9 @@ export default function AdminDashboard({
                   <LeadCard
                     lead={lead}
                     onPatch={patchLead}
-                    onDelete={removeLead}
+                    onArchive={archiveLead}
+                    onRestore={restoreLead}
+                    onHardDelete={hardDeleteLead}
                     onStatusChange={changeStatus}
                     onToggleBookmark={(l) => patchLead(l.id, { bookmarked: !l.bookmarked })}
                     onOpenPhoto={(l, index) => setLightbox({ leadId: l.id, photos: l.photos, index })}
@@ -457,14 +486,18 @@ export default function AdminDashboard({
 function LeadCard({
   lead,
   onPatch,
-  onDelete,
+  onArchive,
+  onRestore,
+  onHardDelete,
   onStatusChange,
   onToggleBookmark,
   onOpenPhoto,
 }: {
   lead: Lead;
   onPatch: (id: string, patch: Partial<Lead>) => void;
-  onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
+  onRestore: (id: string) => void;
+  onHardDelete: (id: string) => void;
   onStatusChange: (lead: Lead, status: LeadStatus) => void;
   onToggleBookmark: (lead: Lead) => void;
   onOpenPhoto: (lead: Lead, index: number) => void;
@@ -485,6 +518,9 @@ function LeadCard({
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${styleOf(lead.status)}`}>
               {labelOf(lead.status)}
             </span>
+            {lead.archived && (
+              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-700">Deleted</span>
+            )}
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
               {lead.kind === "vehicle" ? "Vehicle offer" : "Inquiry"}
             </span>
@@ -613,13 +649,31 @@ function LeadCard({
             <a href={`tel:${lead.contact.phone}`} className="btn-primary px-4 py-2 text-sm">
               <Phone className="h-4 w-4" /> Call
             </a>
-            <button
-              onClick={() => onDelete(lead.id)}
-              className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-              aria-label="Delete lead"
-            >
-              <Trash className="h-4 w-4" />
-            </button>
+            {lead.archived ? (
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => onRestore(lead.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-100"
+                >
+                  <Check className="h-4 w-4" /> Restore
+                </button>
+                <button
+                  onClick={() => onHardDelete(lead.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+                >
+                  <Trash className="h-4 w-4" /> Delete forever
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onArchive(lead.id)}
+                className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                aria-label="Delete lead"
+                title="Delete (restorable from the Deleted tab)"
+              >
+                <Trash className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* purchase price */}

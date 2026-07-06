@@ -188,6 +188,11 @@ export interface Lead {
   notes?: string;
   /** Starred by an admin for quick access. */
   bookmarked?: boolean;
+  /** Soft delete: hidden everywhere + excluded from ALL analytics, but
+   * restorable from the admin "Deleted" tab. Distinct from "spam" (which is a
+   * kept classification). Set by the analytics profile-delete + admin trash. */
+  archived?: boolean;
+  archivedAt?: string;
   /** Final price the vehicle was purchased for (CAD). */
   purchasePrice?: number;
   /**

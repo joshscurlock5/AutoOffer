@@ -48,6 +48,17 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Soft delete (archive): also cancel any scheduled nurture so a deleted lead
+  // stops receiving drip emails. Stamp archivedAt on the way in.
+  if (type !== "referral" && patch.archived === true) {
+    const ids = (item as Lead).dripEmailIds;
+    if (ids && ids.length) {
+      await cancelScheduledEmails(ids);
+      await updateLead(id, { dripEmailIds: [] });
+    }
+    if (!(item as Lead).archivedAt) await updateLead(id, { archivedAt: new Date().toISOString() });
+  }
+
   // Stamp lifecycle timestamps on status transitions — these drive the cron
   // cadence (post-offer follow-ups, win-back, digest) and the back-half metrics.
   // Each is set once. The cron gates customer nurture on status directly, so it

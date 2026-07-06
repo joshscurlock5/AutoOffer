@@ -87,6 +87,8 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     console.error("[cron] getLeads failed", e);
     return NextResponse.json({ ok: false, error: "scan failed" }, { status: 500 });
   }
+  // Soft-deleted leads get no nurture, no geo, and don't count in the digest.
+  leads = leads.filter((l) => !l.archived);
   summary.scanned = leads.length;
 
   // Contacts that already have a REAL (submitted) lead — so an abandoned-cart
