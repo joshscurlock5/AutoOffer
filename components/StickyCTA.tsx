@@ -39,19 +39,28 @@ export default function StickyCTA() {
     return () => io.disconnect();
   }, [pathname, hideBar]);
 
-  // Publish the pill's centerline (distance from the viewport bottom) so the
-  // floating chat button can line up with it on desktop. Uses offsetHeight (not a
-  // rect) so it's correct even mid entrance-transition. Cleared when not shown.
+  // Publish two positions from the viewport bottom, both tracked live by a
+  // ResizeObserver so a resize (which can wrap the label onto a second line and
+  // grow the pill) keeps them correct: the pill's CENTERLINE, so the floating
+  // chat button lines up with it, and the pill's TOP edge + a gap, so the cookie
+  // notice sits fully ABOVE it. Using the full height for the top is what keeps
+  // the notice clear of a taller (wrapped) pill — a fixed center-offset didn't.
+  // Uses offsetHeight (not a rect) so it's correct even mid entrance-transition.
   useEffect(() => {
     const root = document.documentElement;
-    const clear = () => root.style.removeProperty("--cta-pill-center");
+    const clear = () => {
+      root.style.removeProperty("--cta-pill-center");
+      root.style.removeProperty("--cta-pill-top");
+    };
     const el = pillRef.current;
     if (!show || !el || el.offsetParent === null) {
       clear();
       return clear;
     }
-    const apply = () =>
+    const apply = () => {
       root.style.setProperty("--cta-pill-center", `calc(1.5rem + ${el.offsetHeight / 2}px)`);
+      root.style.setProperty("--cta-pill-top", `calc(1.5rem + ${el.offsetHeight}px + 0.75rem)`);
+    };
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
