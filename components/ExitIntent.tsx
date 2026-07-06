@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site, telHref } from "@/lib/site-config";
 import { track, trackPhoneClick } from "@/lib/analytics";
-import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
 import { X, ArrowRight, Phone } from "./icons";
 
 /**
@@ -12,15 +11,13 @@ import { X, ArrowRight, Phone } from "./icons";
  * homepage — the estimate form already lives there — nor the admin panel or the
  * offer flow). Desktop fires on a top-edge cursor exit; touch devices fire on a
  * fast scroll back toward the top after the visitor has scrolled down (a leaving
- * signal). Besides the CTA + phone, it captures an EMAIL so a hesitant visitor is
- * reachable — the address is beaconed to /api/leads/partial as an abandoned cart.
+ * signal). Shows the offer CTA + a call/text link — no email capture (a bare
+ * email can't be quoted; the vehicle form is the real entry point).
  *
  * Preview it any time by adding ?exitpreview=1 to any URL.
  */
 export default function ExitIntent() {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -76,30 +73,6 @@ export default function ExitIntent() {
     return cleanup;
   }, []);
 
-  function submitEmail(e: React.FormEvent) {
-    e.preventDefault();
-    const value = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return;
-    setSent(true);
-    track("exit_intent_email_captured");
-    try {
-      fetch("/api/leads/partial", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: value,
-          contactMethod: "email",
-          attribution: getAttribution(),
-          touches: getTouches(),
-          behavior: getBehavior(),
-        }),
-        keepalive: true,
-      }).catch(() => undefined);
-    } catch {
-      /* ignore */
-    }
-  }
-
   if (!open) return null;
 
   return (
@@ -132,36 +105,10 @@ export default function ExitIntent() {
           Get a Free Offer <ArrowRight className="h-5 w-5" />
         </Link>
 
-        <div className="mt-4 border-t border-slate-100 pt-4">
-          {sent ? (
-            <p className="text-sm font-semibold text-emerald-700">
-              Thanks! We&apos;ll email your offer shortly.
-            </p>
-          ) : (
-            <form onSubmit={submitEmail}>
-              <p className="mb-2 text-sm text-muted">Prefer we email it to you?</p>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  autoComplete="email"
-                  className="field flex-1"
-                />
-                <button type="submit" className="btn-primary shrink-0 px-4">
-                  Send
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
         <a
           href={telHref}
           onClick={() => trackPhoneClick("exit_intent")}
-          className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-brand hover:underline"
+          className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-brand hover:underline"
         >
           <Phone className="h-4 w-4" /> Or call / text {site.phoneDisplay}
         </a>
