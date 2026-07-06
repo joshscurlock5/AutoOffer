@@ -19,6 +19,21 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Canonical host: apex → www, PRESERVING path and query string (Next.js
+  // forwards the query on redirects automatically). Inert today — apex DNS
+  // points at GoDaddy's forwarder, which strips params/404s deep links/fails
+  // TLS. Once apex DNS points at this app (Amplify cert already covers it),
+  // this takes over as a lossless 301 and attribution survives.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "driveoffer.ca" }],
+        destination: "https://www.driveoffer.ca/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
