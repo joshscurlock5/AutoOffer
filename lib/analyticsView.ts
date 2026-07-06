@@ -37,6 +37,8 @@ export interface View {
     cashPaidOut: number;
     revenue: number;
     margin: number;
+    /** True when `margin` includes a closed deal not yet sold (uses expected resale). */
+    marginIsEstimate: boolean;
     medianResponseMins: number | null;
     /** Share (rounded %) of first-responded leads answered within 5 minutes. */
     pctUnder5Min: number | null;
@@ -186,6 +188,7 @@ export function computeView(profiles: Profile[], dateBounds?: { dateFrom?: strin
   const cashPaidOut = closedP.reduce((s, p) => s + (p.cashPaidOut || 0), 0);
   const revenue = closedP.reduce((s, p) => s + (p.revenue || 0), 0);
   const margin = closedP.reduce((s, p) => s + (p.margin || 0), 0);
+  const marginIsEstimate = closedP.some((p) => p.marginIsEstimate);
 
   const latencies = profiles
     .map((p) => p.firstResponseMins)
@@ -251,6 +254,7 @@ export function computeView(profiles: Profile[], dateBounds?: { dateFrom?: strin
       cashPaidOut,
       revenue,
       margin,
+      marginIsEstimate,
       medianResponseMins,
       pctUnder5Min,
     },
@@ -293,6 +297,8 @@ export interface SegmentRow {
   closeRate: number; // % of leads that closed
   avgOffer: number;
   margin: number;
+  /** True when `margin` includes a closed deal not yet sold (uses expected resale). */
+  marginIsEstimate: boolean;
   medianResponseMins: number | null;
   /** Average lead score across the group's people. */
   avgScore: number;
@@ -336,6 +342,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
     const offers = leadsP.filter((p) => p.offer);
     const closed = ps.filter((p) => p.stage === "closed");
     const margin = closed.reduce((s, p) => s + (p.margin || 0), 0);
+    const marginIsEstimate = closed.some((p) => p.marginIsEstimate);
     const offerMids = offers.map((p) => p.offerMid || 0).filter((n) => n > 0);
     const avgOffer = offerMids.length ? Math.round(offerMids.reduce((a, b) => a + b, 0) / offerMids.length) : 0;
     const lat = ps.map((p) => p.firstResponseMins).filter((m): m is number => typeof m === "number" && m >= 0);
@@ -350,6 +357,7 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
       closeRate: leadsP.length ? Math.round((closed.length / leadsP.length) * 100) : 0,
       avgOffer,
       margin,
+      marginIsEstimate,
       medianResponseMins,
       avgScore,
     });

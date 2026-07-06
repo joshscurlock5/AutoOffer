@@ -73,6 +73,20 @@ function money2(n?: number | null): string {
   return `$${n.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Tiny "est" marker for a margin/ROAS figure that still includes a car you've
+// bought but not yet sold — the number uses your EXPECTED resale until the real
+// sold price is recorded, at which point it firms up and this tag drops.
+function EstBadge() {
+  return (
+    <span
+      className="ml-1 align-middle rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700"
+      title="Estimate — includes deals you've bought but not sold yet. Margin uses your expected resale until you enter the actual sold price."
+    >
+      est
+    </span>
+  );
+}
+
 // Provenance strings for the "where's this from?" info dots (an audit aid).
 const SRC = {
   site: "Your website's own database — form submissions, merged into one record per person.",
@@ -350,7 +364,7 @@ function SegmentView({
                 <td className="px-2 text-right">{r.offers}</td>
                 <td className="px-2 text-right font-semibold">{r.closeRate}%</td>
                 <td className="px-2 text-right">{r.avgOffer ? money(r.avgOffer) : "—"}</td>
-                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
+                <td className="px-2 text-right">{r.margin ? <>{money(r.margin)}{r.marginIsEstimate && <EstBadge />}</> : "—"}</td>
                 <td className="px-2 text-right">{r.avgScore}</td>
                 <td className="pl-2 text-right">{fmtMins(r.medianResponseMins)}</td>
               </tr>
@@ -775,6 +789,7 @@ function FunnelEconomics({
       const booked = matched.filter((p) => p.scheduledAt || p.appointmentAt || p.stage === "scheduled" || p.stage === "closed").length;
       const closedP = matched.filter(closedInRange);
       const margin = closedP.reduce((s, p) => s + (p.margin || 0), 0);
+      const marginIsEstimate = closedP.some((p) => p.marginIsEstimate);
       return {
         label,
         spend,
@@ -788,6 +803,7 @@ function FunnelEconomics({
         costBooked: booked ? spend / booked : null,
         closed: closedP.length,
         margin,
+        marginIsEstimate,
         mroas: spend ? margin / spend : null,
       };
     };
@@ -850,8 +866,8 @@ function FunnelEconomics({
                 <td className="px-2 text-right">{r.booked}</td>
                 <td className="px-2 text-right">{money2(r.costBooked)}</td>
                 <td className="px-2 text-right">{r.closed}</td>
-                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
-                <td className="pl-2 text-right">{r.mroas != null ? `${r.mroas.toFixed(1)}×` : "—"}</td>
+                <td className="px-2 text-right">{r.margin ? <>{money(r.margin)}{r.marginIsEstimate && <EstBadge />}</> : "—"}</td>
+                <td className="pl-2 text-right">{r.mroas != null ? <>{r.mroas.toFixed(1)}×{Boolean(r.margin) && r.marginIsEstimate && <EstBadge />}</> : "—"}</td>
               </tr>
             ))
           )}
@@ -876,12 +892,12 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
       const ps = profiles.filter(
         (p) => p.attribution?.utmCampaign === ins.campaign || (p.touchHistory || []).some((t) => t.utmCampaign === ins.campaign),
       );
-      const margin = ps
-        .filter((p) => p.stage === "closed" && p.closedAt && Date.parse(p.closedAt) >= cutoff)
-        .reduce((s, p) => s + (p.margin || 0), 0);
+      const closed = ps.filter((p) => p.stage === "closed" && p.closedAt && Date.parse(p.closedAt) >= cutoff);
+      const margin = closed.reduce((s, p) => s + (p.margin || 0), 0);
+      const marginIsEstimate = closed.some((p) => p.marginIsEstimate);
       const leads = ins.leads ?? 0;
       const cpl = ins.costPerLead ?? (leads ? ins.spend / leads : null);
-      return { ...ins, leads, margin, cpl, roas: ins.spend ? margin / ins.spend : null };
+      return { ...ins, leads, margin, marginIsEstimate, cpl, roas: ins.spend ? margin / ins.spend : null };
     });
   }, [insights, profiles, days]);
 
@@ -914,14 +930,14 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
                 <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
                 <td className="px-2 text-right">{r.leads}</td>
                 <td className="px-2 text-right font-semibold">{money2(r.cpl)}</td>
-                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
-                <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
+                <td className="px-2 text-right">{r.margin ? <>{money(r.margin)}{r.marginIsEstimate && <EstBadge />}</> : "—"}</td>
+                <td className="pl-2 text-right">{r.roas != null ? <>{r.roas.toFixed(1)}×{Boolean(r.margin) && r.marginIsEstimate && <EstBadge />}</> : "—"}</td>
               </tr>
             ))
           )}
         </tbody>
       </table>
-      <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}).</p>
+      <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}). An <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">est</span> tag means the figure includes a car you&apos;ve bought but not sold yet — it uses your expected resale until you record the actual sold price.</p>
     </div>
   );
 }
@@ -1483,7 +1499,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} delta={prevView ? <Delta now={view.totals.leads} prev={prevView.totals.leads} /> : undefined} />
             <StatCard label="Booked" value={String(booked)} tip="Your website's database — leads that reached a booked inspection (scheduled or closed)." delta={prevView ? <Delta now={booked} prev={prevView.funnelByRank.booked} /> : undefined} />
-            <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
+            <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin${view.totals.marginIsEstimate ? " · est" : ""}`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car. “est” means it still includes a car you've bought but not sold yet." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
             <StatCard
               label="Speed to lead"
               value={fmtMins(view.totals.medianResponseMins)}

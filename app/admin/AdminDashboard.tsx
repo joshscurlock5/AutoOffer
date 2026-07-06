@@ -556,8 +556,12 @@ export default function AdminDashboard({
         <PriceModal
           lead={priceModal}
           onCancel={() => setPriceModal(null)}
-          onConfirm={(price) => {
-            patchLead(priceModal.id, { status: "closed", purchasePrice: price });
+          onConfirm={(price, resale) => {
+            patchLead(priceModal.id, {
+              status: "closed",
+              purchasePrice: price,
+              ...(resale != null ? { expectedResale: resale } : {}),
+            });
             setPriceModal(null);
           }}
         />
@@ -667,6 +671,20 @@ function LeadCard({
     if (soldV != null && soldV !== (lead.actualSalePrice ?? null)) {
       patch.actualSalePrice = soldV;
       if (lead.actualSalePrice == null) patch.soldAt = new Date().toISOString();
+    }
+    // Recording a buy price = you bought the car = a CLOSED deal. Flip status so
+    // it counts toward margin/ROAS — analytics sums closed deals only, so without
+    // this the profit shows on the card but the dashboard reads zero. Leave a deal
+    // that's already closed / marked lost / spam / archived untouched.
+    const willHaveCost = (patch.purchasePrice ?? lead.purchasePrice ?? null) != null;
+    if (
+      willHaveCost &&
+      lead.status !== "closed" &&
+      lead.status !== "lost" &&
+      lead.status !== "spam" &&
+      !lead.archived
+    ) {
+      patch.status = "closed";
     }
     if (Object.keys(patch).length) onPatch(lead.id, patch);
   }
@@ -1017,12 +1035,17 @@ function PriceModal({
 }: {
   lead: Lead;
   onCancel: () => void;
-  onConfirm: (price: number) => void;
+  onConfirm: (price: number, resale: number | null) => void;
 }) {
   const [value, setValue] = useState("");
+  const [resaleValue, setResaleValue] = useState("");
   const num = Math.round(Number(value.replace(/[^0-9.]/g, "")));
   const valid = value.trim() !== "" && !Number.isNaN(num) && num > 0;
+  const resaleNum = Math.round(Number(resaleValue.replace(/[^0-9.]/g, "")));
+  const resale = resaleValue.trim() !== "" && !Number.isNaN(resaleNum) && resaleNum > 0 ? resaleNum : null;
+  const estProfit = valid && resale != null ? resale - num : null;
   const v = lead.vehicle;
+  const submit = () => { if (valid) onConfirm(num, resale); };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true">
@@ -1035,23 +1058,52 @@ function PriceModal({
           </span>{" "}
           for?
         </p>
-        <div className="relative mt-4">
+        <label htmlFor="close-bought" className="mt-4 block text-[11px] font-semibold uppercase tracking-wide text-muted">Bought for</label>
+        <div className="relative mt-1">
           <Dollar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
+            id="close-bought"
             autoFocus
             type="number"
             min={0}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && valid) onConfirm(num); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && valid) submit(); }}
             placeholder="e.g. 19000"
             className="field pl-8 text-lg"
           />
         </div>
+        <label htmlFor="close-resale" className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+          Est. resale <span className="font-normal normal-case text-muted/80">— optional, shows ROAS now</span>
+        </label>
+        <div className="relative mt-1">
+          <Dollar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            id="close-resale"
+            type="number"
+            min={0}
+            value={resaleValue}
+            onChange={(e) => setResaleValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && valid) submit(); }}
+            placeholder="what you expect to sell it for"
+            className="field pl-8"
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          {estProfit != null ? (
+            <>
+              Estimated profit{" "}
+              <span className={`font-semibold ${estProfit >= 0 ? "text-green-700" : "text-red-600"}`}>{cad(estProfit)}</span>{" "}
+              — counts toward ROAS right away, until you enter the actual sold price.
+            </>
+          ) : (
+            "Add an expected resale to see estimated ROAS immediately (you can fill in the actual sold price later)."
+          )}
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onCancel} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
           <button
-            onClick={() => valid && onConfirm(num)}
+            onClick={submit}
             disabled={!valid}
             className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
           >
