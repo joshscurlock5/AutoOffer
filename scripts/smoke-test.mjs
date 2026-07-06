@@ -220,8 +220,8 @@ async function main() {
   const anj = await an.json().catch(() => ({}));
   ok("authed analytics -> 200", an.status === 200, `(got ${an.status})`);
   ok(
-    "analytics returns profiles + aggregates",
-    Array.isArray(anj.profiles) && !!anj.aggregates && Array.isArray(anj.aggregates.funnel),
+    "analytics returns profiles + events",
+    Array.isArray(anj.profiles) && !!anj.events && !!anj.events.all && Array.isArray(anj.events.all.funnel),
     JSON.stringify(Object.keys(anj || {})),
   );
   ok(

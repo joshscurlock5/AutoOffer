@@ -16,8 +16,11 @@ export const runtime = "nodejs";
 //  owner "call this abandoner" alert), and only if they never fully converted.
 //
 //  This endpoint only stores data the user already typed — it never messages the
-//  customer itself. Deduped against real leads (never resurrects a converted one)
-//  and against an existing partial (refreshes rather than duplicates).
+//  customer itself. Deduped against real leads (never resurrects an ACTIVE
+//  new/contacted/scheduled one) and against an existing partial (refreshes
+//  rather than duplicates). A closed/lost/spam match only blocks a new partial
+//  for 30 days after it closed — a returning seller further out than that is a
+//  new opportunity, so a fresh partial is created instead of staying silent.
 // ===========================================================================
 
 function str(v: unknown): string {
@@ -96,12 +99,29 @@ export async function POST(req: NextRequest) {
       return (eKey && le === eKey) || (pKey && lp === pKey);
     });
 
-    // A real (submitted) lead already exists — they converted or are in-flight. Do nothing.
+    // A real (submitted) lead already exists. If it's still ACTIVE (new/contacted/
+    // scheduled) they're converted or in-flight — do nothing. If it's closed/lost/
+    // spam, treat it as terminal only for 30 days (avoids nudging someone you just
+    // dealt with); past that window a fresh abandon is a new opportunity, so fall
+    // through and create a new partial lead below.
+    const ACTIVE_STATUSES = new Set(["new", "contacted", "scheduled"]);
     if (match && match.status !== "partial") {
-      return NextResponse.json({ ok: true, deduped: true });
+      if (ACTIVE_STATUSES.has(match.status)) {
+        return NextResponse.json({ ok: true, deduped: true });
+      }
+      // Age from when the deal actually ENDED (closedAt/lostAt/spamAt), not when
+      // the lead was created — a 40-day-old lead closed yesterday is someone we
+      // just dealt with, not a stale contact.
+      const terminalAt = match.closedAt || match.lostAt || match.spamAt || match.createdAt;
+      const matchAgeMs = terminalAt ? Date.now() - Date.parse(terminalAt) : NaN;
+      const THIRTY_DAYS_MS = 30 * 24 * 3600_000;
+      if (!Number.isFinite(matchAgeMs) || matchAgeMs <= THIRTY_DAYS_MS) {
+        return NextResponse.json({ ok: true, deduped: true });
+      }
+      // Closed/lost/spam and older than 30 days — proceed to create a fresh partial.
     }
     // An earlier partial exists — refresh it instead of creating a duplicate.
-    if (match && match.status === "partial") {
+    else if (match && match.status === "partial") {
       await updateLead(match.id, {
         contact: { name, email, phone, contactMethod },
         vehicle,

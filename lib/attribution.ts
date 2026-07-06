@@ -89,12 +89,24 @@ export function captureFirstTouch(): void {
 
   // Behavior session — create once, then bump pageviews + lastSeenAt each call.
   const now = new Date().toISOString();
-  const b: Behavior = read<Behavior>(BEHAVIOR_KEY) || {
+  const existing = read<Behavior>(BEHAVIOR_KEY);
+  const b: Behavior = existing || {
+    visitorId: randomId(),
     sessionId: randomId(),
     firstSeenAt: now,
     pageviews: 0,
     maxFunnelStep: 0,
   };
+  if (existing) {
+    // Backfill continuity: old records only ever stored sessionId, so make
+    // visitorId equal to it — keeps historical stitching intact.
+    if (!b.visitorId) b.visitorId = b.sessionId || randomId();
+    // Sessions rotate after 30 min of inactivity; the durable visitorId does not.
+    const lastSeen = b.lastSeenAt ? Date.parse(b.lastSeenAt) : NaN;
+    if (Number.isFinite(lastSeen) && Date.now() - lastSeen > 30 * 60 * 1000) {
+      b.sessionId = randomId();
+    }
+  }
   b.lastSeenAt = now;
   b.pageviews = (b.pageviews || 0) + 1;
   write(BEHAVIOR_KEY, b);
@@ -261,6 +273,7 @@ export function parseBehavior(raw: unknown): Behavior | undefined {
     const o = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
     if (!o || typeof o !== "object") return undefined;
     const b: Behavior = {
+      visitorId: S(o.visitorId, 60),
       sessionId: S(o.sessionId, 60),
       firstSeenAt: S(o.firstSeenAt, 40),
       lastSeenAt: S(o.lastSeenAt, 40),

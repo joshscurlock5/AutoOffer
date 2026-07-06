@@ -42,6 +42,9 @@ export interface View {
     pctUnder5Min: number | null;
   };
   funnel: Count[];
+  /** Same funnel as raw counts, keyed by stage — for callers that want a value
+   * without matching on the `label` string. */
+  funnelByRank: { leads: number; contacted: number; offerSent: number; booked: number; closed: number };
   overTime: { date: string; leads: number }[];
   bySource: Count[];
   byCampaign: Count[];
@@ -67,6 +70,51 @@ export interface FilterOptions {
 }
 
 const isRealLead = (p: Profile): boolean => p.hasRealLead;
+
+/** Mountain-Time day bucket key (YYYY-MM-DD) for a UTC ISO timestamp — so "leads
+ * over time" and the heatmap group by the owner's actual day, not UTC's. */
+export function dayKeyMT(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+}
+
+/** Mountain-Time weekday (0=Sun..6) + hour (0..23) for the activity heatmap. */
+function weekdayHourMT(iso: string): { day: number; hour: number } | null {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    weekday: "short",
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(d);
+  const weekday = parts.find((p) => p.type === "weekday")?.value;
+  const hourStr = parts.find((p) => p.type === "hour")?.value;
+  const WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const day = weekday ? WEEKDAYS[weekday] : undefined;
+  // hour12:false can format midnight as "24" in some ICU builds — normalize.
+  let hour = hourStr ? parseInt(hourStr, 10) : NaN;
+  if (hour === 24) hour = 0;
+  if (day === undefined || !Number.isFinite(hour)) return null;
+  return { day, hour };
+}
+
+/** Fill every missing day between `from` and `to` (both YYYY-MM-DD, MT) with 0. */
+function zeroFillDays(dayMap: Map<string, number>, from?: string, to?: string): { date: string; leads: number }[] {
+  const keys = [...dayMap.keys()].sort();
+  const start = from || keys[0];
+  const end = to || keys[keys.length - 1];
+  if (!start || !end) return [];
+  const out: { date: string; leads: number }[] = [];
+  // Step day-by-day using UTC-noon anchors so DST transitions can't skip/repeat a day.
+  let cur = new Date(start + "T12:00:00Z");
+  const last = new Date(end + "T12:00:00Z");
+  while (cur.getTime() <= last.getTime()) {
+    const key = cur.toISOString().slice(0, 10);
+    out.push({ date: key, leads: dayMap.get(key) || 0 });
+    cur = new Date(cur.getTime() + 86_400_000);
+  }
+  return out;
+}
 
 /** Standard even/odd median of a numeric list (undefined when empty). */
 function median(ns: number[]): number | null {
@@ -128,8 +176,10 @@ export function filterProfiles(profiles: Profile[], f: Filters): Profile[] {
   });
 }
 
-/** Recompute every chart from a (filtered) profile set. */
-export function computeView(profiles: Profile[]): View {
+/** Recompute every chart from a (filtered) profile set. `dateBounds` (from the
+ * active date filter, when set) anchors the zero-fill range; otherwise it spans
+ * the data's own first..last day. */
+export function computeView(profiles: Profile[], dateBounds?: { dateFrom?: string; dateTo?: string }): View {
   const leadsP = profiles.filter(isRealLead);
   const partials = profiles.filter((p) => p.stage === "partial");
   const closedP = profiles.filter((p) => p.stage === "closed");
@@ -145,30 +195,51 @@ export function computeView(profiles: Profile[]): View {
     ? Math.round((latencies.filter((m) => m <= 5).length / latencies.length) * 100)
     : null;
 
+  // Canonical monotonic lead funnel (audit B4): rank each hasRealLead profile by
+  // the FURTHEST stage it has ever reached, then count profiles whose max rank
+  // is >= k. Monotonic by construction — never dips below the stage before it.
+  let rank1 = 0; // Lead (always true for hasRealLead profiles)
+  let rank2 = 0; // Contacted
+  let rank3 = 0; // Offer sent
+  let rank4 = 0; // Booked
+  let rank5 = 0; // Closed
+  for (const p of leadsP) {
+    let r = 1;
+    if (p.contactedAt || p.offerSentAt || p.stage === "contacted" || p.stage === "scheduled" || p.stage === "closed") r = 2;
+    if (p.offer || p.offerSentAt) r = Math.max(r, 3);
+    if (p.scheduledAt || p.appointmentAt || p.stage === "scheduled" || p.stage === "closed") r = Math.max(r, 4);
+    if (p.stage === "closed" || p.closedAt) r = Math.max(r, 5);
+    if (r >= 1) rank1 += 1;
+    if (r >= 2) rank2 += 1;
+    if (r >= 3) rank3 += 1;
+    if (r >= 4) rank4 += 1;
+    if (r >= 5) rank5 += 1;
+  }
   const funnel: Count[] = [
-    { label: "People", count: profiles.length },
-    { label: "Leads", count: leadsP.length },
-    { label: "Offers", count: leadsP.filter((p) => p.offer).length },
-    { label: "Bookings", count: leadsP.filter((p) => p.appointmentAt || p.stage === "scheduled" || p.stage === "closed").length },
-    { label: "Closed", count: closedP.length },
+    { label: "Leads", count: rank1 },
+    { label: "Contacted", count: rank2 },
+    { label: "Offer sent", count: rank3 },
+    { label: "Booked", count: rank4 },
+    { label: "Closed", count: rank5 },
   ];
+  const funnelByRank = { leads: rank1, contacted: rank2, offerSent: rank3, booked: rank4, closed: rank5 };
 
-  // Leads over time by day (whatever range the filter leaves).
+  // Leads over time by day, Mountain Time, zero-filled across the range.
   const dayMap = new Map<string, number>();
   for (const p of leadsP) {
-    const t = p.createdAt ? Date.parse(p.createdAt) : NaN;
-    if (Number.isFinite(t)) {
-      const d = new Date(t).toISOString().slice(0, 10);
+    if (p.createdAt) {
+      const d = dayKeyMT(p.createdAt);
       dayMap.set(d, (dayMap.get(d) || 0) + 1);
     }
   }
-  const overTime = [...dayMap.entries()].map(([date, leads]) => ({ date, leads })).sort((a, b) => a.date.localeCompare(b.date));
+  const overTime = zeroFillDays(dayMap, dateBounds?.dateFrom, dateBounds?.dateTo);
 
-  // Day×hour heatmap of lead creation (owner's local time).
+  // Day×hour heatmap of lead creation, Mountain Time.
   const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
   for (const p of leadsP) {
-    const t = p.createdAt ? new Date(p.createdAt) : null;
-    if (t && Number.isFinite(t.getTime())) heatmap[t.getDay()][t.getHours()] += 1;
+    if (!p.createdAt) continue;
+    const wh = weekdayHourMT(p.createdAt);
+    if (wh) heatmap[wh.day][wh.hour] += 1;
   }
 
   return {
@@ -184,6 +255,7 @@ export function computeView(profiles: Profile[]): View {
       pctUnder5Min,
     },
     funnel,
+    funnelByRank,
     overTime,
     bySource: topCounts(profiles.map((p) => p.source)),
     byCampaign: topCounts(profiles.map((p) => p.attribution?.utmCampaign)),

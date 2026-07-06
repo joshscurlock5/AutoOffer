@@ -41,12 +41,21 @@ export default function Analytics() {
   // Capture the Meta click id (fbclid) into a first-party _fbc cookie when the
   // Pixel hasn't already set one. This preserves the strongest CAPI match signal
   // even for Safari/iOS/ad-blocked visitors where fbevents.js never runs — the
-  // server reads this cookie when sending the Conversions API Lead.
+  // server reads this cookie when sending the Conversions API Lead. If a _fbc
+  // already exists, only overwrite it when the URL's fbclid is a DIFFERENT click
+  // than the one baked into the cookie (a new ad click arrived) — an identical
+  // fbclid leaves the cookie alone so the original click timestamp is preserved.
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
     const fbclid = searchParams?.get("fbclid");
     if (!fbclid) return;
-    if (document.cookie.split("; ").some((c) => c.startsWith("_fbc="))) return;
+    const existing = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("_fbc="))
+      ?.slice("_fbc=".length);
+    // fb.1.<ts>.<fbclid> — the fbclid segment is everything after the 3rd dot.
+    const existingFbclid = existing ? existing.split(".").slice(3).join(".") : "";
+    if (existing && existingFbclid === fbclid) return;
     const fbc = `fb.1.${Date.now()}.${fbclid}`;
     // 90-day first-party cookie (matches Meta's _fbc lifetime).
     document.cookie = `_fbc=${fbc}; path=/; max-age=7776000; SameSite=Lax`;

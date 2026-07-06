@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
+import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
 import { Check, ArrowRight } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 
@@ -75,7 +76,14 @@ export default function ReferralForm() {
       const res = await fetch("/api/referrals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...f, turnstileToken: tsToken, metaEventId }),
+        body: JSON.stringify({
+          ...f,
+          turnstileToken: tsToken,
+          metaEventId,
+          attribution: getAttribution(),
+          touches: getTouches(),
+          behavior: getBehavior(),
+        }),
       });
       if (!res.ok) throw new Error();
       setState("done");

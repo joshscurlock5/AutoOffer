@@ -20,6 +20,19 @@ export interface EventAnalytics {
   errorsByReason: { label: string; count: number }[];
   /** Most frequent event names — a live view of what the tee is capturing. */
   topEvents: { label: string; count: number }[];
+  /** phone_click counts by p.location (top 12) — which "Call" placements get used. */
+  phoneClicks: { label: string; count: number }[];
+  /** Click→form-load drop-off per placement: cta_click (by p.location) vs
+   * offer_flow_start (by p.cta_source) in the same key space. */
+  ctaPairs: { label: string; ctaClicks: number; flowStarts: number }[];
+  /** Exit-intent popup performance. */
+  exitIntent: { shown: number; clicked: number; emailCaptured: number };
+  /** Abandoned-form "resume" banner performance. */
+  resume: { shown: number; clicked: number };
+  /** VIN decode funnel. */
+  vin: { submitted: number; failed: number; confirmed: number; rejected: number };
+  /** Raw event volume per day (Mountain Time), zero-filled — data-health strip. */
+  eventsPerDay: { day: string; events: number; sessions: number }[];
 }
 
 /** Funnel stages: event name → display label, in journey order. */
@@ -40,6 +53,35 @@ function median(nums: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
+/** Mountain-Time day bucket key (YYYY-MM-DD). Duplicated from lib/analyticsView.ts's
+ * dayKeyMT (not imported) — that module is the client-safe view engine and this
+ * one is server-only; importing across would risk a circular/needless coupling
+ * for one one-line helper. */
+const MT_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" });
+function dayKeyMT(iso: string): string {
+  // Hoisted formatter — this runs once per event row across four windows, and
+  // constructing an Intl.DateTimeFormat per call costs ~100x the format() itself.
+  return MT_DAY_FMT.format(new Date(iso));
+}
+
+/** Zero-fill every day between the first and last event, in order. */
+function zeroFillEventDays(
+  perDay: Map<string, { events: number; sessions: Set<string> }>,
+): { day: string; events: number; sessions: number }[] {
+  const keys = [...perDay.keys()].sort();
+  if (!keys.length) return [];
+  const out: { day: string; events: number; sessions: number }[] = [];
+  let cur = new Date(keys[0] + "T12:00:00Z");
+  const last = new Date(keys[keys.length - 1] + "T12:00:00Z");
+  while (cur.getTime() <= last.getTime()) {
+    const key = cur.toISOString().slice(0, 10);
+    const bucket = perDay.get(key);
+    out.push({ day: key, events: bucket?.events || 0, sessions: bucket?.sessions.size || 0 });
+    cur = new Date(cur.getTime() + 86_400_000);
+  }
+  return out;
+}
+
 export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
   // First occurrence of each event name per session.
   const firstAt = new Map<string, Map<string, string>>(); // sessionId -> (event -> at)
@@ -48,6 +90,19 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
   const lastFieldBySession = new Map<string, string>(); // session -> last field touched
   const lastFieldTouchAt = new Map<string, string>(); // session -> at of that touch
   const errorCounts = new Map<string, number>();
+  const phoneClickCounts = new Map<string, number>(); // p.location -> count
+  const ctaClickCounts = new Map<string, number>(); // p.location -> count
+  const flowStartCounts = new Map<string, number>(); // p.cta_source -> count
+  let exitShown = 0;
+  let exitClicked = 0;
+  let exitEmailCaptured = 0;
+  let resumeShown = 0;
+  let resumeClicked = 0;
+  let vinSubmitted = 0;
+  let vinFailed = 0;
+  let vinConfirmed = 0;
+  let vinRejected = 0;
+  const perDay = new Map<string, { events: number; sessions: Set<string> }>();
 
   for (const e of events) {
     nameCounts.set(e.n, (nameCounts.get(e.n) || 0) + 1);
@@ -79,6 +134,42 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     if (e.n === "form_error" && typeof e.p?.reason === "string") {
       errorCounts.set(e.p.reason, (errorCounts.get(e.p.reason) || 0) + 1);
     }
+
+    // Phone/CTA click→form-load drop-off per placement.
+    if (e.n === "phone_click" && typeof e.p?.location === "string") {
+      phoneClickCounts.set(e.p.location, (phoneClickCounts.get(e.p.location) || 0) + 1);
+    }
+    if (e.n === "cta_click" && typeof e.p?.location === "string") {
+      ctaClickCounts.set(e.p.location, (ctaClickCounts.get(e.p.location) || 0) + 1);
+    }
+    if (e.n === "offer_flow_start" && typeof e.p?.cta_source === "string") {
+      flowStartCounts.set(e.p.cta_source, (flowStartCounts.get(e.p.cta_source) || 0) + 1);
+    }
+
+    // Exit-intent popup.
+    if (e.n === "exit_intent_shown") exitShown += 1;
+    if (e.n === "exit_intent_clicked") exitClicked += 1;
+    if (e.n === "exit_intent_email_captured") exitEmailCaptured += 1;
+
+    // Abandoned-form resume banner.
+    if (e.n === "resume_shown") resumeShown += 1;
+    if (e.n === "resume_clicked") resumeClicked += 1;
+
+    // VIN decode funnel.
+    if (e.n === "vin_submitted") vinSubmitted += 1;
+    if (e.n === "vin_failed") vinFailed += 1;
+    if (e.n === "vin_confirmed") vinConfirmed += 1;
+    if (e.n === "vin_rejected") vinRejected += 1;
+
+    // Raw volume per day (data-health strip).
+    const day = dayKeyMT(e.at);
+    let bucket = perDay.get(day);
+    if (!bucket) {
+      bucket = { events: 0, sessions: new Set() };
+      perDay.set(day, bucket);
+    }
+    bucket.events += 1;
+    bucket.sessions.add(e.sessionId);
   }
 
   const funnel = STAGES.map((s) => ({
@@ -126,6 +217,18 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
       .sort((a, b) => b.count - a.count)
       .slice(0, limit);
 
+  // Click→form-load drop-off per placement: cta_click (by p.location) paired
+  // with offer_flow_start (by p.cta_source) in the same key space.
+  const ctaKeys = new Set([...ctaClickCounts.keys(), ...flowStartCounts.keys()]);
+  const ctaPairs = [...ctaKeys]
+    .map((label) => ({
+      label,
+      ctaClicks: ctaClickCounts.get(label) || 0,
+      flowStarts: flowStartCounts.get(label) || 0,
+    }))
+    .sort((a, b) => b.ctaClicks - a.ctaClicks)
+    .slice(0, 12);
+
   return {
     totalEvents: events.length,
     totalSessions: firstAt.size,
@@ -134,5 +237,11 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     friction,
     errorsByReason: toCounts(errorCounts, 12),
     topEvents: toCounts(nameCounts, 15),
+    phoneClicks: toCounts(phoneClickCounts, 12),
+    ctaPairs,
+    exitIntent: { shown: exitShown, clicked: exitClicked, emailCaptured: exitEmailCaptured },
+    resume: { shown: resumeShown, clicked: resumeClicked },
+    vin: { submitted: vinSubmitted, failed: vinFailed, confirmed: vinConfirmed, rejected: vinRejected },
+    eventsPerDay: zeroFillEventDays(perDay),
   };
 }

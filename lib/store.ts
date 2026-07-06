@@ -48,6 +48,124 @@ export async function updateLead(
 }
 
 /**
+ * Atomically update a lead's engagement fields (email/SMS receipt counters,
+ * flags, and the commsEvents log) via a single UpdateCommand — the webhook
+ * (Resend/Twilio) and cron/admin writers all race on the same lead, and the
+ * get→merge→put in updateLead() would let a slow writer clobber a faster one's
+ * counter bump. `set` overwrites paths outright; `increment` bumps a (possibly
+ * nested) numeric path, seeding it to 0 first via if_not_exists so a lead that's
+ * never had e.g. emailEngagement.opensCount still increments correctly;
+ * `appendCommsEvent` list_appends one entry onto commsEvents (uncapped here —
+ * the 100-entry cap is enforced on read, or by the legacy fallback below, per
+ * the comment on that path).
+ *
+ * Nested increment paths (emailEngagement.opensCount) need their PARENT map to
+ * already exist for DynamoDB's `if_not_exists` on the leaf to work — rather
+ * than pre-checking, we just attempt the update and on ANY failure (e.g. a
+ * ValidationException because the map doesn't exist yet) fall back to the
+ * legacy updateLead() get→merge→put path, so behavior is never worse than
+ * before this function existed.
+ */
+export async function atomicLeadEngagement(
+  id: string,
+  opts: {
+    set?: Record<string, string | number | boolean>;
+    increment?: Record<string, number>;
+    appendCommsEvent?: object;
+  },
+): Promise<void> {
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+  const sets: string[] = [];
+  let n = 0;
+
+  const pathExpr = (path: string): string =>
+    path
+      .split(".")
+      .map((seg) => {
+        n += 1;
+        const alias = `#p${n}`;
+        names[alias] = seg;
+        return alias;
+      })
+      .join(".");
+
+  for (const [path, val] of Object.entries(opts.set || {})) {
+    const vAlias = `:v${n + 1}`;
+    values[vAlias] = val;
+    sets.push(`${pathExpr(path)} = ${vAlias}`);
+  }
+  for (const [path, delta] of Object.entries(opts.increment || {})) {
+    const zeroAlias = `:z${n + 1}`;
+    const nAlias = `:n${n + 1}`;
+    values[zeroAlias] = 0;
+    values[nAlias] = delta;
+    const expr = pathExpr(path);
+    sets.push(`${expr} = if_not_exists(${expr}, ${zeroAlias}) + ${nAlias}`);
+  }
+  if (opts.appendCommsEvent) {
+    values[":emptyList"] = [];
+    values[":commsEntry"] = [opts.appendCommsEvent];
+    sets.push("commsEvents = list_append(if_not_exists(commsEvents, :emptyList), :commsEntry)");
+  }
+  if (!sets.length) return;
+
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "SET " + sets.join(", "),
+        ConditionExpression: "attribute_exists(id)",
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+      }),
+    );
+  } catch (e) {
+    // Nested paths whose parent map doesn't exist yet raise a ValidationException
+    // (and the lead-missing condition raises a ConditionalCheckFailedException) —
+    // either way, fall back to the legacy whole-item path rather than losing the
+    // write. Build the equivalent merge patch from the same opts.
+    console.warn(`[store] atomicLeadEngagement fell back to updateLead for lead=${id}:`, e);
+    const cur = await ddb.send(new GetCommand({ TableName: LEADS_TABLE, Key: { id } }));
+    if (!cur.Item) return;
+    const lead = cur.Item as Lead;
+    const patch: Record<string, unknown> = {};
+    for (const [path, val] of Object.entries(opts.set || {})) setPath(patch, lead, path, val);
+    for (const [path, delta] of Object.entries(opts.increment || {})) {
+      const before = (getPath(lead, path) as number | undefined) || 0;
+      setPath(patch, lead, path, before + delta);
+    }
+    if (opts.appendCommsEvent) {
+      const MAX_COMMS_EVENTS = 100;
+      patch.commsEvents = [...(lead.commsEvents || []), opts.appendCommsEvent].slice(-MAX_COMMS_EVENTS);
+    }
+    await updateLead(id, patch as Partial<Lead>);
+  }
+}
+
+/** Read a (possibly dotted) path off an object. Used only by atomicLeadEngagement's fallback. */
+function getPath(obj: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), obj);
+}
+
+/** Set a (possibly dotted) path on `patch`, copying forward the existing nested
+ * object from `base` first so sibling keys in the same map survive the merge.
+ * Used only by atomicLeadEngagement's fallback. */
+function setPath(patch: Record<string, unknown>, base: unknown, path: string, val: unknown): void {
+  const segs = path.split(".");
+  if (segs.length === 1) {
+    patch[segs[0]] = val;
+    return;
+  }
+  const [head, ...rest] = segs;
+  const baseChild = base && typeof base === "object" ? (base as Record<string, unknown>)[head] : undefined;
+  const patchChild = (patch[head] as Record<string, unknown> | undefined) || { ...(baseChild as object | undefined) };
+  setPath(patchChild, baseChild, rest.join("."), val);
+  patch[head] = patchChild;
+}
+
+/**
  * Atomically claim the one-time "offline Purchase sent to Meta" flag for a lead.
  * Returns true ONLY for the caller that wins the claim (conditional on the flag
  * being unset), so concurrent admin edits can never double-fire the Purchase

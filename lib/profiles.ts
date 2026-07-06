@@ -6,7 +6,6 @@ import type {
   LeadStatus,
   Attribution,
   Behavior,
-  Lookup,
   Profile,
   ProfileEvent,
   DeviceInfo,
@@ -124,13 +123,20 @@ export function buildProfiles(
     else groups.set(root, [rec]);
   }
 
-  // Index the event stream once: by sessionId and by server-resolved leadId.
+  // Index the event stream once: by sessionId, by durable visitorId, and by
+  // server-resolved leadId.
   const eventsBySession = new Map<string, SiteEvent[]>();
+  const eventsByVisitorId = new Map<string, SiteEvent[]>();
   const eventsByLeadId = new Map<string, SiteEvent[]>();
   for (const e of siteEvents) {
     const s = eventsBySession.get(e.sessionId);
     if (s) s.push(e);
     else eventsBySession.set(e.sessionId, [e]);
+    if (e.vid) {
+      const v = eventsByVisitorId.get(e.vid);
+      if (v) v.push(e);
+      else eventsByVisitorId.set(e.vid, [e]);
+    }
     if (e.leadId) {
       const l = eventsByLeadId.get(e.leadId);
       if (l) l.push(e);
@@ -139,7 +145,8 @@ export function buildProfiles(
   }
 
   const profiles: Profile[] = [];
-  for (const [root, group] of groups) profiles.push(buildOne(root, group, eventsBySession, eventsByLeadId));
+  for (const [root, group] of groups)
+    profiles.push(buildOne(root, group, eventsBySession, eventsByVisitorId, eventsByLeadId));
   profiles.sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""));
   return profiles;
 }
@@ -379,6 +386,7 @@ function buildOne(
   root: string,
   group: Rec[],
   eventsBySession: Map<string, SiteEvent[]> = new Map(),
+  eventsByVisitorId: Map<string, SiteEvent[]> = new Map(),
   eventsByLeadId: Map<string, SiteEvent[]> = new Map(),
 ): Profile {
   const leads = group.filter((r): r is Extract<Rec, { kind: "lead" }> => r.kind === "lead").map((r) => r.lead);
@@ -430,6 +438,15 @@ function buildOne(
     .filter((a): a is string => Boolean(a))
     .sort()
     .pop();
+
+  // Earliest-across-real-leads timestamps for the canonical funnel (audit B4) —
+  // real leads only, so an abandoned/spam lead can't backdate these.
+  const realLeads = leads.filter((l) => l.status !== "partial" && l.status !== "spam");
+  const earliestOf = (pick: (l: Lead) => string | undefined): string | undefined =>
+    realLeads.map(pick).filter((t): t is string => Boolean(t)).sort()[0];
+  const contactedAt = earliestOf((l) => l.contactedAt);
+  const offerSentAt = earliestOf((l) => l.offerSentAt);
+  const scheduledAt = earliestOf((l) => l.scheduledAt);
 
   // Economics, computed over CLOSED leads only: purchasePrice is cost, revenue
   // is real sale (falling back to the expected resale when a deal hasn't been
@@ -500,12 +517,16 @@ function buildOne(
   for (const rf of referrals) timeline.push({ at: rf.createdAt, type: "referral", label: `Referred a friend (code ${rf.code})` });
 
   // On-site activity from the first-party event stream: everything under this
-  // person's known session ids, plus events server-stitched by leadId (e.g. a
-  // booking page opened from an email on another device). Deduped by sort key.
+  // person's known session ids, plus events carrying their durable visitor id
+  // (stitches a RETURN visit, whose sessionId rotated, back to the same
+  // person), plus events server-stitched by leadId (e.g. a booking page opened
+  // from an email on another device). Deduped by sort key.
   const siteEvs = new Map<string, SiteEvent>();
   for (const l of leads) {
     const sid = l.behavior?.sessionId;
     for (const e of (sid && eventsBySession.get(sid)) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
+    const vid = l.behavior?.visitorId;
+    if (vid) for (const e of eventsByVisitorId.get(vid) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
     for (const e of eventsByLeadId.get(l.id) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
   }
   timeline.push(...condenseSiteEvents([...siteEvs.values()]));
@@ -584,6 +605,9 @@ function buildOne(
     offer: offer || undefined,
     offerMid,
     appointmentAt,
+    contactedAt,
+    offerSentAt,
+    scheduledAt,
     purchasePrice,
     cashPaidOut,
     revenue,
@@ -603,80 +627,4 @@ function buildOne(
   };
   const { score, breakdown } = computeScore(base, leads);
   return { ...base, score, scoreBreakdown: breakdown };
-}
-
-// ---- Dashboard aggregates (computed from the same scan) ----------------------
-
-export interface Aggregates {
-  totals: { profiles: number; leads: number; partials: number; lookups: number };
-  funnel: { label: string; count: number }[];
-  byStatus: { label: string; count: number }[];
-  bySource: { label: string; count: number }[];
-  byCampaign: { label: string; count: number }[];
-  overTime: { date: string; leads: number }[];
-  revenue: { closed: number; total: number; avgOffer: number };
-  avgFirstResponseMins: number | null;
-}
-
-function topCounts(labels: string[], limit = 12): { label: string; count: number }[] {
-  const m = new Map<string, number>();
-  for (const l of labels) m.set(l, (m.get(l) || 0) + 1);
-  return [...m.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
-}
-
-export function computeAggregates(leads: Lead[], lookups: Lookup[], profiles: Profile[]): Aggregates {
-  const real = leads.filter((l) => l.status !== "partial" && l.status !== "spam");
-  const partials = leads.filter((l) => l.status === "partial");
-
-  const funnel = [
-    { label: "Price lookups", count: lookups.length },
-    { label: "Started (partial)", count: partials.length },
-    { label: "Leads", count: real.length },
-    { label: "Offers sent", count: real.filter((l) => l.offer || l.offerSentAt).length },
-    { label: "Bookings", count: real.filter((l) => l.appointmentAt || l.status === "scheduled").length },
-    { label: "Closed", count: real.filter((l) => l.status === "closed").length },
-  ];
-
-  const byStatus = topCounts(real.map((l) => l.status), 8);
-  const bySource = topCounts(profiles.map((p) => p.source));
-  const byCampaign = topCounts(
-    profiles.map((p) => p.attribution?.utmCampaign).filter((c): c is string => Boolean(c)),
-  );
-
-  // Leads over the last 30 days, by day (YYYY-MM-DD, Edmonton-ish via ISO date).
-  const dayMap = new Map<string, number>();
-  const cutoff = Date.now() - 30 * 86_400_000;
-  for (const l of real) {
-    const t = l.createdAt ? Date.parse(l.createdAt) : NaN;
-    if (Number.isFinite(t) && t >= cutoff) {
-      const d = new Date(t).toISOString().slice(0, 10);
-      dayMap.set(d, (dayMap.get(d) || 0) + 1);
-    }
-  }
-  const overTime = [...dayMap.entries()].map(([date, n]) => ({ date, leads: n })).sort((a, b) => a.date.localeCompare(b.date));
-
-  const closedLeads = real.filter((l) => l.status === "closed");
-  const total = closedLeads.reduce((s, l) => s + (l.purchasePrice || 0), 0);
-  const offers = real.map((l) => l.offer).filter((o): o is NonNullable<Lead["offer"]> => Boolean(o));
-  const avgOffer = offers.length ? Math.round(offers.reduce((s, o) => s + (o.low + o.high) / 2, 0) / offers.length) : 0;
-
-  const latencies = real
-    .filter((l) => l.firstTouchAt && l.createdAt)
-    .map((l) => (Date.parse(l.firstTouchAt as string) - Date.parse(l.createdAt)) / 60_000)
-    .filter((m) => m >= 0);
-  const avgFirstResponseMins = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
-
-  return {
-    totals: { profiles: profiles.length, leads: real.length, partials: partials.length, lookups: lookups.length },
-    funnel,
-    byStatus,
-    bySource,
-    byCampaign,
-    overTime,
-    revenue: { closed: closedLeads.length, total, avgOffer },
-    avgFirstResponseMins,
-  };
 }

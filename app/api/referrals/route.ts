@@ -7,6 +7,7 @@ import type { Referral } from "@/lib/types";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sendCapiLead, splitName } from "@/lib/metaCapi";
+import { parseAttribution, parseTouches, parseBehavior } from "@/lib/attribution";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Server-side mirror of the banner's opt-out (lib/consent.ts) — a denial
+    // skips the Meta CAPI send below AND storing the attribution/behavior data.
+    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
+
+    // Per-person profile enrichment (mirrors app/api/leads/partial/route.ts).
+    const attribution = consentDenied ? undefined : parseAttribution(body.attribution);
+    const touchHistory = consentDenied ? undefined : parseTouches(body.touches);
+    const behavior = consentDenied ? undefined : parseBehavior(body.behavior);
+
     const ref: Referral = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -64,6 +74,9 @@ export async function POST(req: NextRequest) {
       },
       message: String(body.message || "").trim() || undefined,
       code: code(referrerName),
+      ...(attribution ? { attribution } : {}),
+      ...(touchHistory ? { touchHistory } : {}),
+      ...(behavior ? { behavior } : {}),
     };
 
     await addReferral(ref);
@@ -74,7 +87,6 @@ export async function POST(req: NextRequest) {
     // Meta Conversions API "CompleteRegistration" event (best-effort; after the
     // referral is saved). Server-side mirror of the banner's opt-out (lib/consent.ts)
     // — skipped entirely on a stored consent denial.
-    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
     if (!consentDenied) {
       await sendCapiLead({
         eventId: String(body.metaEventId || "") || crypto.randomUUID(),

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
-import type { Profile, AdInsight, Ga4Traffic, Touch } from "@/lib/types";
+import type { EventAnalytics } from "@/lib/eventAnalytics";
+import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
 import {
   computeView,
   filterProfiles,
@@ -21,6 +22,8 @@ import { META_SEGMENTS, segmentProfiles, buildMetaCsv, type MetaSegment } from "
 //  Customer-360 analytics dashboard. All data is computed server-side (profiles)
 //  then filtered + re-aggregated in the browser (lib/analyticsView) so the filter
 //  bar is instant. Hand-rolled charts (CSS width %) — no charting dependency.
+//  Four tabs (Overview / Acquisition / Funnel / People) driven by one sticky
+//  global control bar (date range + dimension filters).
 // ---------------------------------------------------------------------------
 
 const STAGE_STYLE: Record<string, string> = {
@@ -79,7 +82,7 @@ const SRC = {
   ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
   comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
   clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
-  events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Not affected by the filter bar above.",
+  events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Reflects the event window selected in the control bar above.",
   journey: "Your website's database — every marketing source this person arrived from, oldest to newest. First chip = first touch.",
   score: "Computed from this person's own activity — recency, engagement, funnel depth, vehicle value, and source. Not machine learning; every point is explained in the breakdown inside the profile. A prioritization aid, not a prediction.",
   enrich: "Derived from data the customer already gave us — email provider type, phone area-code region, and a vehicle value tier. No extra questions asked, no outside services.",
@@ -130,12 +133,26 @@ function InfoDot({ tip }: { tip: string }) {
   );
 }
 
-function StatCard({ label, value, sub, tip }: { label: string; value: string; sub?: string; tip?: string }) {
+function StatCard({ label, value, sub, tip, delta }: { label: string; value: string; sub?: string; tip?: string; delta?: ReactNode }) {
   return (
     <div className="card p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}{tip && <InfoDot tip={tip} />}</div>
       <div className="mt-1 text-2xl font-bold text-navy">{value}</div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
+      {delta}
+    </div>
+  );
+}
+
+/** Delta chip vs the previous equal-length period (preset ranges only). */
+function Delta({ now, prev }: { now: number; prev: number }) {
+  const diff = now - prev;
+  if (prev === 0 && diff === 0) return <div className="mt-0.5 text-[11px] text-muted">— vs prev period</div>;
+  const up = diff >= 0;
+  const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
+  return (
+    <div className={`mt-0.5 text-[11px] font-semibold ${up ? "text-emerald-600" : "text-red-600"}`}>
+      {up ? "▲" : "▼"} {up ? "+" : ""}{diff}{pct != null ? ` (${up ? "+" : ""}${pct}%)` : ""} <span className="font-normal text-muted">vs prev period</span>
     </div>
   );
 }
@@ -208,12 +225,31 @@ function VBars({ title, rows, tip }: { title: string; rows: { date: string; lead
   );
 }
 
+/** Compact per-day mini bar chart — data-health strip. Generic value key. */
+function MiniBars({ title, rows, tip }: { title: string; rows: { day: string; value: number }[]; tip?: string }) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <div className="card p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">No data.</p>
+      ) : (
+        <div className="flex h-20 items-end gap-0.5 overflow-x-auto">
+          {rows.map((r) => (
+            <div key={r.day} className="min-w-[3px] flex-1 rounded-t bg-brand-600/80" style={{ height: `${(r.value / max) * 100}%` }} title={`${r.day}: ${r.value}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Heatmap({ grid, tip }: { grid: number[][]; tip?: string }) {
   const max = Math.max(1, ...grid.flat());
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return (
     <div className="card overflow-x-auto p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, your time){tip && <InfoDot tip={tip} />}</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, Mountain time){tip && <InfoDot tip={tip} />}</h3>
       <div className="min-w-[560px] space-y-0.5">
         {grid.map((row, d) => (
           <div key={d} className="flex items-center gap-0.5">
@@ -371,6 +407,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {a?.utmCampaign && <Row k="Campaign" v={a.utmCampaign} />}
             {a?.utmMedium && <Row k="Medium" v={a.utmMedium} />}
             {a?.utmContent && <Row k="Ad / content" v={a.utmContent} />}
+            {a?.utmTerm && <Row k="Term" v={a.utmTerm} />}
             {a?.referrer && <Row k="Referrer" v={a.referrer} />}
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
             {loc && <Row k="Location" v={loc} />}
@@ -513,29 +550,329 @@ function Section({ title, children, tip }: { title: string; children: ReactNode;
   );
 }
 
-function AdPerformance({ profiles }: { profiles: Profile[] }) {
-  const [range, setRange] = useState("last_30d");
-  const [data, setData] = useState<{ configured: boolean; insights: AdInsight[] } | null>(null);
-  const [loading, setLoading] = useState(true);
+// ---------------------------------------------------------------------------
+//  Global control bar — date range presets/custom + collapsible dimension
+//  filters. Drives every tab: profiles by date, Meta/GA4 by mapped range, and
+//  the first-party event window.
+// ---------------------------------------------------------------------------
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/admin/ads?range=${range}`)
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData({ configured: false, insights: [] }); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [range]);
+type Preset = "7d" | "30d" | "90d" | "all" | "custom";
 
+interface RangeState {
+  preset: Preset;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/** Preset → { dateFrom, dateTo } in local YYYY-MM-DD, or empty for All/custom. */
+function presetDates(preset: Preset): { dateFrom?: string; dateTo?: string } {
+  if (preset === "custom" || preset === "all") return {};
+  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90;
+  const to = new Date();
+  const from = new Date(to.getTime() - (days - 1) * 86_400_000);
+  // Anchor to Mountain Time so range edges agree with the MT day bucketing in
+  // the charts regardless of where the dashboard is viewed from.
+  const iso = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" }); // YYYY-MM-DD
+  return { dateFrom: iso(from), dateTo: iso(to) };
+}
+
+/** Number of days a preset covers (for the previous-period delta shift). */
+function presetDays(preset: Preset): number | null {
+  return preset === "7d" ? 7 : preset === "30d" ? 30 : preset === "90d" ? 90 : null;
+}
+
+/** Meta date_preset for the selected range. Custom/All map to the nearest of the
+ * three presets Meta supports here; the caller shows a note when approximated. */
+function metaRange(r: RangeState): { range: string; approx: boolean } {
+  if (r.preset === "7d") return { range: "last_7d", approx: false };
+  if (r.preset === "30d") return { range: "last_30d", approx: false };
+  if (r.preset === "90d") return { range: "last_90d", approx: false };
+  if (r.preset === "all") return { range: "last_90d", approx: true };
+  // custom → span in days → nearest of 7/30/90
+  const from = r.dateFrom ? Date.parse(r.dateFrom) : NaN;
+  const to = r.dateTo ? Date.parse(r.dateTo) : Date.now();
+  const span = Number.isFinite(from) ? (to - from) / 86_400_000 : 30;
+  const nearest = [7, 30, 90].reduce((a, b) => (Math.abs(b - span) < Math.abs(a - span) ? b : a), 30);
+  return { range: `last_${nearest}d`, approx: true };
+}
+
+/** GA4 days for the selected range (same nearest-of-three + note rule). */
+function ga4Days(r: RangeState): { days: number; approx: boolean } {
+  const m = metaRange(r);
+  return { days: m.range === "last_7d" ? 7 : m.range === "last_90d" ? 90 : 30, approx: m.approx };
+}
+
+/** Smallest rolling event window that still covers the selection. */
+function eventWindow(r: RangeState, ev: AnalyticsData["events"]): { data: EventAnalytics; label: string } {
+  if (r.preset === "7d") return { data: ev.d7, label: "last 7 days" };
+  if (r.preset === "30d") return { data: ev.d30, label: "last 30 days" };
+  if (r.preset === "90d") return { data: ev.d90, label: "last 90 days" };
+  if (r.preset === "all") return { data: ev.all, label: "all time" };
+  // custom → smallest window covering the span
+  const from = r.dateFrom ? Date.parse(r.dateFrom) : NaN;
+  const to = r.dateTo ? Date.parse(r.dateTo) : Date.now();
+  const span = Number.isFinite(from) ? (to - from) / 86_400_000 : 30;
+  if (span <= 7) return { data: ev.d7, label: "last 7 days" };
+  if (span <= 30) return { data: ev.d30, label: "last 30 days" };
+  if (span <= 90) return { data: ev.d90, label: "last 90 days" };
+  return { data: ev.all, label: "all time" };
+}
+
+function ControlBar({
+  range,
+  setRange,
+  filters,
+  set,
+  options,
+  activeFilters,
+  clearFilters,
+  countLabel,
+}: {
+  range: RangeState;
+  setRange: (r: RangeState) => void;
+  filters: Filters;
+  set: (patch: Partial<Filters>) => void;
+  options: ReturnType<typeof computeFilterOptions>;
+  activeFilters: number;
+  clearFilters: () => void;
+  countLabel: string;
+}) {
+  const [showFilters, setShowFilters] = useState(false);
+  const presets: { key: Preset; label: string }[] = [
+    { key: "7d", label: "7d" },
+    { key: "30d", label: "30d" },
+    { key: "90d", label: "90d" },
+    { key: "all", label: "All" },
+  ];
+  return (
+    <div className="sticky top-0 z-40 -mx-4 mb-6 border-b border-slate-200 bg-bg/95 px-4 py-3 backdrop-blur">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+          {presets.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setRange({ preset: p.key })}
+              className={`px-3 py-1.5 text-sm font-semibold ${range.preset === p.key ? "bg-brand-600 text-white" : "bg-white text-navy hover:bg-slate-50"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1 text-xs text-muted">
+          From
+          <input
+            type="date"
+            className="field py-1 text-sm"
+            value={range.preset === "custom" ? range.dateFrom || "" : ""}
+            onChange={(e) => setRange({ preset: "custom", dateFrom: e.target.value || undefined, dateTo: range.dateTo })}
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-muted">
+          To
+          <input
+            type="date"
+            className="field py-1 text-sm"
+            value={range.preset === "custom" ? range.dateTo || "" : ""}
+            onChange={(e) => setRange({ preset: "custom", dateFrom: range.dateFrom, dateTo: e.target.value || undefined })}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className={`rounded-full px-3 py-1.5 text-sm font-semibold ${activeFilters > 0 ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-navy hover:bg-slate-200"}`}
+        >
+          Filters{activeFilters > 0 ? ` (${activeFilters})` : ""} {showFilters ? "▲" : "▼"}
+        </button>
+        <span className="ml-auto self-center text-sm text-muted">{countLabel}</span>
+      </div>
+      {showFilters && (
+        <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
+          <Sel label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
+          <Sel label="Province/Region" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
+          <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
+          <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
+          <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
+          <Sel label="Score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} />
+          {activeFilters > 0 && (
+            <button type="button" onClick={clearFilters} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
+              Clear ({activeFilters})
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Funnel economics — the Overview hero. One row per Meta campaign (level=ad
+//  rows grouped by campaignId), plus an untagged/organic row for profiles that
+//  match no campaign. Joins DB leads to campaigns by any-touch utm_campaign.
+// ---------------------------------------------------------------------------
+
+/** Does a profile carry this campaign name on any touch (or first-touch attr)? */
+function profileMatchesCampaign(p: Profile, campaign: string): boolean {
+  if (!campaign) return false;
+  if (p.attribution?.utmCampaign === campaign) return true;
+  return (p.touchHistory || []).some((t) => t.utmCampaign === campaign);
+}
+
+/** Any campaign at all (used to bucket the organic remainder). */
+function profileHasAnyCampaign(p: Profile, campaigns: Set<string>): boolean {
+  if (p.attribution?.utmCampaign && campaigns.has(p.attribution.utmCampaign)) return true;
+  return (p.touchHistory || []).some((t) => t.utmCampaign && campaigns.has(t.utmCampaign));
+}
+
+function FunnelEconomics({
+  profiles,
+  ads,
+  configured,
+  dateBounds,
+}: {
+  profiles: Profile[];
+  ads: AdInsightAd[];
+  configured: boolean;
+  dateBounds: { dateFrom?: string; dateTo?: string };
+}) {
   const rows = useMemo(() => {
-    // Leads + cost-per-lead come from Meta's own Pixel numbers (match Ads Manager).
-    // Margin still uses YOUR closed-deal data, matched to the campaign by any UTM
-    // touch and bounded to the same range window as the Meta numbers above.
-    const days = range === "last_7d" ? 7 : range === "last_90d" ? 90 : 30;
+    // Margin counts deals CLOSED inside the selected window (same attribution
+    // window as the Acquisition campaign table), not deals whose LEAD arrived
+    // in it — otherwise the two tabs report different mROAS for one campaign.
+    const from = dateBounds.dateFrom ? Date.parse(dateBounds.dateFrom + "T00:00:00") : null;
+    const to = dateBounds.dateTo ? Date.parse(dateBounds.dateTo + "T23:59:59") : null;
+    const closedInRange = (p: Profile) => {
+      if (from == null && to == null) return p.stage === "closed" || Boolean(p.closedAt);
+      if (!p.closedAt) return false;
+      const t = Date.parse(p.closedAt);
+      if (!Number.isFinite(t)) return false;
+      if (from != null && t < from) return false;
+      if (to != null && t > to) return false;
+      return true;
+    };
+    // Group level=ad rows into campaigns (spend/impr/link-clicks summed).
+    const byCampaign = new Map<string, { campaignId: string; campaign: string; spend: number; impressions: number; linkClicks: number }>();
+    for (const ad of ads) {
+      const key = ad.campaignId || ad.campaign;
+      const row = byCampaign.get(key) || { campaignId: ad.campaignId, campaign: ad.campaign, spend: 0, impressions: 0, linkClicks: 0 };
+      row.spend += ad.spend;
+      row.impressions += ad.impressions;
+      row.linkClicks += ad.linkClicks;
+      if (!row.campaign || row.campaign === "(unnamed)") row.campaign = ad.campaign;
+      byCampaign.set(key, row);
+    }
+    const campaignNames = new Set([...byCampaign.values()].map((c) => c.campaign));
+
+    const build = (
+      label: string,
+      spend: number,
+      impressions: number,
+      linkClicks: number,
+      matched: Profile[],
+    ) => {
+      const leads = matched.length;
+      const qualified = matched.filter((p) => p.score >= 70).length;
+      const booked = matched.filter((p) => p.scheduledAt || p.appointmentAt || p.stage === "scheduled" || p.stage === "closed").length;
+      const closedP = matched.filter(closedInRange);
+      const margin = closedP.reduce((s, p) => s + (p.margin || 0), 0);
+      return {
+        label,
+        spend,
+        impressions,
+        linkClicks,
+        leads,
+        cpl: leads ? spend / leads : null,
+        qualified,
+        cpql: qualified ? spend / qualified : null,
+        booked,
+        costBooked: booked ? spend / booked : null,
+        closed: closedP.length,
+        margin,
+        mroas: spend ? margin / spend : null,
+      };
+    };
+
+    const out = [...byCampaign.values()]
+      .sort((a, b) => b.spend - a.spend)
+      .map((c) => build(c.campaign, c.spend, c.impressions, c.linkClicks, profiles.filter((p) => profileMatchesCampaign(p, c.campaign))));
+
+    // Organic / untagged remainder — profiles matching no known campaign.
+    const organic = profiles.filter((p) => !profileHasAnyCampaign(p, campaignNames));
+    out.push(build("(untagged / organic)", 0, 0, 0, organic));
+    return out;
+  }, [profiles, ads, dateBounds]);
+
+  return (
+    <div className="card overflow-x-auto p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-navy">
+          Funnel economics — per campaign
+          <InfoDot tip="Spend / impressions / link clicks come from Meta (level=ad rows, grouped by campaign). Leads, qualified, booked, closed & margin come from YOUR database, matched to the campaign by any UTM touch (utm_campaign={{campaign.name}}). Untagged / organic = leads matching no Meta campaign." />
+        </h3>
+      </div>
+      {!configured && (
+        <p className="mb-3 text-xs text-muted">
+          <span className="font-semibold text-navy">Meta not connected</span> — spend columns read zero. DB-side columns (leads/qualified/booked/closed/margin) still populate.
+        </p>
+      )}
+      <table className="w-full min-w-[980px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+            <th className="py-2 pr-2" title="Meta campaign name.">Campaign</th>
+            <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
+            <th className="px-2 text-right" title="Meta Ads API — times shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — inline link clicks.">Link clicks</th>
+            <th className="px-2 text-right" title="Your database — people who created a real lead in range, matched to this campaign by any UTM touch.">Leads</th>
+            <th className="px-2 text-right" title="Spend ÷ DB leads.">CPL</th>
+            <th className="px-2 text-right" title="Your database — matched leads with a lead score of 70 or higher.">Qualified</th>
+            <th className="px-2 text-right" title="Spend ÷ qualified leads.">CPQL</th>
+            <th className="px-2 text-right" title="Your database — matched leads that reached booked/closed.">Booked</th>
+            <th className="px-2 text-right" title="Spend ÷ booked.">Cost/booked</th>
+            <th className="px-2 text-right" title="Your database — matched closed deals.">Closed</th>
+            <th className="px-2 text-right" title="Margin from matched deals closed in range = sale price (actual, or expected) minus cost.">Margin</th>
+            <th className="pl-2 text-right" title="Margin ÷ spend.">mROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={13} className="py-3 text-muted">No campaigns or leads in range.</td></tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.label} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy">{r.label}</td>
+                <td className="px-2 text-right">{r.spend ? money(r.spend) : "—"}</td>
+                <td className="px-2 text-right">{r.impressions ? r.impressions.toLocaleString("en-CA") : "—"}</td>
+                <td className="px-2 text-right">{r.linkClicks ? r.linkClicks.toLocaleString("en-CA") : "—"}</td>
+                <td className="px-2 text-right font-semibold">{r.leads}</td>
+                <td className="px-2 text-right">{money2(r.cpl)}</td>
+                <td className="px-2 text-right">{r.qualified}</td>
+                <td className="px-2 text-right">{money2(r.cpql)}</td>
+                <td className="px-2 text-right">{r.booked}</td>
+                <td className="px-2 text-right">{money2(r.costBooked)}</td>
+                <td className="px-2 text-right">{r.closed}</td>
+                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
+                <td className="pl-2 text-right">{r.mroas != null ? `${r.mroas.toFixed(1)}×` : "—"}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-muted">
+        Spend/impressions/link-clicks from Meta (grouped from level=ad rows). Leads, qualified (score ≥ 70), booked, closed &amp; margin come from your own database, matched to the campaign by any UTM touch — ads must carry <code className="rounded bg-slate-100 px-1">utm_campaign={"{{campaign.name}}"}</code> for the join to work. Untagged / organic collects leads that match no Meta campaign.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Meta campaign table (Acquisition) — link-clicks-honest spend/CPL/ROAS,
+//  driven by the campaign-level insights fetch.
+// ---------------------------------------------------------------------------
+
+function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; insights: AdInsight[]; days: number }) {
+  const rows = useMemo(() => {
     const cutoff = Date.now() - days * 86_400_000;
-    return (data?.insights || []).map((ins) => {
+    return insights.map((ins) => {
       const ps = profiles.filter(
         (p) => p.attribution?.utmCampaign === ins.campaign || (p.touchHistory || []).some((t) => t.utmCampaign === ins.campaign),
       );
@@ -546,74 +883,92 @@ function AdPerformance({ profiles }: { profiles: Profile[] }) {
       const cpl = ins.costPerLead ?? (leads ? ins.spend / leads : null);
       return { ...ins, leads, margin, cpl, roas: ins.spend ? margin / ins.spend : null };
     });
-  }, [data, profiles, range]);
+  }, [insights, profiles, days]);
 
-  const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
-  const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
-  const totalMargin = rows.reduce((s, r) => s + r.margin, 0);
-
-  if (loading) return <div className="card p-4 text-sm text-muted">Loading ad performance…</div>;
-  if (!data?.configured) {
-    return (
-      <div className="card p-4 text-sm text-muted">
-        <span className="font-semibold text-navy">Meta ads not connected yet.</span> Add{" "}
-        <code className="rounded bg-slate-100 px-1">META_MARKETING_TOKEN</code> and{" "}
-        <code className="rounded bg-slate-100 px-1">META_AD_ACCOUNT_ID</code> in Amplify to see spend, cost-per-lead, and ROAS here.
-      </div>
-    );
-  }
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Ad spend" value={money(totalSpend)} tip="Meta Ads API — total you paid Meta to run this ad." />
-          <StatCard label="Leads from ads" value={String(totalLeads)} tip="Meta Pixel — form-fills Meta attributes to your ad. Same number as Ads Manager." />
-          <StatCard label="Cost / lead" value={money2(totalLeads ? totalSpend / totalLeads : null)} tip="Meta ad spend ÷ Meta Pixel leads — matches Ads Manager's cost per result." />
-          <StatCard label="Margin ROAS" value={totalSpend ? `${(totalMargin / totalSpend).toFixed(1)}×` : "—"} sub={money(totalMargin)} tip="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name})." />
-        </div>
-        <select className="field py-1 text-sm" value={range} onChange={(e) => setRange(e.target.value)}>
-          <option value="last_7d">Last 7 days</option>
-          <option value="last_30d">Last 30 days</option>
-          <option value="last_90d">Last 90 days</option>
-        </select>
-      </div>
-      <div className="card overflow-x-auto p-4">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
-              <th className="py-2 pr-2" title="Campaign name from Meta.">Campaign</th>
-              <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-              <th className="px-2 text-right" title="Meta Ads API — times your ad was shown.">Impr.</th>
-              <th className="px-2 text-right" title="Meta Ads API — link clicks.">Clicks</th>
-              <th className="px-2 text-right" title="Meta Ads API — click-through rate.">CTR</th>
-              <th className="px-2 text-right" title="Meta Pixel — leads Meta attributes to the ad.">Leads</th>
-              <th className="px-2 text-right" title="Meta ad spend ÷ Meta Pixel leads.">Cost/lead</th>
-              <th className="px-2 text-right" title="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name}).">Margin</th>
-              <th className="pl-2 text-right" title="Margin ÷ spend.">ROAS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr><td colSpan={9} className="py-3 text-muted">No ad spend in range.</td></tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.campaign} className="border-b border-slate-100">
-                  <td className="py-2 pr-2 font-semibold text-navy">{r.campaign}</td>
-                  <td className="px-2 text-right">{money(r.spend)}</td>
-                  <td className="px-2 text-right">{r.impressions.toLocaleString("en-CA")}</td>
-                  <td className="px-2 text-right">{r.clicks.toLocaleString("en-CA")}</td>
-                  <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
-                  <td className="px-2 text-right">{r.leads}</td>
-                  <td className="px-2 text-right font-semibold">{money2(r.cpl)}</td>
-                  <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
-                  <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}).</p>
-      </div>
+    <div className="card overflow-x-auto p-4">
+      <table className="w-full min-w-[720px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+            <th className="py-2 pr-2" title="Campaign name from Meta.">Campaign</th>
+            <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
+            <th className="px-2 text-right" title="Meta Ads API — times your ad was shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — link clicks.">Link clicks</th>
+            <th className="px-2 text-right" title="Meta Ads API — link click-through rate.">CTR</th>
+            <th className="px-2 text-right" title="Meta Pixel — leads Meta attributes to the ad.">Leads</th>
+            <th className="px-2 text-right" title="Meta ad spend ÷ Meta Pixel leads.">Cost/lead</th>
+            <th className="px-2 text-right" title="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name}).">Margin</th>
+            <th className="pl-2 text-right" title="Margin ÷ spend.">ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={9} className="py-3 text-muted">No ad spend in range.</td></tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.campaign} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy">{r.campaign}</td>
+                <td className="px-2 text-right">{money(r.spend)}</td>
+                <td className="px-2 text-right">{r.impressions.toLocaleString("en-CA")}</td>
+                <td className="px-2 text-right">{r.clicks.toLocaleString("en-CA")}</td>
+                <td className="px-2 text-right">{r.ctr.toFixed(1)}%</td>
+                <td className="px-2 text-right">{r.leads}</td>
+                <td className="px-2 text-right font-semibold">{money2(r.cpl)}</td>
+                <td className="px-2 text-right">{r.margin ? money(r.margin) : "—"}</td>
+                <td className="pl-2 text-right">{r.roas != null ? `${r.roas.toFixed(1)}×` : "—"}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}).</p>
+    </div>
+  );
+}
+
+/** Creative-level table from level=ad rows: link CTR + hook/hold + Meta leads. */
+function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
+  const rows = useMemo(() => [...ads].sort((a, b) => b.spend - a.spend), [ads]);
+  return (
+    <div className="card overflow-x-auto p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">
+        Creative performance — per ad
+        <InfoDot tip="Meta Ads API (level=ad). Hook % = 3-second plays ÷ impressions; Hold % = ThruPlays ÷ 3-second plays. Image ads have no video metrics — shown as —." />
+      </h3>
+      <table className="w-full min-w-[860px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+            <th className="py-2 pr-2" title="Ad (creative) name.">Ad</th>
+            <th className="px-2" title="Ad set name.">Ad set</th>
+            <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
+            <th className="px-2 text-right" title="Meta Ads API — times shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — link click-through rate.">Link CTR</th>
+            <th className="px-2 text-right" title="3-second video plays ÷ impressions.">Hook %</th>
+            <th className="px-2 text-right" title="ThruPlays ÷ 3-second video plays.">Hold %</th>
+            <th className="px-2 text-right" title="Meta Pixel leads attributed to this ad.">Leads</th>
+            <th className="pl-2 text-right" title="Meta spend ÷ Meta leads.">CPL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={9} className="py-3 text-muted">No ads in range.</td></tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.adId || r.ad} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy" title={r.ad}>{r.ad}</td>
+                <td className="px-2 text-muted" title={r.adset}>{r.adset}</td>
+                <td className="px-2 text-right">{money(r.spend)}</td>
+                <td className="px-2 text-right">{r.impressions.toLocaleString("en-CA")}</td>
+                <td className="px-2 text-right">{r.linkCtr != null ? `${r.linkCtr.toFixed(1)}%` : "—"}</td>
+                <td className="px-2 text-right">{r.hookRate != null ? `${r.hookRate.toFixed(1)}%` : "—"}</td>
+                <td className="px-2 text-right">{r.holdRate != null ? `${r.holdRate.toFixed(1)}%` : "—"}</td>
+                <td className="px-2 text-right">{r.leads ?? "—"}</td>
+                <td className="pl-2 text-right font-semibold">{money2(r.costPerLead ?? (r.leads ? r.spend / r.leads : null))}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -662,8 +1017,7 @@ function MetaExport({ profiles }: { profiles: Profile[] }) {
   );
 }
 
-function TrafficGa4() {
-  const [days, setDays] = useState(30);
+function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
   const [data, setData] = useState<{ configured: boolean; traffic: Ga4Traffic | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -693,23 +1047,20 @@ function TrafficGa4() {
   const n = (x: number) => x.toLocaleString("en-CA");
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard label="Visitors" value={n(t.totals.users)} tip={SRC.ga4} />
-          <StatCard label="New visitors" value={n(t.totals.newUsers)} tip={SRC.ga4} />
-          <StatCard label="Sessions" value={n(t.totals.sessions)} tip={SRC.ga4} />
-          <StatCard label="Pageviews" value={n(t.totals.pageviews)} tip={SRC.ga4} />
-          <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} tip="Google Analytics 4 — share of engaged sessions (GA4's engagement rate)." />
-        </div>
-        <select className="field py-1 text-sm" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
+      {approx && (
+        <p className="text-xs text-amber-700">Approximated to the nearest GA4 window ({days} days) — GA4 here supports 7/30/90-day ranges only.</p>
+      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard label="Visitors" value={n(t.totals.users)} tip={SRC.ga4} />
+        <StatCard label="New visitors" value={n(t.totals.newUsers)} tip={SRC.ga4} />
+        <StatCard label="Sessions" value={n(t.totals.sessions)} tip={SRC.ga4} />
+        <StatCard label="Pageviews" value={n(t.totals.pageviews)} tip={SRC.ga4} />
+        <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} tip="Google Analytics 4 — share of engaged sessions (GA4's engagement rate)." />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} tip={SRC.ga4} />
-        <HBars title="Traffic sources" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
+        <HBars title="Traffic sources — sessions" rows={t.bySource.map((s) => ({ label: s.label, count: s.sessions }))} tip={SRC.ga4} />
+        <HBars title="Traffic sources — visitors" rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
         <HBars title="By country" rows={t.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
         <HBars title="By device" rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
       </div>
@@ -717,16 +1068,235 @@ function TrafficGa4() {
   );
 }
 
+// ---------------------------------------------------------------------------
+//  Data-health strip (Overview) — events/day + sessions/day mini charts, a DB
+//  vs site reconciliation chip, and connector status chips.
+// ---------------------------------------------------------------------------
+
+function DataHealth({
+  ev,
+  windowLabel,
+  dbLeads,
+  metaConfigured,
+  ga4Configured,
+}: {
+  ev: EventAnalytics;
+  windowLabel: string;
+  dbLeads: number;
+  metaConfigured: boolean | null;
+  ga4Configured: boolean | null;
+}) {
+  // Site "generate_lead" sessions in the window = the funnel's Submitted stage.
+  const siteLeads = ev.funnel.find((f) => f.label === "Submitted")?.count ?? 0;
+  const diverge = siteLeads > 0 && Math.abs(dbLeads - siteLeads) / siteLeads > 0.25;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <MiniBars title={`Events per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.events }))} tip={SRC.events} />
+        <MiniBars title={`Sessions per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.sessions }))} tip={SRC.events} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span
+          className={`rounded-full px-3 py-1 font-semibold ${diverge ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-navy"}`}
+          title="DB leads = people who created a real lead in range. Site generate_lead = distinct sessions that reached the Submitted stage in the selected event window. A >25% gap flags a tracking/attribution mismatch."
+        >
+          {diverge ? "⚠ " : ""}DB leads {dbLeads} vs site generate_lead {siteLeads}
+        </span>
+        <span className={`rounded-full px-3 py-1 font-semibold ${metaConfigured ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+          Meta {metaConfigured ? "✓" : "—"}
+        </span>
+        <span className={`rounded-full px-3 py-1 font-semibold ${ga4Configured ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+          GA4 {ga4Configured ? "✓" : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Funnel-tab widgets driven by the first-party event window.
+// ---------------------------------------------------------------------------
+
+function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: string }) {
+  const exitClickRate = ev.exitIntent.shown ? Math.round((ev.exitIntent.clicked / ev.exitIntent.shown) * 100) : null;
+  const resumeClickRate = ev.resume.shown ? Math.round((ev.resume.clicked / ev.resume.shown) * 100) : null;
+  const vinFailPct = ev.vin.submitted ? Math.round((ev.vin.failed / ev.vin.submitted) * 100) : null;
+  return (
+    <>
+      <p className="mb-3 text-xs text-muted">Event window: {windowLabel}.<InfoDot tip={SRC.events} /></p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Funnel
+          rows={ev.funnel}
+          tip={SRC.events}
+          title={`Every session, step by step (${ev.totalSessions.toLocaleString("en-CA")} sessions)`}
+        />
+        <div className="card p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            Median time between steps<InfoDot tip={SRC.events} />
+          </h3>
+          {ev.stepMedianMins.length === 0 ? (
+            <p className="text-sm text-muted">Not enough sessions yet.</p>
+          ) : (
+            <div className="space-y-1.5 text-sm">
+              {ev.stepMedianMins.map((s) => (
+                <div key={s.label} className="flex justify-between gap-2">
+                  <span className="text-muted">{s.label}</span>
+                  <span className="font-semibold text-navy">
+                    {s.mins < 1 ? `${Math.round(s.mins * 60)}s` : `${s.mins}m`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="card overflow-x-auto p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            Form friction — where people stop<InfoDot tip={SRC.events} />
+          </h3>
+          {ev.friction.length === 0 ? (
+            <p className="text-sm text-muted">No field interactions recorded yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-2">Field</th>
+                  <th className="px-2 text-right" title="Sessions that focused this field">Touched by</th>
+                  <th className="pl-2 text-right" title="Abandoning sessions whose LAST touched field was this one">Abandoned here</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ev.friction.map((f) => (
+                  <tr key={f.field} className="border-b border-slate-100">
+                    <td className="py-2 pr-2 font-semibold capitalize text-navy">{f.field}</td>
+                    <td className="px-2 text-right">{f.focuses}</td>
+                    <td className="pl-2 text-right font-semibold">{f.abandons || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <HBars title="Form errors by reason" rows={ev.errorsByReason} tip={SRC.events} />
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <HBars title="Phone clicks by placement" rows={ev.phoneClicks} tip={SRC.events} />
+        <div className="card overflow-x-auto p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            CTA → form drop-off, by placement<InfoDot tip={SRC.events} />
+          </h3>
+          {ev.ctaPairs.length === 0 ? (
+            <p className="text-sm text-muted">No CTA clicks recorded yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-2">Placement</th>
+                  <th className="px-2 text-right" title="cta_click events at this placement">Clicks</th>
+                  <th className="px-2 text-right" title="offer_flow_start events crediting this placement">Form loads</th>
+                  <th className="pl-2 text-right" title="Share of clicks that never loaded the form">Drop-off %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ev.ctaPairs.map((c) => {
+                  const drop = c.ctaClicks ? Math.round(((c.ctaClicks - c.flowStarts) / c.ctaClicks) * 100) : null;
+                  return (
+                    <tr key={c.label} className="border-b border-slate-100">
+                      <td className="py-2 pr-2 font-semibold text-navy" title={c.label}>{c.label}</td>
+                      <td className="px-2 text-right">{c.ctaClicks}</td>
+                      <td className="px-2 text-right">{c.flowStarts}</td>
+                      <td className="pl-2 text-right font-semibold">{drop != null ? `${Math.max(0, drop)}%` : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="card p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            Recovery features<InfoDot tip={SRC.events} />
+          </h3>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent shown</span><span className="font-semibold text-navy">{ev.exitIntent.shown}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent clicked</span><span className="font-semibold text-navy">{ev.exitIntent.clicked}{exitClickRate != null ? ` (${exitClickRate}%)` : ""}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent email captured</span><span className="font-semibold text-navy">{ev.exitIntent.emailCaptured}</span></div>
+            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5"><span className="text-muted">Resume banner shown</span><span className="font-semibold text-navy">{ev.resume.shown}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Resume banner clicked</span><span className="font-semibold text-navy">{ev.resume.clicked}{resumeClickRate != null ? ` (${resumeClickRate}%)` : ""}</span></div>
+          </div>
+        </div>
+        <div className="card p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            VIN health<InfoDot tip={SRC.events} />
+          </h3>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between gap-2"><span className="text-muted">Submitted</span><span className="font-semibold text-navy">{ev.vin.submitted}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Failed</span><span className={`font-semibold ${vinFailPct != null && vinFailPct > 25 ? "text-red-600" : "text-navy"}`}>{ev.vin.failed}{vinFailPct != null ? ` (${vinFailPct}%)` : ""}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Confirmed</span><span className="font-semibold text-navy">{ev.vin.confirmed}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">Rejected</span><span className="font-semibold text-navy">{ev.vin.rejected}</span></div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4">
+        <HBars title="Top events — what's being captured" rows={ev.topEvents} tip={SRC.events} />
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type Tab = "overview" | "acquisition" | "funnel" | "people";
+
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
-  const { lookupsTotal, events: ev } = data;
+  const events = data.events;
+  const [tab, setTab] = useState<Tab>("overview");
+  const [range, setRange] = useState<RangeState>({ preset: "30d" });
   const [filters, setFilters] = useState<Filters>({});
   const [dim, setDim] = useState<SegmentDimension>("source");
   const [q, setQ] = useState("");
   const [sortByScore, setSortByScore] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(50);
   // Profiles deleted this session vanish immediately (also archived server-side,
   // so they stay gone on refresh and drop out of every chart below).
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const profiles = useMemo(() => data.profiles.filter((p) => !deletedIds.has(p.id)), [data.profiles, deletedIds]);
+
+  // Lazily-fetched connector data — driven by the mapped global range.
+  const meta = metaRange(range);
+  const ga4 = ga4Days(range);
+  const [ads, setAds] = useState<{ configured: boolean; insights: AdInsight[] } | null>(null);
+  const [adLevel, setAdLevel] = useState<{ configured: boolean; ads: AdInsightAd[] } | null>(null);
+  // Just the GA4 configured flag, for the Overview data-health connector chip
+  // (the full traffic report is fetched lazily inside TrafficGa4 on Acquisition).
+  const [ga4Ok, setGa4Ok] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/ads?range=${meta.range}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setAds(d); })
+      .catch(() => { if (!cancelled) setAds({ configured: false, insights: [] }); });
+    fetch(`/api/admin/ads?range=${meta.range}&level=ad`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setAdLevel(d); })
+      .catch(() => { if (!cancelled) setAdLevel({ configured: false, ads: [] }); });
+    return () => { cancelled = true; };
+  }, [meta.range]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/ga4?days=${ga4.days}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setGa4Ok(Boolean(d?.configured)); })
+      .catch(() => { if (!cancelled) setGa4Ok(false); });
+    return () => { cancelled = true; };
+  }, [ga4.days]);
+
+  const metaConfigured = ads?.configured ?? adLevel?.configured ?? null;
 
   async function deleteProfile(p: Profile) {
     if (!p.leadIds.length) {
@@ -746,10 +1316,32 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     );
   }
 
+  // Date bounds the active range maps to (drives profile filtering + zero-fill).
+  const dateBounds = useMemo(() => {
+    if (range.preset === "custom") return { dateFrom: range.dateFrom, dateTo: range.dateTo };
+    if (range.preset === "all") return {};
+    return presetDates(range.preset);
+  }, [range]);
+
+  const effectiveFilters = useMemo<Filters>(() => ({ ...filters, dateFrom: dateBounds.dateFrom, dateTo: dateBounds.dateTo }), [filters, dateBounds]);
+
   const options = useMemo(() => computeFilterOptions(profiles), [profiles]);
-  const filtered = useMemo(() => filterProfiles(profiles, filters), [profiles, filters]);
-  const view = useMemo(() => computeView(filtered), [filtered]);
+  const filtered = useMemo(() => filterProfiles(profiles, effectiveFilters), [profiles, effectiveFilters]);
+  const view = useMemo(() => computeView(filtered, dateBounds), [filtered, dateBounds]);
   const segments = useMemo(() => segmentTable(filtered, dim), [filtered, dim]);
+
+  // Previous equal-length period (preset ranges only) — for KPI deltas.
+  const prevView = useMemo(() => {
+    const days = presetDays(range.preset);
+    if (days == null) return null;
+    const shift = days * 86_400_000;
+    const shiftIso = (iso?: string) => (iso ? new Date(Date.parse(iso + "T12:00:00Z") - shift).toISOString().slice(0, 10) : undefined);
+    const prevFilters: Filters = { ...filters, dateFrom: shiftIso(dateBounds.dateFrom), dateTo: shiftIso(dateBounds.dateTo) };
+    return computeView(filterProfiles(profiles, prevFilters));
+  }, [range.preset, filters, dateBounds, profiles]);
+
+  const evWindow = useMemo(() => eventWindow(range, events), [range, events]);
+
   const list = useMemo(() => {
     const n = q.trim().toLowerCase();
     const base = !n
@@ -764,8 +1356,20 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     return sortByScore ? [...base].sort((a, b) => b.score - a.score) : base;
   }, [q, filtered, sortByScore]);
 
+  // Reset pagination whenever the visible list changes shape.
+  useEffect(() => { setVisibleCount(50); }, [q, sortByScore, filtered]);
+
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
-  const activeFilters = Object.values(filters).filter(Boolean).length;
+  // Only the dimension filters count here — the date range lives in its own control.
+  const activeFilters = [filters.country, filters.region, filters.source, filters.device, filters.stage, filters.scoreBand].filter(Boolean).length;
+
+  const booked = view.funnelByRank.booked;
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "acquisition", label: "Acquisition" },
+    { key: "funnel", label: "Funnel" },
+    { key: "people", label: "People" },
+  ];
 
   return (
     <div className="container-x py-8">
@@ -777,180 +1381,202 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Link href="/admin" className="text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
       </div>
 
-      {/* Filter bar — drives everything below */}
-      <div className="card mb-6 p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col text-xs">
-            <span className="mb-0.5 font-semibold text-muted">From</span>
-            <input type="date" className="field py-1.5 text-sm" value={filters.dateFrom || ""} onChange={(e) => set({ dateFrom: e.target.value || undefined })} />
-          </label>
-          <label className="flex flex-col text-xs">
-            <span className="mb-0.5 font-semibold text-muted">To</span>
-            <input type="date" className="field py-1.5 text-sm" value={filters.dateTo || ""} onChange={(e) => set({ dateTo: e.target.value || undefined })} />
-          </label>
-          <Sel label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
-          <Sel label="Province/Region" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
-          <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
-          <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
-          <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
-          <Sel label="Score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} />
-          {activeFilters > 0 && (
-            <button type="button" onClick={() => setFilters({})} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
-              Clear ({activeFilters})
-            </button>
-          )}
-          <span className="ml-auto self-center text-sm text-muted">{filtered.length} of {profiles.length} people</span>
-        </div>
+      <ControlBar
+        range={range}
+        setRange={setRange}
+        filters={filters}
+        set={set}
+        options={options}
+        activeFilters={activeFilters}
+        clearFilters={() => setFilters({})}
+        countLabel={`${filtered.length} of ${profiles.length} people`}
+      />
+
+      {/* Tab strip */}
+      <div className="mb-6 flex gap-1 border-b border-slate-200">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-navy"}`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Overview */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="People" value={String(view.totals.people)} tip={SRC.site} />
-        <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} />
-        <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." />
-        <StatCard label="Lookups" value={String(lookupsTotal)} sub="all-time" tip="Your website's database — value-lookup requests, all time." />
-        <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car." />
-        <StatCard
-          label="Speed to lead"
-          value={fmtMins(view.totals.medianResponseMins)}
-          sub={view.totals.pctUnder5Min != null ? `${view.totals.pctUnder5Min}% under 5 min` : undefined}
-          tip="Median time from lead submitted to your first real contact (offer sent or marked contacted). Industry research: responding inside 5 minutes multiplies qualification rates ~21x."
-        />
-      </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Funnel rows={view.funnel} tip="Your website's database — how many reach each step." />
-        <VBars title="Leads over time" rows={view.overTime} tip={SRC.site} />
-      </div>
-
-      <Section title="Segments — how different groups respond">
-        <SegmentView rows={segments} dim={dim} setDim={setDim} tip={SRC.siteGrouped} />
-      </Section>
-
-      <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; margin & ROAS from your own closed deals.">
-        <AdPerformance profiles={profiles} />
-      </Section>
-
-      <Section title="Traffic (GA4) — everyone who visited" tip={SRC.ga4}>
-        <TrafficGa4 />
-      </Section>
-
-      <Section title="Site funnel & form friction — every visitor" tip={SRC.events}>
-        {!ev || ev.totalEvents === 0 ? (
-          <div className="card p-4 text-sm text-muted">
-            <span className="font-semibold text-navy">No events collected yet.</span> Data starts flowing
-            automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
-            exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
+      {/* ---- TAB 1: OVERVIEW ---- */}
+      {tab === "overview" && (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} delta={prevView ? <Delta now={view.totals.leads} prev={prevView.totals.leads} /> : undefined} />
+            <StatCard label="Booked" value={String(booked)} tip="Your website's database — leads that reached a booked inspection (scheduled or closed)." delta={prevView ? <Delta now={booked} prev={prevView.funnelByRank.booked} /> : undefined} />
+            <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
+            <StatCard
+              label="Speed to lead"
+              value={fmtMins(view.totals.medianResponseMins)}
+              sub={view.totals.pctUnder5Min != null ? `${view.totals.pctUnder5Min}% under 5 min` : undefined}
+              tip="Median time from lead submitted to your first real contact (offer sent or marked contacted). Industry research: responding inside 5 minutes multiplies qualification rates ~21x."
+            />
+            <StatCard label="People" value={String(view.totals.people)} tip={SRC.site} delta={prevView ? <Delta now={view.totals.people} prev={prevView.totals.people} /> : undefined} />
+            <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." delta={prevView ? <Delta now={view.totals.partials} prev={prevView.totals.partials} /> : undefined} />
           </div>
-        ) : (
-          <>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Funnel
-                rows={ev.funnel}
-                tip={SRC.events}
-                title={`Every session, step by step (${ev.totalSessions.toLocaleString("en-CA")} sessions)`}
+
+          <Section title="Funnel economics — spend to margin, per campaign">
+            {meta.approx && (
+              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta here supports 7/30/90-day windows only.</p>
+            )}
+            <FunnelEconomics profiles={filtered} ads={adLevel?.ads || []} configured={Boolean(adLevel?.configured)} dateBounds={dateBounds} />
+          </Section>
+
+          <Section title="Data health" tip={SRC.events}>
+            {!events.all || events.all.totalEvents === 0 ? (
+              <div className="card p-4 text-sm text-muted">
+                <span className="font-semibold text-navy">No events collected yet.</span> Data starts flowing
+                automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
+                exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
+              </div>
+            ) : (
+              <DataHealth
+                ev={evWindow.data}
+                windowLabel={evWindow.label}
+                dbLeads={view.totals.leads}
+                metaConfigured={metaConfigured}
+                ga4Configured={ga4Ok}
               />
-              <div className="card p-4">
-                <h3 className="mb-3 text-sm font-bold text-navy">
-                  Median time between steps<InfoDot tip={SRC.events} />
-                </h3>
-                {ev.stepMedianMins.length === 0 ? (
-                  <p className="text-sm text-muted">Not enough sessions yet.</p>
-                ) : (
-                  <div className="space-y-1.5 text-sm">
-                    {ev.stepMedianMins.map((s) => (
-                      <div key={s.label} className="flex justify-between gap-2">
-                        <span className="text-muted">{s.label}</span>
-                        <span className="font-semibold text-navy">
-                          {s.mins < 1 ? `${Math.round(s.mins * 60)}s` : `${s.mins}m`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            )}
+          </Section>
+        </>
+      )}
+
+      {/* ---- TAB 2: ACQUISITION ---- */}
+      {tab === "acquisition" && (
+        <>
+          <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/link-clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; margin & ROAS from your own closed deals.">
+            {meta.approx && (
+              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta here supports 7/30/90-day windows only.</p>
+            )}
+            {ads === null ? (
+              <div className="card p-4 text-sm text-muted">Loading ad performance…</div>
+            ) : !ads.configured ? (
+              <div className="card p-4 text-sm text-muted">
+                <span className="font-semibold text-navy">Meta ads not connected yet.</span> Add{" "}
+                <code className="rounded bg-slate-100 px-1">META_MARKETING_TOKEN</code> and{" "}
+                <code className="rounded bg-slate-100 px-1">META_AD_ACCOUNT_ID</code> in Amplify to see spend, cost-per-lead, and ROAS here.
               </div>
+            ) : (
+              <MetaCampaignTable profiles={profiles} insights={ads.insights} days={ga4.days} />
+            )}
+          </Section>
+
+          <Section title="Creative — ad-level performance & hook/hold" tip="Meta Ads API (level=ad).">
+            {adLevel === null ? (
+              <div className="card p-4 text-sm text-muted">Loading creative…</div>
+            ) : !adLevel.configured ? (
+              <div className="card p-4 text-sm text-muted">Meta ads not connected — creative metrics appear once the Marketing API is configured.</div>
+            ) : (
+              <CreativeTable ads={adLevel.ads} />
+            )}
+          </Section>
+
+          <Section title="Traffic (GA4) — everyone who visited" tip={SRC.ga4}>
+            <TrafficGa4 days={ga4.days} approx={ga4.approx} />
+          </Section>
+
+          <Section title="Acquisition">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <HBars title="By source" rows={view.bySource} tip={SRC.siteGrouped} />
+              <HBars title="By campaign" rows={view.byCampaign} tip={SRC.siteGrouped} />
             </div>
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <div className="card overflow-x-auto p-4">
-                <h3 className="mb-3 text-sm font-bold text-navy">
-                  Form friction — where people stop<InfoDot tip={SRC.events} />
-                </h3>
-                {ev.friction.length === 0 ? (
-                  <p className="text-sm text-muted">No field interactions recorded yet.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
-                        <th className="py-2 pr-2">Field</th>
-                        <th className="px-2 text-right" title="Sessions that focused this field">Touched by</th>
-                        <th className="pl-2 text-right" title="Abandoning sessions whose LAST touched field was this one">Abandoned here</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ev.friction.map((f) => (
-                        <tr key={f.field} className="border-b border-slate-100">
-                          <td className="py-2 pr-2 font-semibold capitalize text-navy">{f.field}</td>
-                          <td className="px-2 text-right">{f.focuses}</td>
-                          <td className="pl-2 text-right font-semibold">{f.abandons || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+          </Section>
+
+          <Section
+            title="Retargeting — export audiences for Meta"
+            tip="Your website's database (respects the filter bar). Meta hashes the uploaded file in your browser; only hashed values reach Meta, used solely for ad matching."
+          >
+            <MetaExport profiles={filtered} />
+          </Section>
+        </>
+      )}
+
+      {/* ---- TAB 3: FUNNEL ---- */}
+      {tab === "funnel" && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Funnel rows={view.funnel} tip="Your website's database — how many reach each step." />
+            <VBars title="Leads over time" rows={view.overTime} tip={SRC.site} />
+          </div>
+          <div className="mt-4">
+            <Heatmap grid={view.heatmap} tip="Your website's database — the timestamp each lead arrived (Mountain time)." />
+          </div>
+
+          <Section title="Site funnel & form friction — every visitor" tip={SRC.events}>
+            {!evWindow.data || evWindow.data.totalEvents === 0 ? (
+              <div className="card p-4 text-sm text-muted">
+                <span className="font-semibold text-navy">No events in this window.</span> Data starts flowing
+                automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
+                exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
               </div>
-              <HBars title="Form errors by reason" rows={ev.errorsByReason} tip={SRC.events} />
+            ) : (
+              <EventDetails ev={evWindow.data} windowLabel={evWindow.label} />
+            )}
+          </Section>
+        </>
+      )}
+
+      {/* ---- TAB 4: PEOPLE ---- */}
+      {tab === "people" && (
+        <>
+          <Section title="Segments — how different groups respond">
+            <SegmentView rows={segments} dim={dim} setDim={setDim} tip={SRC.siteGrouped} />
+          </Section>
+
+          <Section title="Geography">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <HBars title="By country" rows={view.byCountry} tip={SRC.geo} />
+              <HBars title="By province / region" rows={view.byRegion} tip={SRC.geo} />
             </div>
-            <div className="mt-4">
-              <HBars title="Top events — what's being captured" rows={ev.topEvents} tip={SRC.events} />
+          </Section>
+
+          <Section title="Behavior & mix">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <HBars title="By device" rows={view.byDevice} tip={SRC.behavior} />
+              <HBars title="By vehicle make" rows={view.byMake} tip={SRC.site} />
+              <HBars title="By status" rows={view.byStatus} tip={SRC.site} />
+              <HBars title="By contact preference" rows={view.byContactMethod} tip={SRC.site} />
             </div>
-          </>
-        )}
-      </Section>
+          </Section>
 
-      <Section
-        title="Retargeting — export audiences for Meta"
-        tip="Your website's database (respects the filter bar). Meta hashes the uploaded file in your browser; only hashed values reach Meta, used solely for ad matching."
-      >
-        <MetaExport profiles={filtered} />
-      </Section>
-
-      <Section title="Geography">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By country" rows={view.byCountry} tip={SRC.geo} />
-          <HBars title="By province / region" rows={view.byRegion} tip={SRC.geo} />
-        </div>
-      </Section>
-
-      <Section title="Acquisition">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By source" rows={view.bySource} tip={SRC.siteGrouped} />
-          <HBars title="By campaign" rows={view.byCampaign} tip={SRC.siteGrouped} />
-        </div>
-      </Section>
-
-      <Section title="Behavior & mix">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HBars title="By device" rows={view.byDevice} tip={SRC.behavior} />
-          <HBars title="By vehicle make" rows={view.byMake} tip={SRC.site} />
-          <HBars title="By status" rows={view.byStatus} tip={SRC.site} />
-          <HBars title="By contact preference" rows={view.byContactMethod} tip={SRC.site} />
-        </div>
-        <div className="mt-4">
-          <Heatmap grid={view.heatmap} tip="Your website's database — the timestamp each lead arrived." />
-        </div>
-      </Section>
-
-      <Section title={`Profiles (${list.length})`} tip={SRC.site}>
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <label className="flex items-center gap-1.5 text-sm text-muted">
-            <input type="checkbox" checked={sortByScore} onChange={(e) => setSortByScore(e.target.checked)} />
-            Sort by score
-          </label>
-        </div>
-        <div className="space-y-3">
-          {list.length === 0 ? <p className="text-sm text-muted">No profiles match.</p> : list.map((p) => <ProfileRow key={p.id} p={p} onDelete={deleteProfile} />)}
-        </div>
-      </Section>
+          <Section title={`Profiles (${list.length})`} tip={SRC.site}>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <label className="flex items-center gap-1.5 text-sm text-muted">
+                <input type="checkbox" checked={sortByScore} onChange={(e) => setSortByScore(e.target.checked)} />
+                Sort by score
+              </label>
+            </div>
+            <div className="space-y-3">
+              {list.length === 0 ? (
+                <p className="text-sm text-muted">No profiles match.</p>
+              ) : (
+                list.slice(0, visibleCount).map((p) => <ProfileRow key={p.id} p={p} onDelete={deleteProfile} />)
+              )}
+            </div>
+            {list.length > visibleCount && (
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((c) => c + 50)}
+                  className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-200"
+                >
+                  Show more ({list.length - visibleCount} more)
+                </button>
+              </div>
+            )}
+          </Section>
+        </>
+      )}
     </div>
   );
 }

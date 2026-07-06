@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeadByShortId, updateLead } from "@/lib/store";
+import { getLeadByShortId, atomicLeadEngagement } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,10 +30,11 @@ export async function POST(req: NextRequest) {
   const { lead } = await getLeadByShortId(ref);
   if (!lead) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
 
-  await updateLead(lead.id, {
-    lastReplyAt: new Date().toISOString(),
-    repliesCount: (lead.repliesCount || 0) + 1,
-    lastInboundChannel: channel,
+  // Atomic write — see lib/store.ts atomicLeadEngagement (concurrent replies /
+  // webhook stamps racing on the same lead).
+  await atomicLeadEngagement(lead.id, {
+    set: { lastReplyAt: new Date().toISOString(), lastInboundChannel: channel },
+    increment: { repliesCount: 1 },
   });
   return NextResponse.json({ ok: true });
 }

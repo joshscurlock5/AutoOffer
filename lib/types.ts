@@ -114,6 +114,10 @@ export interface Touch {
 /** Lightweight on-site behavior summary, accumulated client-side in localStorage
  * across the session and sent with the lead. */
 export interface Behavior {
+  /** Durable per-browser id — set once and never rotated (unlike sessionId,
+   * which rotates after 30 min of inactivity). Used to stitch a person's
+   * activity across multiple sessions/visits. */
+  visitorId?: string;
   sessionId?: string;
   firstSeenAt?: string;
   lastSeenAt?: string;
@@ -310,6 +314,8 @@ export interface SiteEvent {
   p?: Record<string, string | number | boolean>;
   path?: string;
   at: string;
+  /** Durable per-browser visitor id (behavior.visitorId), when the client sent one. */
+  vid?: string;
   /** Present when the event carried a booking token the server resolved. */
   leadId?: string;
   /** Epoch-seconds TTL attribute. */
@@ -377,6 +383,12 @@ export interface Profile {
   margin?: number;
   /** True when margin includes an estimated (not actual) sale price for at least one closed lead. */
   marginIsEstimate?: boolean;
+  /** Earliest lead.contactedAt across this person's real leads (ISO). */
+  contactedAt?: string;
+  /** Earliest lead.offerSentAt across this person's real leads (ISO). */
+  offerSentAt?: string;
+  /** Earliest lead.scheduledAt across this person's real leads (ISO). */
+  scheduledAt?: string;
   /** Latest lead.closedAt among this person's closed leads (ISO). */
   closedAt?: string;
   firstResponseMins?: number;
@@ -411,6 +423,30 @@ export interface AdInsight {
   costPerLead?: number; // Meta's cost per lead ($) — matches Ads Manager
 }
 
+/** One ad's (creative-level) performance pulled from the Meta Marketing API,
+ * including the video hook/hold metrics used to spot weak creative. */
+export interface AdInsightAd {
+  campaignId: string;
+  campaign: string;
+  adsetId: string;
+  adset: string;
+  adId: string;
+  ad: string;
+  spend: number;
+  impressions: number;
+  reach?: number;
+  frequency?: number;
+  linkClicks: number; // inline_link_clicks — matches Ads Manager's "Link Clicks"
+  linkCtr?: number; // percent
+  cpm?: number; // $ per 1,000 impressions
+  leads?: number; // Meta Pixel "Lead" conversions attributed to this ad
+  costPerLead?: number; // $ per lead
+  video3s?: number; // "3-second video plays" (video_view actions)
+  thruplay?: number; // Meta ThruPlays
+  hookRate?: number; // percent: video3s / impressions — did the opening hook grab attention
+  holdRate?: number; // percent: thruplay / video3s — did viewers stick around after the hook
+}
+
 /** Aggregate site traffic pulled from the GA4 Data API. */
 export interface Ga4Traffic {
   totals: { users: number; newUsers: number; sessions: number; pageviews: number; engagementRate: number };
@@ -430,6 +466,13 @@ export interface Referral {
   /** Shareable code generated for the referrer. */
   code: string;
   notes?: string;
+  /** First-touch marketing attribution for the referrer (which ad/campaign/referrer
+   * brought them in). Skipped when consent was denied at submit time. */
+  attribution?: Attribution;
+  /** The referrer's multi-touch journey, oldest first. Skipped on consent denial. */
+  touchHistory?: Touch[];
+  /** The referrer's on-site behavior summary. Skipped on consent denial. */
+  behavior?: Behavior;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getLeads, updateLead } from "@/lib/store";
+import { getLeads, atomicLeadEngagement } from "@/lib/store";
 import { toE164 } from "@/lib/sms";
 import { site } from "@/lib/site-config";
 import type { CommsEvent, Lead } from "@/lib/types";
@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 //
 //  Every outbound text carries StatusCallback=<this URL>, so Twilio POSTs the
 //  message's lifecycle here (queued → sent → delivered / undelivered / failed).
-//  We record only the terminal states onto the lead: delivered/failed counters,
-//  the last status + error code, and a commsEvents entry for the timeline.
+//  We atomically record only the terminal states onto the lead (lib/store.ts
+//  atomicLeadEngagement): delivered/failed counters, the last status + error
+//  code, and a commsEvents entry for the timeline.
 //
 //  Signature-validated exactly like the inbound webhook (app/api/sms/route.ts);
 //  dormant until TWILIO_AUTH_TOKEN is set — it ships with the rest of the SMS
@@ -24,7 +25,8 @@ export const dynamic = "force-dynamic";
 
 const TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
 const WEBHOOK_URL = `${site.url}/api/sms/status`;
-const MAX_COMMS_EVENTS = 100;
+// commsEvents is no longer capped here — see the note in the Resend webhook
+// (app/api/webhooks/resend/route.ts) on atomicLeadEngagement's uncapped append.
 
 /** Verify Twilio's request signature (HMAC-SHA1 of the URL + alpha-sorted params). */
 function validSignature(sig: string, params: URLSearchParams): boolean {
@@ -78,18 +80,19 @@ export async function POST(req: NextRequest) {
     const at = new Date().toISOString();
     const errorCode = params.get("ErrorCode") || undefined;
     const entry: CommsEvent = { at, channel: "sms", type: status };
-    const commsEvents = [...(lead.commsEvents || []), entry].slice(-MAX_COMMS_EVENTS);
 
-    const eng = { ...(lead.smsEngagement || {}), lastStatus: status };
+    // Atomic write — see lib/store.ts atomicLeadEngagement (same race as the
+    // Resend webhook: concurrent status callbacks for the same lead).
+    const set: Record<string, string | number | boolean> = { "smsEngagement.lastStatus": status };
+    const increment: Record<string, number> = {};
     if (status === "delivered") {
-      eng.deliveredCount = (eng.deliveredCount || 0) + 1;
-      eng.lastDeliveredAt = at;
+      increment["smsEngagement.deliveredCount"] = 1;
+      set["smsEngagement.lastDeliveredAt"] = at;
     } else {
-      eng.failedCount = (eng.failedCount || 0) + 1;
-      if (errorCode) eng.lastErrorCode = errorCode;
+      increment["smsEngagement.failedCount"] = 1;
+      if (errorCode) set["smsEngagement.lastErrorCode"] = errorCode;
     }
-
-    await updateLead(lead.id, { smsEngagement: eng, commsEvents });
+    await atomicLeadEngagement(lead.id, { set, increment, appendCommsEvent: entry });
     return new NextResponse(null, { status: 200 });
   } catch (e) {
     console.error("[sms status] error:", e);

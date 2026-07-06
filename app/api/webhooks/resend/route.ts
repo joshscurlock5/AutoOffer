@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getLeads, updateLead } from "@/lib/store";
+import { getLeads, atomicLeadEngagement } from "@/lib/store";
 import { notifyOwner, leadLine } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 //  Resend POSTs an event here for every email we send (delivered / bounced /
 //  complained / clicked / opened / failed, per the events ticked in the Resend
 //  dashboard). We verify the Svix signature, match the recipient to their most
-//  recent lead, and stamp engagement onto it: summary counters + a capped
-//  commsEvents log the profile timeline renders.
+//  recent lead, and atomically stamp engagement onto it (lib/store.ts
+//  atomicLeadEngagement): summary counters + the commsEvents log the profile
+//  timeline renders.
 //
 //  CASL/deliverability hooks: a complaint (marked-as-spam) sets emailOptOut so
 //  nurture emails stop; a bounce sets emailBounced so ALL sends skip the dead
@@ -27,7 +28,9 @@ export const dynamic = "force-dynamic";
 
 const SECRET = process.env.RESEND_WEBHOOK_SECRET || "";
 const TOLERANCE_MS = 5 * 60 * 1000; // reject signatures older/newer than 5 min (replay guard)
-const MAX_COMMS_EVENTS = 100;
+// commsEvents is no longer capped here — atomicLeadEngagement's atomic path
+// appends uncapped (DynamoDB list_append has no trim primitive); the 100-cap
+// is enforced on read, or by atomicLeadEngagement's legacy fallback path.
 
 /** Verify the Svix signature Resend signs webhooks with.
  * signedContent = `${svix-id}.${svix-timestamp}.${rawBody}`, HMAC-SHA256 keyed
@@ -114,24 +117,24 @@ export async function POST(req: NextRequest) {
     const at = new Date().toISOString();
     const url = type === "clicked" ? (event.data?.click?.link || "").slice(0, 500) || undefined : undefined;
     const entry: CommsEvent = { at, channel: "email", type, ...(url ? { url } : {}) };
-    const commsEvents = [...(lead.commsEvents || []), entry].slice(-MAX_COMMS_EVENTS);
 
-    const eng = { ...(lead.emailEngagement || {}) };
-    if (type === "delivered") eng.deliveredCount = (eng.deliveredCount || 0) + 1;
+    // Atomic write — concurrent webhook deliveries for the same lead (e.g. a
+    // near-simultaneous open + click) must not clobber each other's counters.
+    const set: Record<string, string | number | boolean> = {};
+    const increment: Record<string, number> = {};
+    if (type === "delivered") increment["emailEngagement.deliveredCount"] = 1;
     if (type === "opened") {
-      eng.opensCount = (eng.opensCount || 0) + 1;
-      eng.lastOpenedAt = at;
+      increment["emailEngagement.opensCount"] = 1;
+      set["emailEngagement.lastOpenedAt"] = at;
     }
     if (type === "clicked") {
-      eng.clicksCount = (eng.clicksCount || 0) + 1;
-      eng.lastClickedAt = at;
-      if (url) eng.lastClickedUrl = url;
+      increment["emailEngagement.clicksCount"] = 1;
+      set["emailEngagement.lastClickedAt"] = at;
+      if (url) set["emailEngagement.lastClickedUrl"] = url;
     }
-
-    const patch: Partial<Lead> = { emailEngagement: eng, commsEvents };
-    if (type === "bounced" || type === "failed") patch.emailBounced = true;
-    if (type === "complained") patch.emailOptOut = true;
-    await updateLead(lead.id, patch);
+    if (type === "bounced" || type === "failed") set.emailBounced = true;
+    if (type === "complained") set.emailOptOut = true;
+    await atomicLeadEngagement(lead.id, { set, increment, appendCommsEvent: entry });
 
     // The two events the owner should actually hear about (rare + actionable).
     if (type === "bounced" || type === "complained") {

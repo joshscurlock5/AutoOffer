@@ -9,11 +9,16 @@ export const dynamic = "force-dynamic";
 // ---------------------------------------------------------------------------
 //  First-party event beacon — server half of lib/events.ts.
 //
-//  Accepts { sessionId, events: [{n, p, path, at}] } (≤25 per request, the
-//  DynamoDB BatchWrite cap), clamps every field, and batch-writes into the
-//  AutoOfferEvents table with a ~12-month TTL. A booking_view event carrying a
-//  bookingToken is resolved to its leadId server-side, so a booking page opened
-//  from an email on a DIFFERENT device still stitches to the right person.
+//  Accepts { sessionId, visitorId?, events: [{n, p, path, at}] } (≤25 per
+//  request, the DynamoDB BatchWrite cap), clamps every field, and batch-writes
+//  into the AutoOfferEvents table with a ~12-month TTL. visitorId (durable
+//  across sessions, unlike sessionId) is stored as `vid` on each row so
+//  lib/profiles.ts can stitch a return visit to the same person. A booking_view
+//  event carrying a bookingToken is resolved to its leadId server-side, so a
+//  booking page opened from an email on a DIFFERENT device still stitches to
+//  the right person. The raw token is never persisted — leadId already makes
+//  the row joinable, so bookingToken is stripped from the stored params and
+//  any /book/<token> path is rewritten to /book/~ before the row is written.
 //
 //  Always 200s — sendBeacon can't read responses, and analytics failures must
 //  never surface. Rate-limited per IP like every public write endpoint.
@@ -72,9 +77,11 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => null)) as {
       sessionId?: unknown;
+      visitorId?: unknown;
       events?: unknown;
     } | null;
     const sessionId = str(body?.sessionId, 60);
+    const visitorId = str(body?.visitorId, 64);
     const rawEvents = Array.isArray(body?.events) ? body!.events.slice(0, MAX_EVENTS) : [];
     if (!sessionId || !rawEvents.length) return NextResponse.json({ ok: true });
 
@@ -114,14 +121,21 @@ export async function POST(req: NextRequest) {
       if (!n || !/^[a-z0-9_:-]+$/i.test(n)) continue;
       const at = clampAt(e.at);
       const p = clampParams(e.p);
+      const hadToken = Boolean(p?.bookingToken);
+      // The leadId already makes the row joinable to the person — never persist
+      // the raw capability token itself, and scrub it from the /book/<token> path.
+      if (p && "bookingToken" in p) delete p.bookingToken;
+      const path = str(e.path, 200);
+      const redactedPath = path?.startsWith("/book/") ? "/book/~" : path;
       items.push({
         sessionId,
         sk: `${at}#${rand4()}`,
         n,
-        ...(p ? { p } : {}),
-        ...(str(e.path, 200) ? { path: str(e.path, 200) } : {}),
+        ...(p && Object.keys(p).length ? { p } : {}),
+        ...(redactedPath ? { path: redactedPath } : {}),
         at,
-        ...(tokenLeadId && p?.bookingToken ? { leadId: tokenLeadId } : {}),
+        ...(visitorId ? { vid: visitorId } : {}),
+        ...(tokenLeadId && hadToken ? { leadId: tokenLeadId } : {}),
         ttl,
       });
     }

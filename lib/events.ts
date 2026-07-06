@@ -13,8 +13,10 @@ import { getBehavior } from "./attribution";
 //
 //  Keyed by the same behavior.sessionId that's stored on leads, which is how
 //  lib/profiles.ts stitches anonymous browsing onto a person once they submit.
-//  Consent-gated (no-op after the banner's "Turn off analytics") and never
-//  throws — analytics must never break the page.
+//  Also carries behavior.visitorId (durable across sessions, unlike sessionId
+//  which rotates after 30 min idle) so a return visit still stitches to the
+//  same person's on-site history. Consent-gated (no-op after the banner's
+//  "Turn off analytics") and never throws — analytics must never break the page.
 // ===========================================================================
 
 type Params = Record<string, string | number | boolean | undefined>;
@@ -41,8 +43,10 @@ function flush(): void {
     timer = null;
   }
   if (!queue.length || sending) return;
-  const sessionId = getBehavior().sessionId;
+  const behavior = getBehavior();
+  const sessionId = behavior.sessionId;
   if (!sessionId) return; // sessionId may appear after captureFirstTouch runs — leave events queued
+  const visitorId = behavior.visitorId;
   // Peek (don't remove) so a failed send can be retried by the next flush.
   const batch = queue.slice(0, MAX_BATCH);
   // Remove by identity, not position — an overflow trim during an in-flight
@@ -54,7 +58,10 @@ function flush(): void {
   };
   sending = true;
   try {
-    const blob = new Blob([JSON.stringify({ sessionId, events: batch })], { type: "application/json" });
+    const blob = new Blob(
+      [JSON.stringify({ sessionId, ...(visitorId ? { visitorId } : {}), events: batch })],
+      { type: "application/json" },
+    );
     const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon("/api/events", blob);
     if (sent) {
       // sendBeacon acceptance is a queue-handoff guarantee — safe to drop the batch now.

@@ -1,5 +1,5 @@
 import "server-only";
-import type { AdInsight } from "./types";
+import type { AdInsight, AdInsightAd } from "./types";
 
 // ===========================================================================
 //  Meta Marketing API — read-only ad performance (spend / impressions / clicks
@@ -36,6 +36,7 @@ function pickAction(arr: MetaAction[] | undefined, types: string[]): number | un
 }
 
 let cache: { at: number; range: string; data: AdInsight[] } | null = null;
+let adCache: { at: number; range: string; data: AdInsightAd[] } | null = null;
 
 /** Per-campaign insights for a date preset (last_7d / last_30d / last_90d / …). */
 export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
@@ -43,7 +44,11 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
   if (cache && cache.range === range && Date.now() - cache.at < TTL_MS) return cache.data;
   try {
     const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
-    const fields = "campaign_name,spend,impressions,clicks,ctr,cpc,reach,actions,cost_per_action_type";
+    // inline_link_clicks / inline_link_click_ctr are Meta's LINK clicks — the
+    // same numbers Ads Manager shows in its "Link Clicks"/"CTR (link click-through
+    // rate)" columns — as opposed to `clicks`/`ctr` which count ALL clicks
+    // (photo expands, likes, etc.) and read high vs what a marketer expects.
+    const fields = "campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,reach,actions,cost_per_action_type";
     const url =
       `${API}/${acct}/insights?level=campaign&date_preset=${encodeURIComponent(range)}` +
       `&fields=${fields}&limit=500&access_token=${encodeURIComponent(TOKEN!)}`;
@@ -53,22 +58,23 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
       return cache?.data || [];
     }
     interface RawInsight {
-      campaign_name?: string; spend?: string; impressions?: string; clicks?: string;
-      ctr?: string; cpc?: string; reach?: string;
+      campaign_name?: string; spend?: string; impressions?: string;
+      inline_link_clicks?: string; inline_link_click_ctr?: string; reach?: string;
       actions?: MetaAction[]; cost_per_action_type?: MetaAction[];
     }
     const j = (await r.json()) as { data?: RawInsight[] };
     const data: AdInsight[] = (j.data || []).map((d) => {
       const spend = Number(d.spend) || 0;
+      const linkClicks = Number(d.inline_link_clicks) || 0;
       const leads = pickAction(d.actions, LEAD_ACTION_TYPES);
       const costPerLead = pickAction(d.cost_per_action_type, LEAD_ACTION_TYPES) ?? (leads ? spend / leads : undefined);
       return {
         campaign: d.campaign_name || "(unnamed)",
         spend,
         impressions: Number(d.impressions) || 0,
-        clicks: Number(d.clicks) || 0,
-        ctr: Number(d.ctr) || 0,
-        cpc: Number(d.cpc) || 0,
+        clicks: linkClicks,
+        ctr: Number(d.inline_link_click_ctr) || 0,
+        cpc: linkClicks ? spend / linkClicks : 0,
         reach: d.reach ? Number(d.reach) : undefined,
         leads,
         costPerLead,
@@ -80,5 +86,87 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
   } catch (e) {
     console.error("[meta-ads] fetch failed", e);
     return cache?.data || [];
+  }
+}
+
+const AD_LEVEL_FIELDS =
+  "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,frequency," +
+  "inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,video_thruplay_watched_actions";
+const AD_LEVEL_PAGE_CAP = 8;
+
+interface RawAdInsight {
+  campaign_id?: string; campaign_name?: string;
+  adset_id?: string; adset_name?: string;
+  ad_id?: string; ad_name?: string;
+  spend?: string; impressions?: string; reach?: string; frequency?: string;
+  inline_link_clicks?: string; inline_link_click_ctr?: string;
+  actions?: MetaAction[]; cost_per_action_type?: MetaAction[];
+  video_thruplay_watched_actions?: MetaAction[];
+}
+
+/** Per-ad insights for a date preset — creative-level spend/CTR/leads plus the
+ * video hook/hold metrics (3-second plays vs thruplays) used to spot weak
+ * creative before it burns budget. */
+export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightAd[]> {
+  if (!metaAdsConfigured()) return [];
+  if (adCache && adCache.range === range && Date.now() - adCache.at < TTL_MS) return adCache.data;
+  try {
+    const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
+    let url =
+      `${API}/${acct}/insights?level=ad&date_preset=${encodeURIComponent(range)}` +
+      `&fields=${AD_LEVEL_FIELDS}&limit=250&access_token=${encodeURIComponent(TOKEN!)}`;
+    const rows: RawAdInsight[] = [];
+    let page = 0;
+    while (url && page < AD_LEVEL_PAGE_CAP) {
+      const r = await fetch(url);
+      if (!r.ok) {
+        console.error("[meta-ads] non-OK", r.status, (await r.text().catch(() => "")).slice(0, 300));
+        return adCache?.data || [];
+      }
+      const j = (await r.json()) as { data?: RawAdInsight[]; paging?: { next?: string } };
+      rows.push(...(j.data || []));
+      url = j.paging?.next || "";
+      page += 1;
+    }
+    if (url && page >= AD_LEVEL_PAGE_CAP) {
+      console.warn("[meta-ads] ad-level paging hit the", AD_LEVEL_PAGE_CAP, "page cap; results may be truncated");
+    }
+    const data: AdInsightAd[] = rows.map((d) => {
+      const spend = Number(d.spend) || 0;
+      const impressions = Number(d.impressions) || 0;
+      const linkClicks = Number(d.inline_link_clicks) || 0;
+      const leads = pickAction(d.actions, LEAD_ACTION_TYPES);
+      const costPerLead = pickAction(d.cost_per_action_type, LEAD_ACTION_TYPES) ?? (leads ? spend / leads : undefined);
+      // Meta's "3-second video plays" metric is reported under the `video_view` action type.
+      const video3s = pickAction(d.actions, ["video_view"]);
+      const thruplay = d.video_thruplay_watched_actions?.[0] ? Number(d.video_thruplay_watched_actions[0].value) || 0 : undefined;
+      return {
+        campaignId: d.campaign_id || "",
+        campaign: d.campaign_name || "(unnamed)",
+        adsetId: d.adset_id || "",
+        adset: d.adset_name || "(unnamed)",
+        adId: d.ad_id || "",
+        ad: d.ad_name || "(unnamed)",
+        spend,
+        impressions,
+        reach: d.reach ? Number(d.reach) : undefined,
+        frequency: d.frequency ? Number(d.frequency) : undefined,
+        linkClicks,
+        linkCtr: Number(d.inline_link_click_ctr) || 0,
+        cpm: impressions ? (spend / impressions) * 1000 : undefined,
+        leads,
+        costPerLead,
+        video3s,
+        thruplay,
+        hookRate: impressions && video3s !== undefined ? (video3s / impressions) * 100 : undefined,
+        holdRate: video3s && thruplay !== undefined ? (thruplay / video3s) * 100 : undefined,
+      };
+    });
+    data.sort((a, b) => b.spend - a.spend);
+    adCache = { at: Date.now(), range, data };
+    return data;
+  } catch (e) {
+    console.error("[meta-ads] ad-level fetch failed", e);
+    return adCache?.data || [];
   }
 }
