@@ -65,7 +65,7 @@ export const site = {
   team: [
     { name: "Joshua Scurlock", role: "Founder & Owner" },
     { name: "Samir Osman", role: "Founder & Owner" },
-    { name: "Aaron Scurlock", role: "Manager" },
+    { name: "Aaron Scurlock", role: "Data Analyst" },
   ],
 
   // ---- REFERRAL PROGRAM ---------------------------------------------------
