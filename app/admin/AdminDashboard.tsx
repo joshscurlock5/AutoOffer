@@ -54,7 +54,7 @@ export default function AdminDashboard({
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
   const [tab, setTab] = useState<"leads" | "referrals" | "chats" | "lookups">("leads");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "bookmarked" | "deleted" | LeadStatus>("all");
+  const [filter, setFilter] = useState<"all" | "bookmarked" | "deleted" | "inventory" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [priceModal, setPriceModal] = useState<Lead | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -70,8 +70,26 @@ export default function AdminDashboard({
       closed: leads.filter((l) => l.status === "closed" && !l.archived).length,
       saved: leads.filter((l) => l.bookmarked && !l.archived).length,
       deleted: leads.filter((l) => l.archived).length,
+      // Bought (has a purchase price) but not yet sold — your current inventory.
+      inventory: leads.filter(
+        (l) => l.purchasePrice != null && l.actualSalePrice == null && !l.archived && l.status !== "spam",
+      ).length,
     }),
     [leads],
+  );
+
+  // Inventory economics: cash tied up + estimated profit still on the lot.
+  const inventoryLeads = useMemo(
+    () =>
+      leads.filter(
+        (l) => l.purchasePrice != null && l.actualSalePrice == null && !l.archived && l.status !== "spam",
+      ),
+    [leads],
+  );
+  const invCash = inventoryLeads.reduce((s, l) => s + (l.purchasePrice || 0), 0);
+  const invEstProfit = inventoryLeads.reduce(
+    (s, l) => s + (l.expectedResale != null && l.purchasePrice != null ? l.expectedResale - l.purchasePrice : 0),
+    0,
   );
 
   const filtered = useMemo(() => {
@@ -86,6 +104,8 @@ export default function AdminDashboard({
           if (l.status === "spam") return false;
         } else if (filter === "bookmarked") {
           if (!l.bookmarked) return false;
+        } else if (filter === "inventory") {
+          if (!(l.purchasePrice != null && l.actualSalePrice == null && l.status !== "spam")) return false;
         } else if (l.status !== filter) {
           return false;
         }
@@ -256,8 +276,8 @@ export default function AdminDashboard({
     return () => document.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  const filterChips: ("all" | "bookmarked" | "deleted" | LeadStatus)[] = [
-    "all", "bookmarked", ...LEAD_STATUSES, "deleted",
+  const filterChips: ("all" | "bookmarked" | "inventory" | "deleted" | LeadStatus)[] = [
+    "all", "bookmarked", "inventory", ...LEAD_STATUSES, "deleted",
   ];
 
   return (
@@ -358,22 +378,45 @@ export default function AdminDashboard({
                       ? "All"
                       : s === "bookmarked"
                         ? "★ Saved"
-                        : s === "deleted"
-                          ? `🗑 Deleted${counts.deleted ? ` (${counts.deleted})` : ""}`
-                          : labelOf(s)}
+                        : s === "inventory"
+                          ? `🚗 Inventory${counts.inventory ? ` (${counts.inventory})` : ""}`
+                          : s === "deleted"
+                            ? `🗑 Deleted${counts.deleted ? ` (${counts.deleted})` : ""}`
+                            : labelOf(s)}
                   </button>
                 ))}
               </div>
             </div>
 
+            {filter === "inventory" && inventoryLeads.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <div>
+                  <div className="text-xs text-muted">Vehicles held</div>
+                  <div className="mt-1 font-display text-2xl font-extrabold text-navy">{inventoryLeads.length}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">Cash in inventory</div>
+                  <div className="mt-1 font-display text-2xl font-extrabold text-navy">{cad(invCash)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">Est. profit (unsold)</div>
+                  <div className={`mt-1 font-display text-2xl font-extrabold ${invEstProfit < 0 ? "text-red-600" : "text-green-700"}`}>
+                    {cad(invEstProfit)}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 space-y-4">
               {filtered.length === 0 && (
                 <div className="card p-12 text-center text-muted">
-                  {filter === "deleted"
-                    ? "Nothing deleted. Deleted leads land here and can be restored anytime."
-                    : filter === "spam"
-                      ? "No spam leads. Mark fake submissions as Spam to move them here."
-                      : "No leads here yet. New submissions appear automatically."}
+                  {filter === "inventory"
+                    ? "No vehicles in inventory. Cars you've bought (add a “Bought for” price) show here until you record their sale price."
+                    : filter === "deleted"
+                      ? "Nothing deleted. Deleted leads land here and can be restored anytime."
+                      : filter === "spam"
+                        ? "No spam leads. Mark fake submissions as Spam to move them here."
+                        : "No leads here yet. New submissions appear automatically."}
                 </div>
               )}
               {filtered.map((lead) => (
@@ -483,6 +526,36 @@ export default function AdminDashboard({
   );
 }
 
+function PriceInput({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
+      <div className="relative mt-1">
+        <Dollar className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+        <input
+          id={id}
+          type="number"
+          min={0}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="—"
+          className="field w-full py-1.5 pl-6 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
 function LeadCard({
   lead,
   onPatch,
@@ -504,10 +577,38 @@ function LeadCard({
 }) {
   const [note, setNote] = useState(lead.notes || "");
   const [price, setPrice] = useState(lead.purchasePrice != null ? String(lead.purchasePrice) : "");
+  const [resale, setResale] = useState(lead.expectedResale != null ? String(lead.expectedResale) : "");
+  const [sold, setSold] = useState(lead.actualSalePrice != null ? String(lead.actualSalePrice) : "");
   const noteChanged = note !== (lead.notes || "");
-  const priceNum = Math.round(Number(price.replace(/[^0-9.]/g, "")));
-  const priceChanged =
-    price.trim() !== "" && (!Number.isNaN(priceNum)) && priceNum !== (lead.purchasePrice ?? -1);
+  const toNum = (s: string): number | null => {
+    const t = s.replace(/[^0-9.]/g, "");
+    if (!t) return null;
+    const n = Math.round(Number(t));
+    return Number.isNaN(n) ? null : n;
+  };
+  const costV = toNum(price);
+  const resaleV = toNum(resale);
+  const soldV = toNum(sold);
+  const dealChanged =
+    (costV != null && costV !== (lead.purchasePrice ?? null)) ||
+    (resaleV != null && resaleV !== (lead.expectedResale ?? null)) ||
+    (soldV != null && soldV !== (lead.actualSalePrice ?? null));
+  // Profit = actual sale (if recorded) else expected resale, minus your cost.
+  const saleForProfit = soldV ?? lead.actualSalePrice ?? resaleV ?? lead.expectedResale ?? null;
+  const costForProfit = costV ?? lead.purchasePrice ?? null;
+  const isActualSale = (soldV ?? lead.actualSalePrice) != null;
+  const profit = saleForProfit != null && costForProfit != null ? saleForProfit - costForProfit : null;
+  const marginPct = profit != null && costForProfit ? Math.round((profit / costForProfit) * 100) : null;
+  function saveDeal() {
+    const patch: Partial<Lead> = {};
+    if (costV != null && costV !== (lead.purchasePrice ?? null)) patch.purchasePrice = costV;
+    if (resaleV != null && resaleV !== (lead.expectedResale ?? null)) patch.expectedResale = resaleV;
+    if (soldV != null && soldV !== (lead.actualSalePrice ?? null)) {
+      patch.actualSalePrice = soldV;
+      if (lead.actualSalePrice == null) patch.soldAt = new Date().toISOString();
+    }
+    if (Object.keys(patch).length) onPatch(lead.id, patch);
+  }
   const v = lead.vehicle;
 
   return (
@@ -532,6 +633,11 @@ function LeadCard({
             {lead.purchasePrice != null && (
               <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-bold text-green-700">
                 Bought {cad(lead.purchasePrice)}
+              </span>
+            )}
+            {lead.actualSalePrice != null && (
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                Sold {cad(lead.actualSalePrice)}
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
@@ -676,29 +782,33 @@ function LeadCard({
             )}
           </div>
 
-          {/* purchase price */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label htmlFor={`price-${lead.id}`} className="text-sm text-muted">Purchased for</label>
-            <div className="relative">
-              <Dollar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-              <input
-                id={`price-${lead.id}`}
-                type="number"
-                min={0}
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="—"
-                className="field max-w-[150px] py-1.5 pl-7 text-sm"
-              />
+          {/* deal economics — cost, expected resale, actual sale + live profit */}
+          <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+            <div className="grid grid-cols-3 gap-2">
+              <PriceInput id={`cost-${lead.id}`} label="Bought for" value={price} onChange={setPrice} />
+              <PriceInput id={`resale-${lead.id}`} label="Est. resale" value={resale} onChange={setResale} />
+              <PriceInput id={`sold-${lead.id}`} label="Sold for" value={sold} onChange={setSold} />
             </div>
-            {priceChanged && (
-              <button
-                onClick={() => onPatch(lead.id, { purchasePrice: priceNum })}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
-              >
-                <Check className="h-4 w-4" /> Save
-              </button>
-            )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-3">
+              {profit != null ? (
+                <span className={`text-sm font-bold ${profit < 0 ? "text-red-600" : "text-green-700"}`}>
+                  {isActualSale ? "Profit" : "Est. profit"}: {profit < 0 ? "−" : ""}{cad(Math.abs(profit))}
+                  {marginPct != null && (
+                    <span className="font-semibold text-muted"> ({profit >= 0 ? "+" : ""}{marginPct}%)</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-xs text-muted">Add a cost + a resale or sale price to see profit.</span>
+              )}
+              {dealChanged && (
+                <button
+                  onClick={saveDeal}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
+                >
+                  <Check className="h-4 w-4" /> Save
+                </button>
+              )}
+            </div>
           </div>
 
           {/* notes */}

@@ -193,8 +193,14 @@ export interface Lead {
    * kept classification). Set by the analytics profile-delete + admin trash. */
   archived?: boolean;
   archivedAt?: string;
-  /** Final price the vehicle was purchased for (CAD). */
+  /** Final price the vehicle was purchased for (CAD) — your cost. */
   purchasePrice?: number;
+  /** What you expect to resell it for (CAD) — drives estimated profit + margin. */
+  expectedResale?: number;
+  /** What it ACTUALLY sold for (CAD), recorded when the car is flipped. */
+  actualSalePrice?: number;
+  /** When the actual sale price was recorded (ISO). */
+  soldAt?: string;
   /**
    * Meta ad-match keys captured at lead creation, kept so a later offline
    * "Purchase" conversion can be attributed back to the originating ad click
