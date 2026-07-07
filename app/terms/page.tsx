@@ -90,7 +90,7 @@ export default function TermsPage() {
       h: "Consent to Be Contacted",
       body: [
         "When you submit your details, you agree that DriveOffer and its buyer/partner may contact you about your vehicle and a possible purchase by phone, SMS/text, email or other reasonable methods, using the contact information you provide.",
-        "Standard message and data rates may apply to calls and texts. You can ask us to stop contacting you at any time — for example, by replying STOP to a text or by emailing us.",
+        "If you provide your mobile number and choose text as a contact method, DriveOffer may send you SMS updates about your vehicle — such as confirming we received your request, your offer when it's ready, and inspection scheduling and reminders. Message frequency varies. Standard message and data rates may apply to calls and texts. Reply STOP at any time to opt out, or HELP for help — you can also email us to stop contacting you. Consent to texts is not a condition of any purchase.",
         {
           node: (
             <>
