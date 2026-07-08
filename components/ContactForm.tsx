@@ -6,6 +6,7 @@ import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { track } from "@/lib/analytics";
 import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
+import { formatPhone } from "@/lib/phone";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
@@ -95,7 +96,7 @@ export default function ContactForm() {
           </div>
           <div>
             <label className="label" htmlFor="c-phone">Phone</label>
-            <input id="c-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(___) ___-____" autoComplete="tel" />
+            <input id="c-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(___) ___-____" autoComplete="tel" />
           </div>
         </div>
         <div>

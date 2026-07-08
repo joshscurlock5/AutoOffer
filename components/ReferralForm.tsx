@@ -5,6 +5,7 @@ import { site } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { getAttribution, getBehavior, getTouches } from "@/lib/attribution";
+import { formatPhone } from "@/lib/phone";
 import { Check, ArrowRight } from "./icons";
 import TurnstileBox, { turnstileEnabled } from "./TurnstileBox";
 
@@ -47,12 +48,13 @@ export default function ReferralForm() {
     track("referral_page_view");
   }, []);
 
-  function set(k: keyof typeof f) {
+  function set(k: keyof typeof f, transform?: (v: string) => string) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       once("referral_form_start");
       const ev = FIELD_EVENT[k];
       if (ev && e.target.value) once(ev);
-      setF((prev) => ({ ...prev, [k]: e.target.value }));
+      const value = transform ? transform(e.target.value) : e.target.value;
+      setF((prev) => ({ ...prev, [k]: value }));
     };
   }
 
@@ -135,7 +137,7 @@ export default function ReferralForm() {
         </div>
         <div>
           <label className="label" htmlFor="r-phone">Your phone <span className="font-normal text-muted">(so we can send your <span className="font-semibold text-emerald-700">$100</span>)</span></label>
-          <input id="r-phone" type="tel" className="field" value={f.referrerPhone} onChange={set("referrerPhone")} placeholder="(___) ___-____" />
+          <input id="r-phone" type="tel" className="field" value={f.referrerPhone} onChange={set("referrerPhone", formatPhone)} placeholder="(___) ___-____" />
         </div>
       </div>
 
@@ -148,7 +150,7 @@ export default function ReferralForm() {
           </div>
           <div>
             <label className="label" htmlFor="f-phone">Friend&apos;s phone</label>
-            <input id="f-phone" type="tel" className="field" value={f.friendPhone} onChange={set("friendPhone")} placeholder="(___) ___-____" />
+            <input id="f-phone" type="tel" className="field" value={f.friendPhone} onChange={set("friendPhone", formatPhone)} placeholder="(___) ___-____" />
           </div>
         </div>
         <div>

@@ -11,6 +11,7 @@ import { getAttribution, getBehavior, getTouches, markFunnelStep } from "@/lib/a
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
+import { formatPhone } from "@/lib/phone";
 import { OfferSkeleton } from "@/components/Skeleton";
 import CountUp from "@/components/CountUp";
 import WhySell from "@/components/WhySell";
@@ -43,13 +44,8 @@ const TRIM_UNSURE = "__unsure__";
 // flipped back to true. (Server side has a matching COMPUTE_ESTIMATE flag.)
 const SHOW_INSTANT_ESTIMATE = false;
 
-/** Live-format a phone number to (XXX) XXX-XXXX as the user types. */
-function formatPhone(v: string): string {
-  const d = v.replace(/\D/g, "").slice(0, 10);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
+// formatPhone lives in lib/phone.ts now — shared by all forms, tolerates the
+// +1 country code that browser autofill often prepends.
 
 export default function OfferFlow() {
   const sp = useSearchParams();
@@ -642,7 +638,7 @@ export default function OfferFlow() {
             </div>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone <span className="font-semibold text-emerald-700">(recommended)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Recommended — sometimes we need a quick detail to finalize an accurate offer, and a call or text is the fastest way to get it.</p>
             </div>
           </>
@@ -650,7 +646,7 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" maxLength={14} className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
