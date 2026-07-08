@@ -260,6 +260,9 @@ export interface Lead {
   /** Owner stale-lead SLA nudges already sent (idempotency guard for the cron). */
   staleNudges?: number;
   lastNudgedAt?: string;
+  /** ISO time the owner was pinged in Telegram about this as an abandoned (partial)
+   * lead — once-only guard so a repeated pre-submit beacon doesn't re-alert. */
+  partialNotifiedAt?: string;
   /** Customer nurture cadence, DECOUPLED from status: which follow-up track/step is
    * active, a pause-until gate, and the last automated-nurture timestamp (idempotency). */
   nurtureStage?: string;

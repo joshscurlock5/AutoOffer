@@ -5,6 +5,7 @@ import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import type { Lead, VehicleInfo } from "@/lib/types";
 import { parseAttribution, parseBehavior, parseTouches } from "@/lib/attribution";
 import { clientIdFromGaCookie } from "@/lib/ga4Mp";
+import { notifyPartialLead } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -122,6 +123,9 @@ export async function POST(req: NextRequest) {
     }
     // An earlier partial exists — refresh it instead of creating a duplicate.
     else if (match && match.status === "partial") {
+      // Ping the owner the first time a partial is seen with contact info — catches
+      // partials from before this alert existed, or one whose ping was skipped.
+      const notifyNow = !match.partialNotifiedAt;
       await updateLead(match.id, {
         contact: { name, email, phone, contactMethod },
         vehicle,
@@ -134,7 +138,11 @@ export async function POST(req: NextRequest) {
         ...(touchHistory ? { touchHistory } : {}),
         ...(gaClientId && !match.gaClientId ? { gaClientId } : {}),
         ...(!match.meta && !consentDenied ? { meta } : {}),
+        ...(notifyNow ? { partialNotifiedAt: new Date().toISOString() } : {}),
       });
+      if (notifyNow) {
+        await notifyPartialLead({ ...match, contact: { name, email, phone, contactMethod }, vehicle });
+      }
       return NextResponse.json({ ok: true, updated: true });
     }
 
@@ -154,8 +162,13 @@ export async function POST(req: NextRequest) {
       ...(behavior ? { behavior } : {}),
       ...(gaClientId ? { gaClientId } : {}),
       source: "web-partial",
+      // Stamp before the alert so a repeated pre-submit beacon can't re-ping.
+      partialNotifiedAt: new Date().toISOString(),
     };
     await addLead(lead);
+    // High-intent abandoner left a phone/email — ping the owner so they can chase
+    // it (same short ID + commands as a full lead). Best-effort; never throws.
+    await notifyPartialLead(lead);
     return NextResponse.json({ ok: true, created: true });
   } catch (e) {
     console.error("POST /api/leads/partial failed", e);

@@ -54,11 +54,15 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
 }
 
+// Shopping-cart emoji via codepoint (abandoned-cart partial alert), matching the
+// EMOJI_CHAT/EMOJI_REFERRAL pattern so it survives build + Telegram transport.
+const EMOJI_CART = String.fromCodePoint(0x1f6d2);
+
 /** Human-friendly message body. Telegram auto-links phone numbers + emails. */
-function buildText(lead: Lead): string {
+function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
   const c = lead.contact;
   const reach = c.contactMethod ?? "call";
-  const lines: string[] = ["🚗 New DriveOffer lead", "", c.name];
+  const lines: string[] = [header, "", c.name];
 
   if (lead.vehicle) {
     const v = lead.vehicle;
@@ -120,6 +124,24 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
+  }
+}
+
+/** Alert the owner about an ABANDONED (partial) form that still left a phone or
+ * email — a high-intent seller worth chasing. Mirrors the full-lead alert (same
+ * short ID + /offer /moreinfo /message commands) so the owner can reach out
+ * straight from Telegram. Sent once per partial (the caller guards on
+ * partialNotifiedAt). No-op if unconfigured; never throws. Await it. */
+export async function notifyPartialLead(lead: Lead): Promise<void> {
+  const chat = chatFor("leads");
+  if (!BOT_TOKEN || !chat) return;
+  const sid = lead.id.split("-")[0];
+  const text = buildText(lead, `${EMOJI_CART} Abandoned form — reachable (they left contact info)`);
+  try {
+    await sendText(text, chat);
+    await sendText(sid, chat);
+  } catch (e) {
+    console.error("[notify] partial Telegram alert failed:", e);
   }
 }
 
