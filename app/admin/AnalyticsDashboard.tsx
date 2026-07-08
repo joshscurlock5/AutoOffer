@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
+import { DATA_SOURCES, STATUS_META, CATEGORY_LABEL, type SourceHealth, type SourceStatus } from "@/lib/dataSources";
 import {
   computeView,
   filterProfiles,
@@ -1335,8 +1336,117 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
 }
 
 // ---------------------------------------------------------------------------
+//  Sources — passive "data-sources health" hub. A card per collection method
+//  with a last-data-seen status chip; click one to see what it collects and its
+//  health. Data comes from /api/admin/sources (registry: lib/dataSources.ts).
+// ---------------------------------------------------------------------------
 
-type Tab = "overview" | "acquisition" | "funnel" | "people";
+function SourceStatusChip({ status }: { status: SourceStatus }) {
+  const m = STATUS_META[status];
+  return (
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.cls}`}>
+      <span aria-hidden>{m.dot}</span> {m.label}
+    </span>
+  );
+}
+
+function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  if (sources === null) {
+    return <div className="card p-4 text-sm text-muted">Loading data sources…</div>;
+  }
+  const byId = new Map(sources.map((s) => [s.id, s]));
+  const def = selected ? DATA_SOURCES.find((d) => d.id === selected) ?? null : null;
+  const health = selected ? byId.get(selected) ?? null : null;
+  return (
+    <>
+      <p className="mb-4 max-w-3xl text-sm text-muted">
+        When each way you collect data last received something.{" "}
+        <span className="font-semibold text-emerald-700">Active</span> = fresh,{" "}
+        <span className="font-semibold text-amber-700">Quiet</span> = nothing lately,{" "}
+        <span className="font-semibold text-red-700">Check it</span> = likely broken. This is passive — it reads
+        data you already have and doesn&apos;t ping anything. Click a source to see exactly what it collects.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {DATA_SOURCES.map((d) => {
+          const h = byId.get(d.id);
+          const active = selected === d.id;
+          return (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => setSelected(active ? null : d.id)}
+              className={`card p-4 text-left transition hover:shadow-md ${active ? "ring-2 ring-brand-600" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm font-bold text-navy">{d.label}</div>
+                <SourceStatusChip status={h?.status ?? "empty"} />
+              </div>
+              <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{CATEGORY_LABEL[d.category]}</div>
+              <div className="mt-2 text-xs text-muted">
+                Last data: <span className="font-semibold text-navy">{timeAgo(h?.lastAt ?? undefined)}</span>
+              </div>
+              <div className="text-xs text-muted">{h ? `${h.count24h} in 24h · ${h.count7d} in 7d` : "—"}</div>
+              {h?.note && <div className="mt-1 text-[11px] text-slate-500">{h.note}</div>}
+            </button>
+          );
+        })}
+      </div>
+      {def && (
+        <div className="card mt-4 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-navy">{def.label}</h3>
+              <p className="mt-0.5 text-sm text-muted">{def.purpose}</p>
+            </div>
+            <SourceStatusChip status={health?.status ?? "empty"} />
+          </div>
+          <div className="mt-4 grid gap-5 md:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">What it collects</div>
+              <ul className="mt-2 space-y-1 text-sm text-navy">
+                {def.collects.map((c) => (
+                  <li key={c} className="flex gap-2">
+                    <span className="text-brand-600">•</span>
+                    <span>{c}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">Health</div>
+              <div className="mt-2 space-y-1 text-sm text-navy">
+                <div>
+                  Last datapoint: <span className="font-semibold">{timeAgo(health?.lastAt ?? undefined)}</span>
+                  {health?.lastAt && <span className="text-muted"> · {new Date(health.lastAt).toLocaleString("en-CA")}</span>}
+                </div>
+                <div>
+                  Last 24h: <span className="font-semibold">{health?.count24h ?? 0}</span> · Last 7d:{" "}
+                  <span className="font-semibold">{health?.count7d ?? 0}</span>
+                </div>
+                {health?.note && <div className="text-muted">{health.note}</div>}
+                {def.storage && (
+                  <div className="text-muted">
+                    Storage: <code className="rounded bg-slate-100 px-1">{def.storage}</code>
+                  </div>
+                )}
+              </div>
+              {def.fixHint && (
+                <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                  <span className="font-semibold text-navy">If it looks off:</span> {def.fixHint}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type Tab = "sources" | "overview" | "acquisition" | "funnel" | "people";
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const events = data.events;
@@ -1357,6 +1467,8 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const ga4 = ga4Days(range);
   const [ads, setAds] = useState<{ configured: boolean; insights: AdInsight[] } | null>(null);
   const [adLevel, setAdLevel] = useState<{ configured: boolean; ads: AdInsightAd[] } | null>(null);
+  // Data-sources health hub (passive last-seen) — fetched once, range-independent.
+  const [sources, setSources] = useState<SourceHealth[] | null>(null);
   // Just the GA4 configured flag, for the Overview data-health connector chip
   // (the full traffic report is fetched lazily inside TrafficGa4 on Acquisition).
   const [ga4Ok, setGa4Ok] = useState<boolean | null>(null);
@@ -1382,6 +1494,16 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       .catch(() => { if (!cancelled) setGa4Ok(false); });
     return () => { cancelled = true; };
   }, [ga4.days]);
+
+  // Data-sources health — global (not range-scoped), fetched once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/sources`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setSources(d.sources || []); })
+      .catch(() => { if (!cancelled) setSources([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const metaConfigured = ads?.configured ?? adLevel?.configured ?? null;
 
@@ -1452,6 +1574,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
   const booked = view.funnelByRank.booked;
   const tabs: { key: Tab; label: string }[] = [
+    { key: "sources", label: "Sources" },
     { key: "overview", label: "Overview" },
     { key: "acquisition", label: "Acquisition" },
     { key: "funnel", label: "Funnel" },
@@ -1492,6 +1615,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </button>
         ))}
       </div>
+
+      {/* ---- TAB: SOURCES ---- */}
+      {tab === "sources" && <SourcesPanel sources={sources} />}
 
       {/* ---- TAB 1: OVERVIEW ---- */}
       {tab === "overview" && (

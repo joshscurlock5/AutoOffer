@@ -1,0 +1,230 @@
+// ===========================================================================
+//  Data Sources registry — the single source of truth for the admin
+//  "Sources" health hub. Describes every distinct way DriveOffer collects
+//  data: what it collects, where it lands, and the passive freshness
+//  thresholds that turn a "last data seen" timestamp into a status chip.
+//
+//  Shared by BOTH the API (app/api/admin/sources/route.ts computes health)
+//  and the UI (app/admin/AnalyticsDashboard.tsx renders the cards), so the two
+//  never drift. Pure data + pure helpers — NO server-only imports, so the
+//  client component can import it too.
+//
+//  Health model = PASSIVE "last data seen" (owner's choice): we read data we
+//  already store; we do not ping anything. Each source declares freshHrs
+//  (newer than this ⇒ Active) and quietDays (older than freshHrs but within
+//  this ⇒ Quiet; beyond ⇒ Check it).
+//
+//  This file currently covers the STEP 1 first-party sources. Later steps
+//  append connector / tracker / comms entries here.
+// ===========================================================================
+
+export type SourceCategory = "firstParty" | "tracker" | "connector" | "comms";
+
+export type SourceStatus = "active" | "quiet" | "stale" | "empty" | "unconfigured";
+
+export interface DataSourceDef {
+  id: string;
+  label: string;
+  category: SourceCategory;
+  /** One-line plain-language purpose. */
+  purpose: string;
+  /** The data types this method collects — shown in the detail panel. */
+  collects: string[];
+  /** Where it lands (table / storage) — shown in detail. Optional. */
+  storage?: string;
+  /** Newer than this many hours ⇒ Active. */
+  freshHrs: number;
+  /** Older than freshHrs but within this many days ⇒ Quiet; beyond ⇒ Check it. */
+  quietDays: number;
+  /** Plain-language "where to look if it's broken". */
+  fixHint?: string;
+}
+
+/** Per-source computed health returned by /api/admin/sources. */
+export interface SourceHealth {
+  id: string;
+  configured: boolean;
+  /** ISO of the most recent datapoint, or null if none. */
+  lastAt: string | null;
+  count24h: number;
+  count7d: number;
+  status: SourceStatus;
+  /** Optional extra context (e.g. coverage %, "table not created yet"). */
+  note?: string;
+}
+
+/** Turn a last-seen timestamp into a passive status. `now` = Date.now(). */
+export function statusFor(
+  lastAt: string | null,
+  def: Pick<DataSourceDef, "freshHrs" | "quietDays">,
+  now: number,
+  configured = true,
+): SourceStatus {
+  if (!configured) return "unconfigured";
+  if (!lastAt) return "empty";
+  const t = Date.parse(lastAt);
+  if (!Number.isFinite(t)) return "empty";
+  const age = now - t;
+  if (age <= def.freshHrs * 3_600_000) return "active";
+  if (age <= def.quietDays * 86_400_000) return "quiet";
+  return "stale";
+}
+
+/** UI presentation for each status (label + dot glyph + Tailwind chip classes). */
+export const STATUS_META: Record<SourceStatus, { label: string; dot: string; cls: string }> = {
+  active: { label: "Active", dot: "●", cls: "bg-emerald-100 text-emerald-800" },
+  quiet: { label: "Quiet", dot: "●", cls: "bg-amber-100 text-amber-800" },
+  stale: { label: "Check it", dot: "●", cls: "bg-red-100 text-red-700" },
+  empty: { label: "No data yet", dot: "○", cls: "bg-slate-100 text-slate-600" },
+  unconfigured: { label: "Not set up", dot: "○", cls: "bg-slate-100 text-slate-500" },
+};
+
+export const CATEGORY_LABEL: Record<SourceCategory, string> = {
+  firstParty: "First-party",
+  tracker: "Tracker",
+  connector: "Connector",
+  comms: "Comms",
+};
+
+// ---------------------------------------------------------------------------
+//  STEP 1 — first-party data streams we own (all DynamoDB-backed, so each has
+//  a real stored timestamp → true passive "last data seen").
+// ---------------------------------------------------------------------------
+export const DATA_SOURCES: DataSourceDef[] = [
+  {
+    id: "leads",
+    label: "Lead form",
+    category: "firstParty",
+    purpose: "Completed sell-my-car submissions — your actual leads.",
+    collects: [
+      "Name, email, phone",
+      "Preferred contact method + best time",
+      "Vehicle: year, make, model, trim, mileage",
+      "Condition tags + free-text note",
+      "Marketing attribution (UTM, gclid, fbclid, referrer)",
+      "On-site behavior (visits, funnel step, time on site)",
+      "Meta match keys (fbp / fbc) + GA client/session id",
+    ],
+    storage: "AutoOfferLeads (DynamoDB)",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Submissions write to the leads table via /api/leads. If this goes stale unexpectedly, submit a test through the get-offer form end to end and watch for a Telegram alert.",
+  },
+  {
+    id: "partials",
+    label: "Abandoned-form beacon",
+    category: "firstParty",
+    purpose: "High-intent visitors who started the form but didn't submit.",
+    collects: [
+      "Partial contact (name / email / phone as typed)",
+      "Partial vehicle info",
+      "Attribution + behavior",
+      "Whether an owner alert was already sent",
+    ],
+    storage: "AutoOfferLeads (status = partial)",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Fires on contact-field blur via /api/leads/partial. If stale, either the beacon is being blocked or few people are reaching the contact step.",
+  },
+  {
+    id: "events",
+    label: "On-site event stream",
+    category: "firstParty",
+    purpose: "First-party behavior analytics — every visit and funnel step.",
+    collects: [
+      "Page views + route changes",
+      "Funnel steps (offer_flow_start → generate_lead)",
+      "Field focus / blur + form errors",
+      "VIN decode funnel",
+      "Exit-intent + resume prompts",
+      "Session + visitor ids",
+    ],
+    storage: "AutoOfferEvents (DynamoDB, ~12-month TTL)",
+    freshHrs: 24,
+    quietDays: 3,
+    fixHint:
+      "Client beacon → /api/events → AutoOfferEvents. If empty, the table may not exist yet (one-time setup) or analytics consent is being declined.",
+  },
+  {
+    id: "attribution",
+    label: "Attribution & multi-touch",
+    category: "firstParty",
+    purpose: "Where each person came from — the ad / campaign / referrer trail.",
+    collects: [
+      "UTM source / medium / campaign / content / term",
+      "Google click id (gclid)",
+      "Meta click id (fbclid)",
+      "External referrer + landing page",
+      "Full multi-touch journey (oldest → newest)",
+    ],
+    storage: "Embedded on each lead / referral",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Captured client-side and stored on every lead. Coverage shows the share of recent leads that arrived tagged — a sudden drop can mean links lost their UTMs.",
+  },
+  {
+    id: "lookups",
+    label: "Price lookups",
+    category: "firstParty",
+    purpose: "Every vehicle valuation, and whether it turned into a lead.",
+    collects: [
+      "Vehicle looked up",
+      "Outcome (priced range vs unique / no-price)",
+      "Estimate range shown",
+      "MarketCheck API calls used + cache hits",
+      "Whether it converted to a lead",
+    ],
+    storage: "AutoOfferLookups (DynamoDB)",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Logged on every /api/estimate call. Also reflects live MarketCheck usage (the API-call counter).",
+  },
+  {
+    id: "referrals",
+    label: "Referral program",
+    category: "firstParty",
+    purpose: "Referral submissions — referrer + the friend they sent.",
+    collects: [
+      "Referrer name / email / phone",
+      "Friend name / phone / email",
+      "Message",
+      "Generated referral code",
+      "Attribution + behavior",
+    ],
+    storage: "AutoOfferReferrals (DynamoDB)",
+    freshHrs: 168,
+    quietDays: 30,
+    fixHint: "Writes via /api/referrals. Low volume here is normal.",
+  },
+  {
+    id: "chat",
+    label: "Live chat",
+    category: "firstParty",
+    purpose: "Visitor-initiated chat conversations.",
+    collects: [
+      "Conversation + message history",
+      "Visitor name + contact",
+      "Who replied last (the needs-reply cue)",
+    ],
+    storage: "AutoOfferChats (DynamoDB)",
+    freshHrs: 168,
+    quietDays: 30,
+    fixHint: "Writes via /api/chat. Low volume here is normal.",
+  },
+  {
+    id: "geo",
+    label: "Geo enrichment",
+    category: "firstParty",
+    purpose: "Coarse location resolved from each lead's IP address.",
+    collects: ["Country / province / city", "Resolved-at timestamp"],
+    storage: "Embedded on each lead (Lead.geo)",
+    freshHrs: 168,
+    quietDays: 30,
+    fixHint:
+      "Resolved hourly by the cron (ipwho.is) for leads that have an IP. If stale while leads keep coming, check the /api/cron schedule (EventBridge).",
+  },
+];
