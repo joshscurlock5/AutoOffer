@@ -63,6 +63,27 @@ export async function GET() {
   const clarityId = process.env.NEXT_PUBLIC_CLARITY_ID;
   const leadsWithGaClient = leads.filter((l) => l.gaClientId);
   const leadsWithFbCookie = leads.filter((l) => l.meta?.fbp || l.meta?.fbc);
+  // Messaging channels: outbound receipts (commsEvents) + inbound replies stamped
+  // on leads, split by channel. commsEvents is the authoritative receipt log
+  // (avoids double-counting the emailEngagement/smsEngagement summary fields).
+  const resendConfigured = Boolean(process.env.RESEND_API_KEY || process.env.RESEND_WEBHOOK_SECRET);
+  const twilioConfigured = Boolean(process.env.TWILIO_AUTH_TOKEN);
+  const emailTimes: string[] = [];
+  const smsTimes: string[] = [];
+  let emailOptOuts = 0;
+  let smsOptOuts = 0;
+  for (const l of leads) {
+    if (l.emailOptOut || l.emailBounced) emailOptOuts += 1;
+    if (l.smsOptOut) smsOptOuts += 1;
+    for (const e of l.commsEvents || []) {
+      if (e.channel === "email") emailTimes.push(e.at);
+      else if (e.channel === "sms") smsTimes.push(e.at);
+    }
+    if (l.lastReplyAt) {
+      if (l.lastInboundChannel === "email") emailTimes.push(l.lastReplyAt);
+      else if (l.lastInboundChannel === "sms") smsTimes.push(l.lastReplyAt);
+    }
+  }
 
   const pct = (have: number, total: number, label: string) =>
     total > 0 ? `${Math.round((have / total) * 100)}% of ${label}` : undefined;
@@ -95,6 +116,16 @@ export async function GET() {
       times: leadsWithFbCookie.map((l) => l.createdAt),
       configured: Boolean(pixelId),
       note: pixelId ? pct(leadsWithFbCookie.length, realLeads.length, "recent leads carried a Meta cookie") : "NEXT_PUBLIC_META_PIXEL_ID not set.",
+    },
+    email: {
+      times: emailTimes,
+      configured: resendConfigured,
+      note: resendConfigured ? (emailOptOuts ? `${emailOptOuts} opted out / bounced` : undefined) : "RESEND_API_KEY / RESEND_WEBHOOK_SECRET not set.",
+    },
+    sms: {
+      times: smsTimes,
+      configured: twilioConfigured,
+      note: twilioConfigured ? (smsOptOuts ? `${smsOptOuts} opted out (STOP)` : undefined) : "TWILIO_AUTH_TOKEN not set — SMS is dormant.",
     },
   };
 

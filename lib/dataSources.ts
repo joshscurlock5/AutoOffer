@@ -362,4 +362,41 @@ export const DATA_SOURCES: DataSourceDef[] = [
     fixHint:
       "Fires client-side for every consented visitor; there's no server signal, so confirm live recordings in the Clarity dashboard.",
   },
+  // ----- STEP 4: messaging & delivery (inbound + outbound receipts on leads) -----
+  {
+    id: "email",
+    label: "Email (Resend)",
+    category: "comms",
+    purpose: "Delivery, opens, clicks, bounces + inbound email replies.",
+    collects: [
+      "Delivered / opened / clicked receipts",
+      "Hard bounces + spam complaints (opt-out)",
+      "Inbound customer replies (via the Gmail script)",
+      "Per-lead comms timeline",
+    ],
+    storage: "Stamped onto each lead (emailEngagement + commsEvents)",
+    envVars: ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET"],
+    freshHrs: 72,
+    quietDays: 30,
+    fixHint:
+      "Receipts arrive via the Resend webhook (/api/webhooks/resend, RESEND_WEBHOOK_SECRET); replies via the Gmail Apps Script. If stale while emails send, check the Resend webhook points at the site.",
+  },
+  {
+    id: "sms",
+    label: "SMS (Twilio)",
+    category: "comms",
+    purpose: "Delivery/failure receipts, inbound replies, STOP opt-outs.",
+    collects: [
+      "Delivered / failed receipts",
+      "Inbound replies + 'C' confirmations",
+      "STOP / START opt-out state",
+      "Per-lead comms timeline",
+    ],
+    storage: "Stamped onto each lead (smsEngagement + commsEvents)",
+    envVars: ["TWILIO_AUTH_TOKEN"],
+    freshHrs: 72,
+    quietDays: 30,
+    fixHint:
+      "Inbound + status callbacks hit /api/sms and /api/sms/status (Twilio, signature-validated). Ships dormant until TWILIO_AUTH_TOKEN is set. If stale while texts send, check the Twilio webhooks point at the site.",
+  },
 ];
