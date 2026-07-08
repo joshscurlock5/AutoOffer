@@ -170,3 +170,39 @@ export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightA
     return adCache?.data || [];
   }
 }
+
+/** TEMPORARY diagnostic (authed ?debug=1 only). Does two fresh, tiny Meta calls
+ * — validate the token, then check for ANY lifetime spend on the configured
+ * account — and reports the HTTP status + Meta error code so we can tell an
+ * expired/invalid token apart from a valid-token-but-wrong-account. Returns the
+ * token LENGTH (never the value) and no lead PII; error messages are scrubbed of
+ * the token and truncated. Remove once the connector is fixed. */
+export async function probeMetaAds() {
+  if (!metaAdsConfigured()) {
+    return { configured: false, tokenLen: 0, account: null };
+  }
+  const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
+  const esc = TOKEN!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const scrub = (s: string) => (s || "").replace(new RegExp(esc, "g"), "***").slice(0, 300);
+  async function call(url: string) {
+    try {
+      const r = await fetch(url);
+      const t = await r.text();
+      let j: { error?: { code?: number; type?: string; message?: string }; data?: unknown[] } = {};
+      try { j = JSON.parse(t); } catch { /* non-JSON */ }
+      return {
+        ok: r.ok, status: r.status,
+        rows: Array.isArray(j.data) ? j.data.length : undefined,
+        errorCode: j.error?.code, errorType: j.error?.type,
+        errorMessage: j.error?.message ? scrub(j.error.message) : undefined,
+      };
+    } catch (e) {
+      return { ok: false, status: -1, errorMessage: scrub(String((e as Error)?.message || e)) };
+    }
+  }
+  const identity = await call(`${API}/me?fields=id&access_token=${encodeURIComponent(TOKEN!)}`);
+  const spendEver = await call(
+    `${API}/${acct}/insights?level=campaign&date_preset=maximum&fields=campaign_name,spend&limit=200&access_token=${encodeURIComponent(TOKEN!)}`
+  );
+  return { configured: true, tokenLen: (TOKEN || "").length, account: acct, identity, spendEver };
+}
