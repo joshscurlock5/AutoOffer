@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { getAdInsights, getAdLevelInsights, metaAdsConfigured, probeMetaAds } from "@/lib/metaAds";
+import { getAdInsights, getAdLevelInsights, metaAdsConfigured } from "@/lib/metaAds";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,10 +14,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const params = new URL(req.url).searchParams;
-  // TEMPORARY: authed connector diagnostic. Remove once Meta ads are fixed.
-  if (params.get("debug") === "1") {
-    return NextResponse.json(await probeMetaAds());
-  }
   const range = params.get("range") || "last_30d";
   const level = params.get("level") || "campaign";
   if (level === "ad") {

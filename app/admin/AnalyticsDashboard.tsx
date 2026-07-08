@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
-import { DATA_SOURCES, STATUS_META, CATEGORY_LABEL, type SourceHealth, type SourceStatus } from "@/lib/dataSources";
+import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import {
   computeView,
   filterProfiles,
@@ -1350,6 +1350,14 @@ function SourceStatusChip({ status }: { status: SourceStatus }) {
   );
 }
 
+const GROUP_ORDER: SourceCategory[] = ["firstParty", "connector", "tracker", "comms"];
+const GROUP_HEADING: Record<SourceCategory, string> = {
+  firstParty: "First-party — data you collect directly",
+  connector: "Connected platforms — data we read via API",
+  tracker: "Trackers — third-party analytics",
+  comms: "Messaging & delivery",
+};
+
 function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
   const [selected, setSelected] = useState<string | null>(null);
   if (sources === null) {
@@ -1358,40 +1366,63 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
   const byId = new Map(sources.map((s) => [s.id, s]));
   const def = selected ? DATA_SOURCES.find((d) => d.id === selected) ?? null : null;
   const health = selected ? byId.get(selected) ?? null : null;
+  const isLive = def?.healthKind === "liveFetch";
+  const groups = GROUP_ORDER.map((cat) => ({ cat, defs: DATA_SOURCES.filter((d) => d.category === cat) })).filter((g) => g.defs.length > 0);
   return (
     <>
-      <p className="mb-4 max-w-3xl text-sm text-muted">
+      <p className="mb-5 max-w-3xl text-sm text-muted">
         When each way you collect data last received something.{" "}
         <span className="font-semibold text-emerald-700">Active</span> = fresh,{" "}
         <span className="font-semibold text-amber-700">Quiet</span> = nothing lately,{" "}
-        <span className="font-semibold text-red-700">Check it</span> = likely broken. This is passive — it reads
-        data you already have and doesn&apos;t ping anything. Click a source to see exactly what it collects.
+        <span className="font-semibold text-red-700">Check it</span> = likely broken. Mostly passive — it reads data
+        you already have; the connected platforms also report whether their last API call succeeded. Click a source
+        to see exactly what it collects.
       </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {DATA_SOURCES.map((d) => {
-          const h = byId.get(d.id);
-          const active = selected === d.id;
-          return (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => setSelected(active ? null : d.id)}
-              className={`card p-4 text-left transition hover:shadow-md ${active ? "ring-2 ring-brand-600" : ""}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-sm font-bold text-navy">{d.label}</div>
-                <SourceStatusChip status={h?.status ?? "empty"} />
-              </div>
-              <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{CATEGORY_LABEL[d.category]}</div>
-              <div className="mt-2 text-xs text-muted">
-                Last data: <span className="font-semibold text-navy">{timeAgo(h?.lastAt ?? undefined)}</span>
-              </div>
-              <div className="text-xs text-muted">{h ? `${h.count24h} in 24h · ${h.count7d} in 7d` : "—"}</div>
-              {h?.note && <div className="mt-1 text-[11px] text-slate-500">{h.note}</div>}
-            </button>
-          );
-        })}
-      </div>
+      {groups.map((g) => (
+        <div key={g.cat} className="mb-6">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{GROUP_HEADING[g.cat]}</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {g.defs.map((d) => {
+              const h = byId.get(d.id);
+              const active = selected === d.id;
+              const live = d.healthKind === "liveFetch";
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSelected(active ? null : d.id)}
+                  className={`card p-4 text-left transition hover:shadow-md ${active ? "ring-2 ring-brand-600" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-bold text-navy">{d.label}</div>
+                    <SourceStatusChip status={h?.status ?? "empty"} />
+                  </div>
+                  {live ? (
+                    <div className="mt-2 text-xs">
+                      {h?.error ? (
+                        <span className="text-red-700">{h.error}</span>
+                      ) : (
+                        <span className="text-muted">
+                          {h?.status === "unconfigured" ? "Not connected" : h?.note || (h?.status === "quiet" ? "Connected — no data in range" : "Connected")}
+                          {h?.lastAt && <span className="text-slate-400"> · checked {timeAgo(h.lastAt)}</span>}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-2 text-xs text-muted">
+                        Last data: <span className="font-semibold text-navy">{timeAgo(h?.lastAt ?? undefined)}</span>
+                      </div>
+                      <div className="text-xs text-muted">{h ? `${h.count24h} in 24h · ${h.count7d} in 7d` : "—"}</div>
+                      {h?.note && <div className="mt-1 text-[11px] text-slate-500">{h.note}</div>}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       {def && (
         <div className="card mt-4 p-5">
           <div className="flex items-start justify-between gap-3">
@@ -1412,19 +1443,43 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                   </li>
                 ))}
               </ul>
+              {def.envVars && def.envVars.length > 0 && (
+                <div className="mt-3 text-xs text-muted">
+                  Depends on:{" "}
+                  {def.envVars.map((v, i) => (
+                    <span key={v}>
+                      {i > 0 && ", "}
+                      <code className="rounded bg-slate-100 px-1">{v}</code>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-muted">Health</div>
               <div className="mt-2 space-y-1 text-sm text-navy">
-                <div>
-                  Last datapoint: <span className="font-semibold">{timeAgo(health?.lastAt ?? undefined)}</span>
-                  {health?.lastAt && <span className="text-muted"> · {new Date(health.lastAt).toLocaleString("en-CA")}</span>}
-                </div>
-                <div>
-                  Last 24h: <span className="font-semibold">{health?.count24h ?? 0}</span> · Last 7d:{" "}
-                  <span className="font-semibold">{health?.count7d ?? 0}</span>
-                </div>
-                {health?.note && <div className="text-muted">{health.note}</div>}
+                {isLive ? (
+                  <>
+                    {health?.error ? (
+                      <div className="rounded-lg bg-red-50 p-2 text-red-700">{health.error}</div>
+                    ) : (
+                      <div>{health?.status === "unconfigured" ? "Not connected — env vars not set." : health?.note || "Connected and returning data."}</div>
+                    )}
+                    {health?.lastAt && <div className="text-muted">Last successful call: {timeAgo(health.lastAt)}</div>}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      Last datapoint: <span className="font-semibold">{timeAgo(health?.lastAt ?? undefined)}</span>
+                      {health?.lastAt && <span className="text-muted"> · {new Date(health.lastAt).toLocaleString("en-CA")}</span>}
+                    </div>
+                    <div>
+                      Last 24h: <span className="font-semibold">{health?.count24h ?? 0}</span> · Last 7d:{" "}
+                      <span className="font-semibold">{health?.count7d ?? 0}</span>
+                    </div>
+                    {health?.note && <div className="text-muted">{health.note}</div>}
+                  </>
+                )}
                 {def.storage && (
                   <div className="text-muted">
                     Storage: <code className="rounded bg-slate-100 px-1">{def.storage}</code>

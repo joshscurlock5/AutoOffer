@@ -36,6 +36,11 @@ export interface DataSourceDef {
   freshHrs: number;
   /** Older than freshHrs but within this many days ⇒ Quiet; beyond ⇒ Check it. */
   quietDays: number;
+  /** Names (only) of env vars this method depends on — shown in detail. */
+  envVars?: string[];
+  /** How health is measured. "lastSeen" (default) = most recent stored datapoint;
+   * "liveFetch" = the result of a live connector call (Meta / GA4). */
+  healthKind?: "lastSeen" | "liveFetch";
   /** Plain-language "where to look if it's broken". */
   fixHint?: string;
 }
@@ -51,6 +56,19 @@ export interface SourceHealth {
   status: SourceStatus;
   /** Optional extra context (e.g. coverage %, "table not created yet"). */
   note?: string;
+  /** Connector error message (why a liveFetch source is failing), if any. */
+  error?: string;
+}
+
+/** Health of a pull-connector we READ from (Meta / GA4). Its "last data seen" is
+ * the fetch result: configured? did the call succeed? was there data? */
+export interface ConnectorHealth {
+  configured: boolean;
+  ok: boolean;
+  hasData: boolean;
+  lastOkAt?: string | null;
+  error?: string;
+  summary?: string;
 }
 
 /** Turn a last-seen timestamp into a passive status. `now` = Date.now(). */
@@ -226,5 +244,61 @@ export const DATA_SOURCES: DataSourceDef[] = [
     quietDays: 30,
     fixHint:
       "Resolved hourly by the cron (ipwho.is) for leads that have an IP. If stale while leads keep coming, check the /api/cron schedule (EventBridge).",
+  },
+  // ----- STEP 2: read-connectors (external APIs we pull data FROM) -----
+  {
+    id: "metaAds",
+    label: "Meta Ads (Marketing API)",
+    category: "connector",
+    purpose: "Reads your Facebook / Instagram ad spend, clicks, and results.",
+    collects: [
+      "Campaign & ad spend (CAD)",
+      "Impressions, reach, link clicks, CTR",
+      "Leads + cost-per-lead",
+      "Creative hook / hold video metrics",
+    ],
+    storage: "Live from Meta — nothing stored locally",
+    envVars: ["META_MARKETING_TOKEN", "META_AD_ACCOUNT_ID"],
+    healthKind: "liveFetch",
+    freshHrs: 0,
+    quietDays: 0,
+    fixHint:
+      "If it reads blocked/expired: developers.facebook.com/apps → your app → Alerts (clear the banner), then regenerate the token and update META_MARKETING_TOKEN in Amplify. The exact reason from Meta is shown above.",
+  },
+  {
+    id: "ga4Data",
+    label: "Google Analytics (Data API)",
+    category: "connector",
+    purpose: "Reads aggregate site traffic — everyone who visited, not just leads.",
+    collects: [
+      "Users, new users, sessions, page views",
+      "Engagement rate",
+      "Traffic by source / medium",
+      "By country + device",
+    ],
+    storage: "Live from GA4 — nothing stored locally",
+    envVars: ["GA4_PROPERTY_ID", "GA4_SA_CLIENT_EMAIL", "GA4_SA_PRIVATE_KEY"],
+    healthKind: "liveFetch",
+    freshHrs: 0,
+    quietDays: 0,
+    fixHint:
+      "If it errors, the service-account key likely rotated or expired. Regenerate the GA4 service-account key and update GA4_SA_PRIVATE_KEY in Amplify.",
+  },
+  {
+    id: "marketcheck",
+    label: "MarketCheck (vehicle pricing)",
+    category: "connector",
+    purpose: "Live Canadian market pricing + VIN decode used during a valuation.",
+    collects: [
+      "VIN → year / make / model / trim",
+      "Market asking-price percentiles",
+      "Active listing counts by trim",
+    ],
+    storage: "Live from MarketCheck — only called during a price lookup",
+    envVars: ["MARKETCHECK_API_KEY"],
+    freshHrs: 48,
+    quietDays: 30,
+    fixHint:
+      "Only called when a visitor runs a price lookup; it falls back to the local estimate model if it fails. “Last live call” reflects real API usage (cache hits excluded).",
   },
 ];

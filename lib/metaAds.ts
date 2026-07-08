@@ -1,5 +1,6 @@
 import "server-only";
 import type { AdInsight, AdInsightAd } from "./types";
+import type { ConnectorHealth } from "./dataSources";
 
 // ===========================================================================
 //  Meta Marketing API — read-only ad performance (spend / impressions / clicks
@@ -38,6 +39,11 @@ function pickAction(arr: MetaAction[] | undefined, types: string[]): number | un
 let cache: { at: number; range: string; data: AdInsight[] } | null = null;
 let adCache: { at: number; range: string; data: AdInsightAd[] } | null = null;
 
+// Last outcome of the campaign-insights fetch — surfaced to the Sources health
+// hub so a blocked/expired token shows up instead of looking like "no spend".
+let lastInsightsError: { status: number; code?: number; message?: string } | null = null;
+let lastInsightsOkAt: number | null = null;
+
 /** Per-campaign insights for a date preset (last_7d / last_30d / last_90d / …). */
 export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
   if (!metaAdsConfigured()) return [];
@@ -54,7 +60,12 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
       `&fields=${fields}&limit=500&access_token=${encodeURIComponent(TOKEN!)}`;
     const r = await fetch(url);
     if (!r.ok) {
-      console.error("[meta-ads] non-OK", r.status, (await r.text().catch(() => "")).slice(0, 300));
+      const body = await r.text().catch(() => "");
+      let code: number | undefined;
+      let message: string | undefined;
+      try { const j = JSON.parse(body); code = j?.error?.code; message = j?.error?.message; } catch { /* non-JSON */ }
+      console.error("[meta-ads] non-OK", r.status, body.slice(0, 300));
+      lastInsightsError = { status: r.status, code, message: message?.slice(0, 200) };
       return cache?.data || [];
     }
     interface RawInsight {
@@ -82,9 +93,12 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
     });
     data.sort((a, b) => b.spend - a.spend);
     cache = { at: Date.now(), range, data };
+    lastInsightsError = null;
+    lastInsightsOkAt = Date.now();
     return data;
   } catch (e) {
     console.error("[meta-ads] fetch failed", e);
+    lastInsightsError = { status: -1, message: String(e).slice(0, 200) };
     return cache?.data || [];
   }
 }
@@ -171,38 +185,22 @@ export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightA
   }
 }
 
-/** TEMPORARY diagnostic (authed ?debug=1 only). Does two fresh, tiny Meta calls
- * — validate the token, then check for ANY lifetime spend on the configured
- * account — and reports the HTTP status + Meta error code so we can tell an
- * expired/invalid token apart from a valid-token-but-wrong-account. Returns the
- * token LENGTH (never the value) and no lead PII; error messages are scrubbed of
- * the token and truncated. Remove once the connector is fixed. */
-export async function probeMetaAds() {
-  if (!metaAdsConfigured()) {
-    return { configured: false, tokenLen: 0, account: null };
-  }
-  const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
-  const esc = TOKEN!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const scrub = (s: string) => (s || "").replace(new RegExp(esc, "g"), "***").slice(0, 300);
-  async function call(url: string) {
-    try {
-      const r = await fetch(url);
-      const t = await r.text();
-      let j: { error?: { code?: number; type?: string; message?: string }; data?: unknown[] } = {};
-      try { j = JSON.parse(t); } catch { /* non-JSON */ }
-      return {
-        ok: r.ok, status: r.status,
-        rows: Array.isArray(j.data) ? j.data.length : undefined,
-        errorCode: j.error?.code, errorType: j.error?.type,
-        errorMessage: j.error?.message ? scrub(j.error.message) : undefined,
-      };
-    } catch (e) {
-      return { ok: false, status: -1, errorMessage: scrub(String((e as Error)?.message || e)) };
-    }
-  }
-  const identity = await call(`${API}/me?fields=id&access_token=${encodeURIComponent(TOKEN!)}`);
-  const spendEver = await call(
-    `${API}/${acct}/insights?level=campaign&date_preset=maximum&fields=campaign_name,spend&limit=200&access_token=${encodeURIComponent(TOKEN!)}`
-  );
-  return { configured: true, tokenLen: (TOKEN || "").length, account: acct, identity, spendEver };
+/** Connector health for the Sources hub — reuses the cached campaign-insights
+ * fetch (so it adds no extra load) and reports whether Meta accepted the call.
+ * A blocked/expired token surfaces here as ok:false + the Meta error text,
+ * instead of looking like an empty "no spend" table. */
+export async function getMetaAdsHealth(): Promise<ConnectorHealth> {
+  if (!metaAdsConfigured()) return { configured: false, ok: false, hasData: false };
+  const rows = await getAdInsights("last_30d");
+  const ok = !lastInsightsError;
+  const spend = rows.reduce((s, r) => s + (r.spend || 0), 0);
+  const err = lastInsightsError;
+  return {
+    configured: true,
+    ok,
+    hasData: ok && rows.length > 0,
+    lastOkAt: lastInsightsOkAt ? new Date(lastInsightsOkAt).toISOString() : null,
+    error: ok ? undefined : `${err?.message || "Meta API error"} (code ${err?.code ?? err?.status})`,
+    summary: ok ? `${rows.length} campaign${rows.length === 1 ? "" : "s"} · $${Math.round(spend).toLocaleString("en-CA")} spend (30d)` : undefined,
+  };
 }

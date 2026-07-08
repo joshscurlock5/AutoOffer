@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "crypto";
 import type { Ga4Traffic } from "./types";
+import type { ConnectorHealth } from "./dataSources";
 
 // ===========================================================================
 //  GA4 Data API — READ aggregate traffic (visitors / sessions / sources / geo /
@@ -26,6 +27,10 @@ function b64url(input: Buffer | string): string {
 }
 
 let tokenCache: { token: string; exp: number } | null = null;
+// Last outcome of a GA4 fetch — surfaced to the Sources health hub so an expired
+// service-account key shows up instead of just an empty traffic report.
+let lastGa4Error: string | null = null;
+let lastGa4OkAt: number | null = null;
 
 async function getAccessToken(): Promise<string | null> {
   if (!ga4Configured()) return null;
@@ -52,6 +57,7 @@ async function getAccessToken(): Promise<string | null> {
     });
     if (!r.ok) {
       console.error("[ga4] token", r.status, (await r.text().catch(() => "")).slice(0, 200));
+      lastGa4Error = `service-account token exchange failed (${r.status})`;
       return null;
     }
     const j = (await r.json()) as { access_token?: string; expires_in?: number };
@@ -60,6 +66,7 @@ async function getAccessToken(): Promise<string | null> {
     return j.access_token;
   } catch (e) {
     console.error("[ga4] token error", e);
+    lastGa4Error = "service-account token exchange error";
     return null;
   }
 }
@@ -108,7 +115,11 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
       body: JSON.stringify(body),
     });
     if (!r.ok) {
-      console.error("[ga4] report", r.status, (await r.text().catch(() => "")).slice(0, 300));
+      const body = await r.text().catch(() => "");
+      console.error("[ga4] report", r.status, body.slice(0, 300));
+      let msg: string | undefined;
+      try { msg = JSON.parse(body)?.error?.message; } catch { /* non-JSON */ }
+      lastGa4Error = `report failed (${r.status})${msg ? ": " + msg.slice(0, 120) : ""}`;
       return dataCache.get(key)?.data || null;
     }
     const j = (await r.json()) as { reports?: GaReport[] };
@@ -128,9 +139,29 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
       byDevice: (reports[4]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
     };
     dataCache.set(key, { at: Date.now(), data });
+    lastGa4Error = null;
+    lastGa4OkAt = Date.now();
     return data;
   } catch (e) {
     console.error("[ga4] report error", e);
+    lastGa4Error = "report request error";
     return dataCache.get(key)?.data || null;
   }
+}
+
+/** Connector health for the Sources hub — reuses the cached traffic fetch and
+ * reports whether the GA4 service account is still authorized + returning data. */
+export async function getGa4Health(): Promise<ConnectorHealth> {
+  if (!ga4Configured()) return { configured: false, ok: false, hasData: false };
+  const data = await getGa4Traffic(30);
+  const ok = data !== null && !lastGa4Error;
+  const users = data?.totals.users ?? 0;
+  return {
+    configured: true,
+    ok,
+    hasData: ok && users > 0,
+    lastOkAt: lastGa4OkAt ? new Date(lastGa4OkAt).toISOString() : null,
+    error: ok ? undefined : (lastGa4Error || "GA4 returned no data"),
+    summary: ok ? `${users.toLocaleString("en-CA")} users (30d)` : undefined,
+  };
 }
