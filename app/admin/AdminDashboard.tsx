@@ -19,6 +19,7 @@ type ChatSummary = {
   lastSender: "visitor" | "admin";
   count: number;
   preview: string;
+  archived: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -53,6 +54,8 @@ export default function AdminDashboard({
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [referrals, setReferrals] = useState<Referral[]>(initialReferrals);
   const [tab, setTab] = useState<"leads" | "referrals" | "chats" | "lookups">("leads");
+  const [refView, setRefView] = useState<"active" | "deleted">("active");
+  const [chatView, setChatView] = useState<"active" | "deleted">("active");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "bookmarked" | "deleted" | "inventory" | LeadStatus>("all");
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
@@ -64,7 +67,7 @@ export default function AdminDashboard({
   const [activeChat, setActiveChat] = useState<ChatConversation | null>(null);
   const [lookups, setLookups] = useState<Lookup[]>([]);
   const [focusLeadId, setFocusLeadId] = useState<string | null>(null);
-  const chatsNeedingReply = chats.filter((c) => c.lastSender === "visitor").length;
+  const chatsNeedingReply = chats.filter((c) => c.lastSender === "visitor" && !c.archived).length;
 
   const counts = useMemo(
     () => ({
@@ -168,15 +171,8 @@ export default function AdminDashboard({
     await patchLead(id, { archived: false });
   }
 
-  async function hardDeleteLead(id: string) {
-    if (!confirm("Permanently delete this lead? This CANNOT be undone.")) return;
-    setLeads((prev) => prev.filter((l) => l.id !== id));
-    await fetch("/api/admin/leads", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-  }
+  // Permanent delete removed — leads (like referrals + chats) are only ever
+  // soft-deleted (archived) now, and stay restorable from the Deleted view.
 
   // Changing status to "Closed" requires a purchase price first; "Lost" offers
   // an optional reason (both via a confirm/cancel modal, same pattern).
@@ -201,6 +197,14 @@ export default function AdminDashboard({
     });
   }
 
+  async function archiveReferral(id: string) {
+    if (!confirm("Move this referral to Deleted? It's hidden and pulled from analytics, but you can restore it from the Deleted view.")) return;
+    await patchReferral(id, { archived: true, archivedAt: new Date().toISOString() });
+  }
+  async function restoreReferral(id: string) {
+    await patchReferral(id, { archived: false });
+  }
+
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     router.refresh();
@@ -214,6 +218,17 @@ export default function AdminDashboard({
     } catch {
       /* ignore */
     }
+  }
+
+  async function setChatArchived(id: string, archived: boolean) {
+    if (archived && !confirm("Move this conversation to Deleted? It's hidden and pulled from analytics, but you can restore it from the Deleted view.")) return;
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, archived } : c)));
+    setActiveChat((prev) => (prev && prev.id === id ? { ...prev, archived } : prev));
+    await fetch("/api/admin/chats", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId: id, archived }),
+    });
   }
 
   async function refreshLookups() {
@@ -366,7 +381,7 @@ export default function AdminDashboard({
             onClick={() => setTab("referrals")}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition ${tab === "referrals" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}
           >
-            Referrals ({referrals.length})
+            Referrals ({referrals.filter((r) => !r.archived).length})
           </button>
           <button
             onClick={() => setTab("chats")}
@@ -470,7 +485,6 @@ export default function AdminDashboard({
                     onPatch={patchLead}
                     onArchive={archiveLead}
                     onRestore={restoreLead}
-                    onHardDelete={hardDeleteLead}
                     onStatusChange={changeStatus}
                     onToggleBookmark={(l) => patchLead(l.id, { bookmarked: !l.bookmarked })}
                     onOpenPhoto={(l, index) => setLightbox({ leadId: l.id, photos: l.photos, index })}
@@ -483,16 +497,23 @@ export default function AdminDashboard({
 
         {tab === "referrals" && (
           <div className="mt-5 space-y-4">
-            {referrals.length === 0 && (
-              <div className="card p-12 text-center text-muted">No referrals yet.</div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setRefView("active")} className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${refView === "active" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}>Active ({referrals.filter((r) => !r.archived).length})</button>
+              <button onClick={() => setRefView("deleted")} className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${refView === "deleted" ? "bg-navy text-white" : "bg-white text-navy hover:bg-slate-50"}`}>Deleted ({referrals.filter((r) => r.archived).length})</button>
+            </div>
+            {referrals.filter((r) => (refView === "deleted" ? r.archived : !r.archived)).length === 0 && (
+              <div className="card p-12 text-center text-muted">{refView === "deleted" ? "Nothing deleted. Deleted referrals land here and can be restored anytime." : "No referrals yet."}</div>
             )}
-            {referrals.map((r) => (
+            {referrals.filter((r) => (refView === "deleted" ? r.archived : !r.archived)).map((r) => (
               <div key={r.id} className="card p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-navy"><Gift className="h-5 w-5" /></span>
                     <div>
-                      <div className="font-bold text-navy">{r.referrer.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-navy">{r.referrer.name}</span>
+                        {r.archived && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">Deleted</span>}
+                      </div>
                       <div className="text-xs text-muted">{formatDateTime(r.createdAt)}</div>
                     </div>
                   </div>
@@ -523,6 +544,11 @@ export default function AdminDashboard({
                     <option value="qualified">Qualified</option>
                     <option value="paid">Paid ${site.referralReward}</option>
                   </select>
+                  {r.archived ? (
+                    <button onClick={() => restoreReferral(r.id)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-100"><Check className="h-4 w-4" /> Restore</button>
+                  ) : (
+                    <button onClick={() => archiveReferral(r.id)} className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete (restorable from the Deleted view)"><Trash className="h-4 w-4" /></button>
+                  )}
                 </div>
               </div>
             ))}
@@ -530,7 +556,17 @@ export default function AdminDashboard({
         )}
 
         {tab === "chats" && (
-          <ChatsPanel chats={chats} active={activeChat} onOpen={openChat} onSend={sendReply} />
+          <ChatsPanel
+            chats={chats.filter((c) => (chatView === "deleted" ? c.archived : !c.archived))}
+            view={chatView}
+            counts={{ active: chats.filter((c) => !c.archived).length, deleted: chats.filter((c) => c.archived).length }}
+            onView={setChatView}
+            active={activeChat}
+            onOpen={openChat}
+            onSend={sendReply}
+            onArchive={(id) => setChatArchived(id, true)}
+            onRestore={(id) => setChatArchived(id, false)}
+          />
         )}
 
         {tab === "lookups" && (
@@ -626,7 +662,6 @@ function LeadCard({
   onPatch,
   onArchive,
   onRestore,
-  onHardDelete,
   onStatusChange,
   onToggleBookmark,
   onOpenPhoto,
@@ -635,7 +670,6 @@ function LeadCard({
   onPatch: (id: string, patch: Partial<Lead>) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
-  onHardDelete: (id: string) => void;
   onStatusChange: (lead: Lead, status: LeadStatus) => void;
   onToggleBookmark: (lead: Lead) => void;
   onOpenPhoto: (lead: Lead, index: number) => void;
@@ -644,6 +678,7 @@ function LeadCard({
   const [price, setPrice] = useState(lead.purchasePrice != null ? String(lead.purchasePrice) : "");
   const [resale, setResale] = useState(lead.expectedResale != null ? String(lead.expectedResale) : "");
   const [sold, setSold] = useState(lead.actualSalePrice != null ? String(lead.actualSalePrice) : "");
+  const [copied, setCopied] = useState(false);
   const noteChanged = note !== (lead.notes || "");
   const toNum = (s: string): number | null => {
     const t = s.replace(/[^0-9.]/g, "");
@@ -689,6 +724,7 @@ function LeadCard({
     if (Object.keys(patch).length) onPatch(lead.id, patch);
   }
   const v = lead.vehicle;
+  const sid = lead.id.split("-")[0];
 
   return (
     <div className="card overflow-hidden">
@@ -704,6 +740,14 @@ function LeadCard({
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
               {lead.kind === "vehicle" ? "Vehicle offer" : "Inquiry"}
             </span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard?.writeText(sid); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+              className="rounded-full bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              title="Lead code — click to copy, then use with /offer, /message or /moreinfo in Telegram"
+            >
+              {copied ? "Copied!" : `ID ${sid}`}
+            </button>
             {lead.referralCode && (
               <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent-700">
                 Ref: {lead.referralCode}
@@ -842,12 +886,7 @@ function LeadCard({
                 >
                   <Check className="h-4 w-4" /> Restore
                 </button>
-                <button
-                  onClick={() => onHardDelete(lead.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
-                >
-                  <Trash className="h-4 w-4" /> Delete forever
-                </button>
+                {/* permanent delete removed — leads are only ever soft-deleted */}
               </div>
             ) : (
               <button
@@ -1295,14 +1334,24 @@ function AddLeadModal({
 
 function ChatsPanel({
   chats,
+  view,
+  counts,
+  onView,
   active,
   onOpen,
   onSend,
+  onArchive,
+  onRestore,
 }: {
   chats: ChatSummary[];
+  view: "active" | "deleted";
+  counts: { active: number; deleted: number };
+  onView: (v: "active" | "deleted") => void;
   active: ChatConversation | null;
   onOpen: (id: string) => void;
   onSend: (text: string) => void;
+  onArchive: (id: string) => void;
+  onRestore: (id: string) => void;
 }) {
   const [reply, setReply] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -1316,8 +1365,12 @@ function ChatsPanel({
     <div className="mt-5 grid gap-4 lg:grid-cols-[320px_1fr]">
       {/* conversation list */}
       <div className="card max-h-[34rem] divide-y divide-slate-100 overflow-y-auto">
+        <div className="flex items-center gap-2 bg-white p-3">
+          <button onClick={() => onView("active")} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${view === "active" ? "bg-navy text-white" : "bg-slate-100 text-navy hover:bg-slate-200"}`}>Active ({counts.active})</button>
+          <button onClick={() => onView("deleted")} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${view === "deleted" ? "bg-navy text-white" : "bg-slate-100 text-navy hover:bg-slate-200"}`}>Deleted ({counts.deleted})</button>
+        </div>
         {chats.length === 0 && (
-          <div className="p-8 text-center text-sm text-muted">No messages yet.</div>
+          <div className="p-8 text-center text-sm text-muted">{view === "deleted" ? "Nothing deleted." : "No messages yet."}</div>
         )}
         {chats.map((c) => (
           <button
@@ -1353,21 +1406,29 @@ function ChatsPanel({
           </div>
         ) : (
           <>
-            <div className="border-b border-slate-100 px-4 py-3">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
               <div>
-                <span className="font-semibold text-navy">{active.name || "Visitor"}</span>
-                <span className="ml-2 text-xs text-muted">{active.messages.length} messages</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-navy">{active.name || "Visitor"}</span>
+                  <span className="text-xs text-muted">{active.messages.length} messages</span>
+                  {active.archived && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">Deleted</span>}
+                </div>
+                {active.contact ? (
+                  <a
+                    href={active.contact.includes("@") ? `mailto:${active.contact}` : `tel:${active.contact}`}
+                    className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+                  >
+                    {active.contact.includes("@") ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                    {active.contact}
+                  </a>
+                ) : (
+                  <span className="mt-1 block text-xs text-muted">No contact info provided.</span>
+                )}
               </div>
-              {active.contact ? (
-                <a
-                  href={active.contact.includes("@") ? `mailto:${active.contact}` : `tel:${active.contact}`}
-                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
-                >
-                  {active.contact.includes("@") ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
-                  {active.contact}
-                </a>
+              {active.archived ? (
+                <button onClick={() => onRestore(active.id)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-100"><Check className="h-4 w-4" /> Restore</button>
               ) : (
-                <span className="mt-1 block text-xs text-muted">No contact info provided.</span>
+                <button onClick={() => onArchive(active.id)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete (restorable from the Deleted view)"><Trash className="h-4 w-4" /></button>
               )}
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">

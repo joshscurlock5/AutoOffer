@@ -340,6 +340,21 @@ export async function getConversation(id: string): Promise<ChatConversation | nu
   return (res.Item as ChatConversation) || null;
 }
 
+/** Whole-item update of a conversation — used only for the admin archive/restore
+ * toggle. Chats normally grow via addChatMessage's atomic list_append; this
+ * get→merge→put is safe for the rare archive toggle (an archived chat isn't being
+ * actively appended to). Returns null if the conversation is gone. */
+export async function updateConversation(
+  id: string,
+  patch: Partial<ChatConversation>,
+): Promise<ChatConversation | null> {
+  const cur = await ddb.send(new GetCommand({ TableName: CHATS_TABLE, Key: { id } }));
+  if (!cur.Item) return null;
+  const updated = { ...(cur.Item as ChatConversation), ...patch, id };
+  await ddb.send(new PutCommand({ TableName: CHATS_TABLE, Item: updated }));
+  return updated;
+}
+
 /**
  * Append a message to a conversation (atomic list_append, so concurrent
  * visitor + admin sends can't clobber each other). Creates the conversation if

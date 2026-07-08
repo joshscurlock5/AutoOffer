@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { addChatMessage, getConversation, getConversations } from "@/lib/store";
+import { addChatMessage, getConversation, getConversations, updateConversation } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       lastSender: c.lastSender,
       count: c.messages?.length || 0,
       preview: last ? last.text.slice(0, 140) : "",
+      archived: Boolean(c.archived),
     };
   });
   return NextResponse.json({ conversations });
@@ -44,6 +45,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
   const conversation = await addChatMessage({ conversationId, role: "admin", text });
+  if (!conversation) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, conversation });
+}
+
+/** Soft-delete (archive) or restore a conversation. No permanent delete — an
+ * archived chat drops out of the Messages list + analytics, restorable anytime. */
+export async function PATCH(req: NextRequest) {
+  if (!(await isAuthed())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await req.json().catch(() => ({}));
+  const conversationId = String(body.conversationId || "");
+  if (!conversationId || typeof body.archived !== "boolean") {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+  const conversation = await updateConversation(conversationId, {
+    archived: body.archived,
+    ...(body.archived ? { archivedAt: new Date().toISOString() } : {}),
+  });
   if (!conversation) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

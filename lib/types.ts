@@ -469,6 +469,10 @@ export interface Referral {
   /** Shareable code generated for the referrer. */
   code: string;
   notes?: string;
+  /** Soft delete: hidden from the Referrals list + excluded from analytics,
+   * restorable from the Referrals "Deleted" view. No permanent delete. */
+  archived?: boolean;
+  archivedAt?: string;
   /** First-touch marketing attribution for the referrer (which ad/campaign/referrer
    * brought them in). Skipped when consent was denied at submit time. */
   attribution?: Attribution;
@@ -526,4 +530,8 @@ export interface ChatConversation {
   messages: ChatMessage[];
   /** Who sent the most recent message (drives the admin "needs reply" cue). */
   lastSender: "visitor" | "admin";
+  /** Soft delete: hidden from Messages + excluded from analytics, restorable from
+   * the Messages "Deleted" view. No permanent delete. */
+  archived?: boolean;
+  archivedAt?: string;
 }

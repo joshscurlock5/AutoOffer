@@ -53,7 +53,11 @@ export async function getAnalytics(): Promise<AnalyticsData> {
   // Soft-deleted leads are excluded from EVERYTHING here — profiles, funnel,
   // segments, revenue — so a deleted test lead is truly gone from the data.
   const leads = allLeads.filter((l) => !l.archived);
-  const profiles = buildProfiles(leads, referrals, chats, siteEvents);
+  // Soft-deleted referrals + chats are excluded too — they feed profiles + lead
+  // scores, so a deleted one must vanish from the data just like a deleted lead.
+  const activeReferrals = referrals.filter((r) => !r.archived);
+  const activeChats = chats.filter((c) => !c.archived);
+  const profiles = buildProfiles(leads, activeReferrals, activeChats, siteEvents);
   const events = windowEvents(siteEvents);
   return { profiles, events };
 }
