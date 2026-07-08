@@ -20,7 +20,7 @@
 
 export type SourceCategory = "firstParty" | "tracker" | "connector" | "comms";
 
-export type SourceStatus = "active" | "quiet" | "stale" | "empty" | "unconfigured";
+export type SourceStatus = "active" | "quiet" | "stale" | "empty" | "unconfigured" | "external";
 
 export interface DataSourceDef {
   id: string;
@@ -39,8 +39,12 @@ export interface DataSourceDef {
   /** Names (only) of env vars this method depends on — shown in detail. */
   envVars?: string[];
   /** How health is measured. "lastSeen" (default) = most recent stored datapoint;
-   * "liveFetch" = the result of a live connector call (Meta / GA4). */
-  healthKind?: "lastSeen" | "liveFetch";
+   * "liveFetch" = the result of a live connector call (Meta / GA4);
+   * "external" = fires in the browser with no server signal (verify in the
+   * vendor's own dashboard). */
+  healthKind?: "lastSeen" | "liveFetch" | "external";
+  /** Optional link to the vendor's own dashboard (trackers / connectors). */
+  vendorUrl?: string;
   /** Plain-language "where to look if it's broken". */
   fixHint?: string;
 }
@@ -95,6 +99,7 @@ export const STATUS_META: Record<SourceStatus, { label: string; dot: string; cls
   stale: { label: "Check it", dot: "●", cls: "bg-red-100 text-red-700" },
   empty: { label: "No data yet", dot: "○", cls: "bg-slate-100 text-slate-600" },
   unconfigured: { label: "Not set up", dot: "○", cls: "bg-slate-100 text-slate-500" },
+  external: { label: "Installed", dot: "◇", cls: "bg-sky-100 text-sky-800" },
 };
 
 export const CATEGORY_LABEL: Record<SourceCategory, string> = {
@@ -300,5 +305,61 @@ export const DATA_SOURCES: DataSourceDef[] = [
     quietDays: 30,
     fixHint:
       "Only called when a visitor runs a price lookup; it falls back to the local estimate model if it fails. “Last live call” reflects real API usage (cache hits excluded).",
+  },
+  // ----- STEP 3: client-side trackers (fire in the visitor's browser) -----
+  {
+    id: "gtag",
+    label: "Google Analytics tag (gtag)",
+    category: "tracker",
+    purpose: "The browser tag that sends page views + funnel events to GA4.",
+    collects: [
+      "Page views + route changes",
+      "Funnel + click events (mirrored to GA4)",
+      "GA client id / session id (the _ga cookie)",
+    ],
+    storage: "Sent to Google — measured here only by proxy",
+    envVars: ["NEXT_PUBLIC_GA_ID"],
+    vendorUrl: "https://analytics.google.com/",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Health is a PROXY — the newest lead that carried a GA client id (gtag only stamps this at form submit). If coverage drops while leads keep coming, the tag may be blocked or NEXT_PUBLIC_GA_ID changed.",
+  },
+  {
+    id: "pixel",
+    label: "Meta Pixel",
+    category: "tracker",
+    purpose: "The browser pixel that sends PageView / Lead events to Meta.",
+    collects: [
+      "PageView, Search, ViewContent, InitiateCheckout, Lead",
+      "Meta browser cookies (fbp / fbc)",
+      "Deduplicated with the server-side CAPI events",
+    ],
+    storage: "Sent to Meta — measured here only by proxy",
+    envVars: ["NEXT_PUBLIC_META_PIXEL_ID"],
+    vendorUrl: "https://business.facebook.com/events_manager2/",
+    freshHrs: 48,
+    quietDays: 14,
+    fixHint:
+      "Health is a PROXY — the newest lead that carried a Meta cookie (fbp / fbc). If coverage drops, the pixel may be blocked or NEXT_PUBLIC_META_PIXEL_ID changed.",
+  },
+  {
+    id: "clarity",
+    label: "Microsoft Clarity",
+    category: "tracker",
+    purpose: "Session recordings + heatmaps (typed form fields are masked).",
+    collects: [
+      "Session recordings + heatmaps",
+      "Visitor id for stitching sessions",
+      "Never records typed form data (masked by default)",
+    ],
+    storage: "Sent to Microsoft — no server-side signal",
+    envVars: ["NEXT_PUBLIC_CLARITY_ID"],
+    vendorUrl: "https://clarity.microsoft.com/",
+    healthKind: "external",
+    freshHrs: 0,
+    quietDays: 0,
+    fixHint:
+      "Fires client-side for every consented visitor; there's no server signal, so confirm live recordings in the Clarity dashboard.",
   },
 ];

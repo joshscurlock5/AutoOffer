@@ -1367,6 +1367,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
   const def = selected ? DATA_SOURCES.find((d) => d.id === selected) ?? null : null;
   const health = selected ? byId.get(selected) ?? null : null;
   const isLive = def?.healthKind === "liveFetch";
+  const isExternal = def?.healthKind === "external";
   const groups = GROUP_ORDER.map((cat) => ({ cat, defs: DATA_SOURCES.filter((d) => d.category === cat) })).filter((g) => g.defs.length > 0);
   return (
     <>
@@ -1386,6 +1387,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
               const h = byId.get(d.id);
               const active = selected === d.id;
               const live = d.healthKind === "liveFetch";
+              const external = d.healthKind === "external";
               return (
                 <button
                   key={d.id}
@@ -1407,6 +1409,10 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                           {h?.lastAt && <span className="text-slate-400"> · checked {timeAgo(h.lastAt)}</span>}
                         </span>
                       )}
+                    </div>
+                  ) : external ? (
+                    <div className="mt-2 text-xs text-muted">
+                      {h?.note || (h?.status === "unconfigured" ? "Not set up" : "Installed — verify in the dashboard")}
                     </div>
                   ) : (
                     <>
@@ -1454,6 +1460,13 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                   ))}
                 </div>
               )}
+              {def.vendorUrl && (
+                <div className="mt-2 text-xs">
+                  <a href={def.vendorUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 hover:underline">
+                    Open the platform dashboard →
+                  </a>
+                </div>
+              )}
             </div>
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-muted">Health</div>
@@ -1466,6 +1479,11 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                       <div>{health?.status === "unconfigured" ? "Not connected — env vars not set." : health?.note || "Connected and returning data."}</div>
                     )}
                     {health?.lastAt && <div className="text-muted">Last successful call: {timeAgo(health.lastAt)}</div>}
+                  </>
+                ) : isExternal ? (
+                  <>
+                    <div>{health?.status === "unconfigured" ? "Not set up — env var not set." : "Installed and gated only by visitor consent — no server signal."}</div>
+                    {health?.note && <div className="text-muted">{health.note}</div>}
                   </>
                 ) : (
                   <>

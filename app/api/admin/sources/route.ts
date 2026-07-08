@@ -55,6 +55,14 @@ export async function GET() {
   const leadsWithIp = leads.filter((l) => l.meta?.clientIp);
   const mcConfigured = marketCheckEnabled();
   const mcLiveCalls = lookups.filter((l) => (l.apiCalls || 0) > 0);
+  // Client-side trackers: NEXT_PUBLIC_* are present in process.env server-side
+  // too (same pattern metaCapi.ts already relies on). Health is a proxy from the
+  // signals those browser tags stamp onto leads.
+  const gaId = process.env.NEXT_PUBLIC_GA_ID;
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+  const clarityId = process.env.NEXT_PUBLIC_CLARITY_ID;
+  const leadsWithGaClient = leads.filter((l) => l.gaClientId);
+  const leadsWithFbCookie = leads.filter((l) => l.meta?.fbp || l.meta?.fbc);
 
   const pct = (have: number, total: number, label: string) =>
     total > 0 ? `${Math.round((have / total) * 100)}% of ${label}` : undefined;
@@ -78,6 +86,16 @@ export async function GET() {
       configured: mcConfigured,
       note: mcConfigured ? "Last live call (cache hits excluded)." : "MARKETCHECK_API_KEY not set — running on the local estimate model.",
     },
+    gtag: {
+      times: leadsWithGaClient.map((l) => l.createdAt),
+      configured: Boolean(gaId),
+      note: gaId ? pct(leadsWithGaClient.length, realLeads.length, "recent leads carried a GA client id") : "NEXT_PUBLIC_GA_ID not set.",
+    },
+    pixel: {
+      times: leadsWithFbCookie.map((l) => l.createdAt),
+      configured: Boolean(pixelId),
+      note: pixelId ? pct(leadsWithFbCookie.length, realLeads.length, "recent leads carried a Meta cookie") : "NEXT_PUBLIC_META_PIXEL_ID not set.",
+    },
   };
 
   const connectors: Record<string, SourceHealth> = {
@@ -88,6 +106,22 @@ export async function GET() {
   const sources: SourceHealth[] = DATA_SOURCES.map((def) => {
     if (def.healthKind === "liveFetch") {
       return connectors[def.id] ?? fromConnector(def.id, { configured: false, ok: false, hasData: false });
+    }
+    if (def.healthKind === "external") {
+      // Fires in the browser; we can't measure it server-side. Report only
+      // whether it's installed (env set) + point to the vendor dashboard.
+      const configured = def.id === "clarity" ? Boolean(clarityId) : false;
+      return {
+        id: def.id,
+        configured,
+        lastAt: null,
+        count24h: 0,
+        count7d: 0,
+        status: configured ? "external" : "unconfigured",
+        note: configured
+          ? "Fires client-side for consented visitors — confirm live recordings in the Clarity dashboard."
+          : "NEXT_PUBLIC_CLARITY_ID not set.",
+      };
     }
     const feed = feeds[def.id] || { times: [] };
     const configured = feed.configured ?? true;
