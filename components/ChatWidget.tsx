@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { site, telHref } from "@/lib/site-config";
 import { track, trackPhoneClick } from "@/lib/analytics";
+import { getAttribution, getBehavior } from "@/lib/attribution";
 import OfferCtaLink from "@/components/OfferCtaLink";
 import type { ChatMessage } from "@/lib/types";
 import { Chat, Send, X, ChevronLeft, ChevronDown, ArrowRight, Phone, Home } from "./icons";
@@ -128,10 +129,18 @@ export default function ChatWidget() {
     setInput("");
     setShowEmoji(false);
     try {
+      const b = getBehavior();
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: convId, text, contact: contact.trim() || undefined }),
+        body: JSON.stringify({
+          conversationId: convId,
+          text,
+          contact: contact.trim() || undefined,
+          // First message only: context that stitches this chat to the person's
+          // profile (source, on-site activity, device). Stored once, server-side.
+          ...(convId ? {} : { visitorId: b.visitorId, sessionId: b.sessionId, path: pathname || undefined, attribution: getAttribution() }),
+        }),
       });
       const d = await r.json();
       if (d.conversationId) {

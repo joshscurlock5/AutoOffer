@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { addChatMessage, getConversation } from "@/lib/store";
 import { notifyNewChatMessage } from "@/lib/notify";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
+import { parseAttribution } from "@/lib/attribution";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,29 @@ export async function POST(req: NextRequest) {
     }
     const name = body.name ? String(body.name).trim().slice(0, 80) : undefined;
     const contact = body.contact ? String(body.contact).trim().slice(0, 120) : undefined;
-    const conv = await addChatMessage({ conversationId, role: "visitor", text, name, contact });
+    // Context (Batch 8) — stitches the chat to the person's profile. visitorId /
+    // sessionId / path / attribution ride from the widget (the same data leads
+    // carry); userAgent + clientIp are server-side and consent-gated like leads.
+    const consentDenied = req.cookies.get("ao_consent")?.value === "denied";
+    const visitorId = body.visitorId ? String(body.visitorId).slice(0, 64) : undefined;
+    const sessionId = body.sessionId ? String(body.sessionId).slice(0, 64) : undefined;
+    const startedOnPath = body.path ? String(body.path).slice(0, 200) : undefined;
+    const attribution = parseAttribution(body.attribution);
+    const userAgent = consentDenied ? undefined : (req.headers.get("user-agent") || "").slice(0, 400) || undefined;
+    const clientIp = consentDenied ? undefined : ip;
+    const conv = await addChatMessage({
+      conversationId,
+      role: "visitor",
+      text,
+      name,
+      contact,
+      visitorId,
+      sessionId,
+      startedOnPath,
+      attribution,
+      userAgent,
+      clientIp,
+    });
     if (!conv) {
       return NextResponse.json({ error: "Could not send." }, { status: 500 });
     }

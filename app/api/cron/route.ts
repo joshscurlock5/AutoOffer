@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeads, updateLead } from "@/lib/store";
+import { getLeads, updateLead, getConversations, updateConversation } from "@/lib/store";
 import { notifyOwner, leadLine } from "@/lib/notify";
 import { resolveGeo } from "@/lib/geo";
 import {
@@ -247,6 +247,23 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[cron] lead processing failed", lead.id, e);
     }
+  }
+
+  // --- Backfill coarse geo for chat conversations (same free ipwho.is lookup as
+  //     leads; bounded per run). Chats stitch into profiles, so their geo shows
+  //     on the person's file just like a lead's. ---
+  try {
+    let chatGeo = 0;
+    const convos = await getConversations();
+    for (const c of convos) {
+      if (chatGeo >= 10) break;
+      if (c.archived || !c.clientIp || c.geo) continue;
+      chatGeo += 1;
+      const g = await resolveGeo(c.clientIp);
+      if (g) await updateConversation(c.id, { geo: g });
+    }
+  } catch (e) {
+    console.error("[cron] chat geo backfill failed", e);
   }
 
   // --- Daily "Needs Action" digest — one consolidated message at ~8am MT ---

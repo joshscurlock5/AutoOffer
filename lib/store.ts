@@ -367,6 +367,12 @@ export async function addChatMessage(opts: {
   text: string;
   name?: string;
   contact?: string;
+  visitorId?: string;
+  sessionId?: string;
+  startedOnPath?: string;
+  attribution?: import("./types").Attribution;
+  userAgent?: string;
+  clientIp?: string;
 }): Promise<ChatConversation | null> {
   const now = new Date().toISOString();
   const id = opts.conversationId || crypto.randomUUID();
@@ -383,7 +389,7 @@ export async function addChatMessage(opts: {
         TableName: CHATS_TABLE,
         Key: { id },
         UpdateExpression:
-          "SET messages = list_append(if_not_exists(messages, :empty), :m), updatedAt = :now, lastSender = :ls, createdAt = if_not_exists(createdAt, :now), #nm = if_not_exists(#nm, :name), #ct = if_not_exists(#ct, :contact)",
+          "SET messages = list_append(if_not_exists(messages, :empty), :m), updatedAt = :now, lastSender = :ls, createdAt = if_not_exists(createdAt, :now), #nm = if_not_exists(#nm, :name), #ct = if_not_exists(#ct, :contact), visitorId = if_not_exists(visitorId, :vid), sessionId = if_not_exists(sessionId, :sid), startedOnPath = if_not_exists(startedOnPath, :sop), attribution = if_not_exists(attribution, :attr), userAgent = if_not_exists(userAgent, :ua), clientIp = if_not_exists(clientIp, :ip)",
         ConditionExpression: "attribute_not_exists(messages) OR size(messages) < :cap",
         ExpressionAttributeNames: { "#nm": "name", "#ct": "contact" },
         ExpressionAttributeValues: {
@@ -394,6 +400,12 @@ export async function addChatMessage(opts: {
           ":cap": MAX_CHAT_MESSAGES,
           ":name": opts.name ?? null,
           ":contact": opts.contact ?? null,
+          ":vid": opts.visitorId ?? null,
+          ":sid": opts.sessionId ?? null,
+          ":sop": opts.startedOnPath ?? null,
+          ":attr": opts.attribution ?? null,
+          ":ua": opts.userAgent ?? null,
+          ":ip": opts.clientIp ?? null,
         },
         ReturnValues: "ALL_NEW",
       }),

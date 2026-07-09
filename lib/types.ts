@@ -612,4 +612,15 @@ export interface ChatConversation {
    * the Messages "Deleted" view. No permanent delete. */
   archived?: boolean;
   archivedAt?: string;
+  /** Context captured on the first message (Batch 8) so the chat stitches into
+   * the person's Customer-360 profile (on-site activity, source, device, geo).
+   * visitorId/sessionId/path/attribution ride from the widget; userAgent/clientIp
+   * are server-side and consent-gated; geo is resolved later by the cron. */
+  visitorId?: string;
+  sessionId?: string;
+  startedOnPath?: string;
+  attribution?: Attribution;
+  userAgent?: string;
+  clientIp?: string;
+  geo?: Geo;
 }

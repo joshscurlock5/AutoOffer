@@ -438,7 +438,9 @@ function buildOne(
 
   const sortedLeads = [...leads].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
   const attribution =
-    sortedLeads.find((l) => l.attribution)?.attribution ?? referrals.find((r) => r.attribution)?.attribution;
+    sortedLeads.find((l) => l.attribution)?.attribution ??
+    referrals.find((r) => r.attribution)?.attribution ??
+    chats.find((c) => c.attribution)?.attribution;
   const behavior = aggregateBehavior([...sortedLeads, ...referrals]);
 
   // Leads are sorted oldest-first: seed from the earliest lead's status (not a
@@ -548,6 +550,13 @@ function buildOne(
     if (vid) for (const e of eventsByVisitorId.get(vid) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
     for (const e of eventsByLeadId.get(l.id) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
   }
+  // Chat-carried ids stitch a chat-only person's on-site activity in too.
+  for (const ch of chats) {
+    const sid = ch.sessionId;
+    for (const e of (sid && eventsBySession.get(sid)) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
+    const vid = ch.visitorId;
+    if (vid) for (const e of eventsByVisitorId.get(vid) || []) siteEvs.set(`${e.sessionId}#${e.sk}`, e);
+  }
   timeline.push(...condenseSiteEvents([...siteEvs.values()]));
   timeline.sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
@@ -565,8 +574,10 @@ function buildOne(
       : undefined;
 
   const recent = [...sortedLeads].reverse();
-  const geo = recent.find((l) => l.geo)?.geo;
-  const device = deviceFromUA(recent.find((l) => l.meta?.userAgent)?.meta?.userAgent);
+  const geo = recent.find((l) => l.geo)?.geo ?? chats.find((c) => c.geo)?.geo;
+  const device = deviceFromUA(
+    recent.find((l) => l.meta?.userAgent)?.meta?.userAgent ?? chats.find((c) => c.userAgent)?.userAgent,
+  );
   const make = recent.find((l) => l.vehicle?.make)?.vehicle?.make;
   const offerMid = offer ? Math.round((offer.low + offer.high) / 2) : undefined;
   // Speed-to-lead: firstTouchAt also gets stamped by marking spam/lost and by
