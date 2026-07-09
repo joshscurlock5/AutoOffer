@@ -283,6 +283,10 @@ export interface Lead {
    * offers over time (+ a final "bought"), for ask-vs-offer / realistic-seller
    * analysis. Decoupled from the email-offer flow so phone-only leads log too. */
   negotiation?: NegotiationEntry[];
+  /** Telegram message id + chat of the single in-place "negotiation summary" the
+   * bot edits as asks/offers are logged, so the group doesn't fill with messages. */
+  negMsgId?: number;
+  negChatId?: number;
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */

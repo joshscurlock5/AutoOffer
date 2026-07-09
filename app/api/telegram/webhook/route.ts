@@ -114,6 +114,64 @@ function negTrail(entries: NegotiationEntry[] | undefined): string {
   return entries.map((e) => `${negIcon(e.kind)} ${negMoney(e.amount)}`).join("  →  ");
 }
 
+/** The negotiation buttons for a lead's short id (put on the in-place summary). */
+function negKeyboardFor(sid: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "💬 Their ask", callback_data: `neg|ask|${sid}` },
+        { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
+      ],
+      [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
+    ],
+  };
+}
+
+/** sendMessage that returns the new message_id (so we can edit it in place later). */
+async function sendReturningId(chatId: number | string, text: string, replyMarkup?: unknown): Promise<number | undefined> {
+  if (!BOT_TOKEN) return undefined;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+    });
+    const j = await r.json();
+    return typeof j?.result?.message_id === "number" ? j.result.message_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Edit a message's text (+ optional buttons) in place. */
+async function editMessage(chatId: number | string, messageId: number, text: string, replyMarkup?: unknown): Promise<void> {
+  if (!BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Delete a message. The bot can always delete its OWN messages; deleting the
+ * owner's typed number needs the bot to be a group admin with delete rights. */
+async function deleteMessage(chatId: number | string, messageId: number): Promise<void> {
+  if (!BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1) Verify Telegram's secret header (set during setWebhook). If we have a
@@ -200,14 +258,24 @@ export async function POST(req: NextRequest) {
         patch.status = "closed";
         patch.closedAt = lead.closedAt || entry.at;
       }
-      await updateLead(lead.id, patch);
-      const head =
-        kind === "ask"
-          ? `✅ Logged their ask: ${negMoney(amount)}`
-          : kind === "offer"
-            ? `✅ Logged our offer: ${negMoney(amount)}`
-            : `✅ Marked BOUGHT at ${negMoney(amount)} — deal closed.`;
-      await reply(fromChat, `${head}\n${carText(lead)}\n${negTrail(negotiation)}`);
+      // Keep ONE tidy in-place summary per lead (edited, not re-sent), carrying the
+      // buttons — then delete the prompt + the typed number so nothing piles up.
+      const summaryText = `📊 Negotiation — ${carText(lead)}\n${negTrail(negotiation)}` + (kind === "bought" ? "\n(deal closed)" : "");
+      const kb = negKeyboardFor(code);
+      let negMsgId = lead.negMsgId;
+      if (lead.negMsgId != null && lead.negChatId != null) {
+        await editMessage(lead.negChatId, lead.negMsgId, summaryText, kb);
+      } else {
+        negMsgId = await sendReturningId(fromChat, summaryText, kb);
+      }
+      await updateLead(lead.id, {
+        ...patch,
+        ...(negMsgId != null ? { negMsgId, negChatId: fromChat } : {}),
+      });
+      // Clean up the noise: our prompt, and the bare number the owner typed.
+      const promptId = msg?.reply_to_message?.message_id;
+      if (typeof promptId === "number") await deleteMessage(fromChat, promptId);
+      if (typeof msg?.message_id === "number") await deleteMessage(fromChat, msg.message_id);
       return NextResponse.json({ ok: true });
     }
 
