@@ -7,6 +7,7 @@ import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
 import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import { tagsFor, TAG_META, EFFORT_META, TAG_ORDER, type EffortTag } from "@/lib/dataSourceTags";
+import { useStatusFor, USE_STATUS_META } from "@/lib/dataSourceStatus";
 import {
   computeView,
   filterProfiles,
@@ -1485,6 +1486,19 @@ function SourceStatusChip({ status }: { status: SourceStatus }) {
   );
 }
 
+// A live "is it actually used?" pill for a "collected but not fully used" item,
+// so the Sources tab reflects what's shipped — not the static brainstorm text.
+function UseStatusBadge({ sourceId, label }: { sourceId: string; label: string }) {
+  const st = useStatusFor(sourceId, label);
+  if (!st) return null;
+  const m = USE_STATUS_META[st];
+  return (
+    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${m.cls}`} title={m.desc}>
+      {m.label}
+    </span>
+  );
+}
+
 // Renders the "answer key" symbols for a data point — its category tags plus,
 // for a "could collect" idea, an effort tag. Hover any symbol for its meaning.
 function TagMarks({ sourceId, label }: { sourceId: string; label: string }) {
@@ -1684,14 +1698,14 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
           {def.underutilized && def.underutilized.length > 0 && (
             <div className="mt-5 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                Collected — not fully used yet
-                <InfoDot tip="Data this source already captures (or trivially can) but that isn't surfaced or acted on yet — low-effort wins. Hover each for the missed opportunity." />
+                Collected — usage at a glance
+                <InfoDot tip="Data this source already captures. The pill on each shows its real status right now: In use (surfaced in the dashboard), Partly used, Not built yet (data exists, view pending), Needs a setting (a toggle in GA4/Meta/Clarity), or Waiting (idle until the instant estimate or SMS is switched on). Hover a pill for detail." />
               </div>
               <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {def.underutilized.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-amber-500">◐</span>
-                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /></span>
+                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /><UseStatusBadge sourceId={def.id} label={it.label} /></span>
                   </li>
                 ))}
               </ul>
