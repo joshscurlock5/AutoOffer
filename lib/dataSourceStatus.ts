@@ -27,6 +27,11 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "UTM-to-vehicle patterns": "todo",
     "fbc/fbp offline value": "live",
     "Time-on-site as intent": "live",
+    // "Could collect" items that have since been built.
+    "Field-level timing & hesitation": "live",
+    "Abandoned-form partial capture": "live",
+    "Input method detection": "live",
+    "IP geolocation to city": "live",
   },
   partials: {
     "Last field before exit": "live",
@@ -35,6 +40,14 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Attribution on abandoners": "live",
     "Owner-alert-sent flag": "todo",
     "Step reached at exit": "live",
+    // "Could collect" items that have since been built (mostly Batch 3).
+    "Time spent per field": "live",
+    "Correction / retype rate": "live",
+    "Validation errors hit": "live",
+    "Device and input type": "live",
+    "Scroll depth / CTA seen": "partial",
+    "Focus/blur tab-switching": "live",
+    "Repeat-visitor abandonment": "live",
   },
   events: {
     "Field re-edit & hesitation": "live",
@@ -43,6 +56,12 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Form-error field ranking": "live",
     "Resume-prompt conversion rate": "partial",
     "Returning-visitor journey stitch": "live",
+    // "Could collect" items that have since been built (Batch 3).
+    "Scroll depth on offer page": "live",
+    "Rage & dead clicks": "partial",
+    "Device, viewport & OS": "live",
+    "Copy-to-clipboard & phone tap": "live",
+    "Field autofill vs typed": "live",
   },
   attribution: {
     "First- vs last-touch split": "live",
@@ -51,6 +70,12 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Landing page path patterns": "todo",
     "gclid campaign-side join": "todo",
     "Referrer-quality segmentation": "live",
+    // "Could collect" items that have since been built (Batch 4).
+    "Keyword + match type": "live",
+    "Device type at click": "live",
+    "Network + placement": "live",
+    "gbraid / wbraid capture": "live",
+    "Ad creative + campaign ID": "live",
   },
   lookups: {
     "Priced-but-didn't-convert list": "dormant",
@@ -67,6 +92,8 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Referrer's own attribution": "live",
     "Referral message intent": "todo",
     "Referrer-friend relationship graph": "todo",
+    // "Could collect" item that has since been built (Batch 2).
+    "Self-referral / fraud flags": "live",
   },
   chat: {
     "Pages viewed pre-chat": "live",
@@ -75,6 +102,8 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Returning vs new visitor": "live",
     "Referrer and search terms": "live",
     "Chat-to-lead linkage": "live",
+    // "Could collect" item that has since been built (Batch 8).
+    "Device and OS": "live",
   },
   geo: {
     "Postal / FSA code": "live",
@@ -90,6 +119,8 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Age & gender of leads": "todo",
     "Frequency by ad": "live",
     "Ad relevance diagnostics": "todo",
+    // "Could collect" item already live (pre-existing offline-conversion loop).
+    "Offline conversion upload": "live",
   },
   ga4Data: {
     "Landing page performance": "live",
@@ -98,6 +129,8 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "New vs returning behavior": "live",
     "Engagement rate by segment": "partial",
     "Device category conversion gap": "config",
+    // "Could collect" item that has since been built (Batch 7).
+    "Session default channel group": "live",
   },
   marketcheck: {
     "NeoVIN factory options": "dormant",
@@ -122,6 +155,12 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "ViewContent content_category": "live",
     "Search query parameter": "live",
     "InitiateCheckout drop-off": "config",
+    // "Could collect" items already live (pre-existing CAPI) or built (Batch 9).
+    "Contact standard event": "live",
+    "Schedule standard event": "live",
+    "Purchase on car bought": "live",
+    "external_id matching": "live",
+    "Custom vehicle-segment events": "partial",
   },
   clarity: {
     "Rage & dead clicks": "live",
@@ -130,6 +169,10 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "JavaScript error sessions": "live",
     "Scroll-depth on form steps": "live",
     "GA4 Clarity Playback URL": "config",
+    // "Could collect" items already live (identify + consent) or built (Batch 9 tags).
+    "Identify leads by ID": "live",
+    "Custom tag: traffic source": "live",
+    "Consent-gated recording": "live",
   },
   email: {
     "Per-URL click data": "live",

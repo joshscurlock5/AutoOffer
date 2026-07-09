@@ -1784,14 +1784,14 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
           {def.opportunities && def.opportunities.length > 0 && (
             <div className="mt-4 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-                Could collect — not set up
-                <InfoDot tip="Data this source could capture but currently doesn't — brainstorm ideas to add. Hover each for what it is and why it's worth it (or the tradeoff)." />
+                Could collect — status at a glance
+                <InfoDot tip="More this source could capture. A green 'In use' pill means it has since been built (it's live) — anything without a pill genuinely isn't set up yet; hover its effort tag (⚙️ config · 🔧 dev · 💵 paid) for what adding it would take, and hover the idea for why it's worth it." />
               </div>
               <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {def.opportunities.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-brand-500">+</span>
-                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /></span>
+                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /><UseStatusBadge sourceId={def.id} label={it.label} /></span>
                   </li>
                 ))}
               </ul>
