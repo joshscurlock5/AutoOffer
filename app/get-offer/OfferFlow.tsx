@@ -118,6 +118,12 @@ export default function OfferFlow() {
   // listener from racing the step-5 re-render and firing a partial for someone
   // who just converted.
   const submittedRef = useRef(false);
+  // Pending 3-minute abandoned-cart countdown (started once valid contact is
+  // entered). If they submit OR close the page first it's cancelled/superseded, so
+  // a normal submission never fires a duplicate abandoned alert. `sendBeaconRef`
+  // keeps the timer's target pointed at the latest data, not a stale closure.
+  const partialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendBeaconRef = useRef<() => void>(() => {});
 
   // --- Passive form-quality signals (Batch 3). Refs only — never trigger a
   //     render; consent-gating is inherited from track()/logEvent(). We record
@@ -225,17 +231,19 @@ export default function OfferFlow() {
   // closure never fires with stale data.
   useEffect(() => {
     if (step !== 3) return;
+    // Fire on a true page CLOSE / navigation only — they've clearly bailed and
+    // can't submit, so there's no duplicate. We intentionally DON'T fire on
+    // visibilitychange (tab-switch): people tab away to look up their VIN/mileage
+    // and come back to submit, and firing there produced a duplicate abandoned
+    // alert. Anyone who lingers without submitting is covered by the 3-min timer.
     const handler = () => sendPartialBeacon();
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") sendPartialBeacon();
-    };
     window.addEventListener("pagehide", handler);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("pagehide", handler);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    return () => window.removeEventListener("pagehide", handler);
   }, [step, name, email, phone, contactMethod, year, make, model, trim, kmv]);
+
+  // Cancel the pending 3-minute countdown if the form unmounts (e.g. an in-app
+  // <Link> navigation away, which doesn't fire pagehide) so no orphaned timer fires.
+  useEffect(() => () => { if (partialTimerRef.current) clearTimeout(partialTimerRef.current); }, []);
 
   // Passive scroll-depth on the offer page (throttled via rAF; each bucket fires
   // once). Tracks the furthest depth for the profile + fires GA/first-party events.
@@ -376,6 +384,25 @@ export default function OfferFlow() {
     } catch {
       /* ignore — never disrupt the form; ref stays false so a later attempt can retry */
     }
+  }
+  // Keep the delayed timer's target fresh so it beacons the LATEST typed data.
+  sendBeaconRef.current = sendPartialBeacon;
+
+  // Abandoned-cart capture, DELAYED: instead of beaconing the instant a valid
+  // phone/email is typed (which fired on the very blur caused by clicking Submit,
+  // duplicating every real lead), start a one-shot 3-minute countdown. If they
+  // submit or leave first it's cancelled/superseded; only a genuine 3-minute
+  // no-submit lingerer actually beacons. Started once; contact edits don't reset it.
+  function schedulePartialBeacon() {
+    if (partialSentRef.current || submittedRef.current) return;
+    if (partialTimerRef.current) return; // already counting down — don't restart the clock
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    const validPhone = phone.replace(/\D/g, "").length >= 10;
+    if (!validEmail && !validPhone) return;
+    partialTimerRef.current = setTimeout(() => {
+      partialTimerRef.current = null;
+      sendBeaconRef.current();
+    }, 3 * 60 * 1000);
   }
 
   /** Fire contact_engaged (+ Meta InitiateCheckout) once on first real field interaction. */
@@ -638,6 +665,12 @@ export default function OfferFlow() {
     }
     submittingRef.current = true;
     setSubmitting(true);
+    // They're submitting — cancel any pending abandoned-cart countdown so the real
+    // lead is the ONLY alert (no duplicate abandoned-form ping).
+    if (partialTimerRef.current) {
+      clearTimeout(partialTimerRef.current);
+      partialTimerRef.current = null;
+    }
     const metaEventId = newEventId();
     try {
       const fd = new FormData();
@@ -683,6 +716,9 @@ export default function OfferFlow() {
     } catch {
       track("lead_error", { contactMethod });
       setError("Something went wrong submitting your request. Please try again or call us.");
+      // Submit failed — no real lead was created, so re-arm the abandoned-cart
+      // countdown (cleared above) to still capture them if they now give up.
+      schedulePartialBeacon();
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -780,12 +816,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { schedulePartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone <span className="font-semibold text-emerald-700">(recommended)</span></label>
-              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { schedulePartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Recommended — sometimes we need a quick detail to finalize an accurate offer, and a call or text is the fastest way to get it.</p>
             </div>
           </>
@@ -793,12 +829,12 @@ export default function OfferFlow() {
           <>
             <div>
               <label className="label" htmlFor="cphone">Mobile phone</label>
-              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
+              <input id="cphone" type="tel" inputMode="numeric" className="field" value={phone} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_phone_entered"); setPhone(formatPhone(e.target.value)); }} onFocus={() => track("field_focus", { field: "phone" })} onBlur={() => { schedulePartialBeacon(); track("field_blur", { field: "phone", filled: !!phone }); }} placeholder="(___) ___-____" autoComplete="tel" />
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
               <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { sendPartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
+              <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { schedulePartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
               <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
             </div>
             <div>
