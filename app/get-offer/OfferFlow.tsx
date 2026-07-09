@@ -526,7 +526,8 @@ export default function OfferFlow() {
       { make, model, year: yr, hasDamage },
       // Meta ViewContent — details_submitted is the live mid-funnel remarketing
       // signal now that the instant estimate is off (estimate_viewed can't fire).
-      { content_name: `${yr} ${make} ${model}` },
+      // content_category = make lets Meta build make/segment-specific lookalikes.
+      { content_name: `${yr} ${make} ${model}`, content_category: make },
     );
     setStep(3);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -676,7 +677,7 @@ export default function OfferFlow() {
         has_damage: hasDamage,
         cta_source: ctaSource,
       });
-      trackMeta("Lead", { currency: "CAD", value: estimate?.mid ?? 0, content_name: `${year} ${make} ${model}` }, metaEventId);
+      trackMeta("Lead", { currency: "CAD", value: estimate?.mid ?? 0, content_name: `${year} ${make} ${model}`, content_category: make }, metaEventId);
       setStep(5);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {

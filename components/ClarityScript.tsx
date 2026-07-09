@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { consentDenied } from "@/lib/consent";
-import { getBehavior } from "@/lib/attribution";
+import { getAttribution, getBehavior } from "@/lib/attribution";
 
 /**
  * Microsoft Clarity session recordings + heatmaps. Injected only when
@@ -54,7 +54,14 @@ export default function ClarityScript() {
     if (!CLARITY_ID || consentDenied()) return;
     const b = getBehavior();
     const id = b.visitorId || b.sessionId;
-    if (id && typeof window.clarity === "function") window.clarity("identify", id);
+    if (id && typeof window.clarity === "function") {
+      window.clarity("identify", id);
+      // Tag the session with its marketing source so replays are filterable by
+      // channel/campaign in the Clarity dashboard (no PII — utm values only).
+      const a = getAttribution();
+      if (a.utmSource) window.clarity("set", "utm_source", a.utmSource);
+      if (a.utmCampaign) window.clarity("set", "utm_campaign", a.utmCampaign);
+    }
   }, [pathname]);
 
   return null;

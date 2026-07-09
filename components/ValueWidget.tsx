@@ -39,7 +39,7 @@ export default function ValueWidget() {
         document.getElementById("vw-vin")?.focus();
         return;
       }
-      trackFunnel("widget_submit", { mode: "vin" });
+      trackFunnel("widget_submit", { mode: "vin" }, { search_string: vin.trim().toUpperCase() });
       const q = new URLSearchParams({ mode: "vin", vin: vin.trim().toUpperCase(), source: "widget" });
       router.push(`/get-offer?${q.toString()}`);
       return;
@@ -51,7 +51,7 @@ export default function ValueWidget() {
       document.getElementById(firstMissing)?.focus();
       return;
     }
-    trackFunnel("widget_submit", { make, model, year: Number(year) });
+    trackFunnel("widget_submit", { make, model, year: Number(year) }, { search_string: `${year} ${make} ${model}`.trim() });
     const q = new URLSearchParams({ year, make, model, source: "widget" });
     router.push(`/get-offer?${q.toString()}`);
   }
