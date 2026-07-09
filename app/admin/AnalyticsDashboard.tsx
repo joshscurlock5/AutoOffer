@@ -15,6 +15,10 @@ import {
   segmentTable,
   scoreBand,
   SEGMENT_DIMENSIONS,
+  byLandingPath,
+  abandonersBySource,
+  campaignVehicle,
+  warmAbandoners,
   type Filters,
   type SegmentDimension,
   type Count,
@@ -1064,6 +1068,72 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
   );
 }
 
+function CampaignVehicleCard({ profiles }: { profiles: Profile[] }) {
+  const rows = useMemo(() => campaignVehicle(profiles), [profiles]);
+  return (
+    <div className="card overflow-x-auto p-4">
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">No leads in range.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="py-2 pr-2">Campaign / source</th>
+              <th className="px-2 text-right">Leads</th>
+              <th className="px-2">Top make</th>
+              <th className="pl-2 text-right" title="Share of this channel's leads whose vehicle is high value (from the derived vehicle tier) — high = it sends buyable cars, not just clicks.">High-value %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.campaign} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy" title={r.campaign}>{r.campaign}</td>
+                <td className="px-2 text-right">{r.leads}</td>
+                <td className="px-2 capitalize">{r.topMake}</td>
+                <td className="pl-2 text-right font-semibold">{r.highValuePct}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function WarmAbandonersCard({ profiles }: { profiles: Profile[] }) {
+  const rows = useMemo(() => warmAbandoners(profiles), [profiles]);
+  return (
+    <div className="card overflow-x-auto p-4">
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">No abandoned leads with a phone number in range.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="py-2 pr-2">Who</th>
+              <th className="px-2">Phone</th>
+              <th className="px-2">Vehicle</th>
+              <th className="px-2">Source</th>
+              <th className="pl-2 text-right">Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy">{r.name || "(no name)"}</td>
+                <td className="px-2"><a href={`tel:${r.phone}`} className="font-semibold text-brand-600 hover:underline">{r.phone}</a></td>
+                <td className="px-2 text-muted">{r.vehicle || "—"}</td>
+                <td className="px-2 text-muted">{r.source}</td>
+                <td className="pl-2 text-right text-muted">{timeAgo(r.lastActivityAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function MetaExport({ profiles }: { profiles: Profile[] }) {
   const download = (seg: MetaSegment) => {
     const { filename, csv, rows } = buildMetaCsv(profiles, seg);
@@ -1990,7 +2060,17 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             <div className="grid gap-4 lg:grid-cols-2">
               <HBars title="By source" rows={view.bySource} tip={SRC.siteGrouped} />
               <HBars title="By campaign" rows={view.byCampaign} tip={SRC.siteGrouped} />
+              <HBars title="Top landing pages" rows={byLandingPath(filtered)} tip="The first page each person entered your site on — shows which SEO pages / ad links actually pull people in." />
+              <HBars title="Abandoners by source" rows={abandonersBySource(filtered)} tip="Which channels send people who START the form but don't finish — high-intent starts worth winning back." />
             </div>
+          </Section>
+
+          <Section title="What each channel brings — vehicle mix" tip="Real leads only: the most common vehicle make per campaign/source and the share that are high-value, so you can judge channels on buyable cars, not just clicks.">
+            <CampaignVehicleCard profiles={filtered} />
+          </Section>
+
+          <Section title="Warm abandoners — call these now" tip="People who started the form and left a phone number but never submitted. Newest first — call or text while they're warm.">
+            <WarmAbandonersCard profiles={filtered} />
           </Section>
 
           <Section

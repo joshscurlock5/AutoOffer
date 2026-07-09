@@ -367,3 +367,82 @@ export function segmentTable(profiles: Profile[], dim: SegmentDimension): Segmen
   }
   return rows.sort((a, b) => b.people - a.people);
 }
+
+// ---- Small read-time aggregates over already-stored data (Acquisition) ---------
+
+/** Top entry (landing) pages across the people, query-string-stripped, by count. */
+export function byLandingPath(profiles: Profile[], limit = 12): Count[] {
+  return topCounts(
+    profiles.map((p) => {
+      const lp = p.attribution?.landingPath;
+      if (!lp) return undefined;
+      const q = lp.indexOf("?");
+      return (q >= 0 ? lp.slice(0, q) : lp) || "/";
+    }),
+    limit,
+  );
+}
+
+/** Abandoners (partial-stage people) grouped by acquisition source. */
+export function abandonersBySource(profiles: Profile[], limit = 12): Count[] {
+  return topCounts(profiles.filter((p) => p.stage === "partial").map((p) => p.source), limit);
+}
+
+export interface CampaignVehicleRow {
+  campaign: string;
+  leads: number;
+  topMake: string;
+  highValuePct: number;
+}
+
+/** Per-campaign vehicle mix (real leads only) — which channels bring which cars,
+ * and what share are high-value, so ad spend can be judged on buyable cars not clicks. */
+export function campaignVehicle(profiles: Profile[], limit = 10): CampaignVehicleRow[] {
+  const groups = new Map<string, Profile[]>();
+  for (const p of profiles) {
+    if (!p.hasRealLead) continue;
+    const c = p.attribution?.utmCampaign || p.source || "Direct";
+    const arr = groups.get(c);
+    if (arr) arr.push(p);
+    else groups.set(c, [p]);
+  }
+  const rows: CampaignVehicleRow[] = [];
+  for (const [campaign, ps] of groups) {
+    const makeCounts = new Map<string, number>();
+    let highValue = 0;
+    for (const p of ps) {
+      if (p.make) makeCounts.set(p.make, (makeCounts.get(p.make) || 0) + 1);
+      if (p.enrichment?.vehicleTier === "high") highValue += 1;
+    }
+    const topMake = [...makeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
+    rows.push({ campaign, leads: ps.length, topMake, highValuePct: ps.length ? Math.round((highValue / ps.length) * 100) : 0 });
+  }
+  return rows.sort((a, b) => b.leads - a.leads).slice(0, limit);
+}
+
+export interface WarmAbandoner {
+  id: string;
+  name?: string;
+  phone?: string;
+  vehicle?: string;
+  source: string;
+  score: number;
+  lastActivityAt?: string;
+}
+
+/** Partial (abandoned) leads that left a phone — the "call these now" list, newest first. */
+export function warmAbandoners(profiles: Profile[], limit = 15): WarmAbandoner[] {
+  return profiles
+    .filter((p) => p.stage === "partial" && p.phones.length > 0)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      phone: p.phones[0],
+      vehicle: p.vehicles[0],
+      source: p.source,
+      score: p.score,
+      lastActivityAt: p.lastActivityAt,
+    }))
+    .sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""))
+    .slice(0, limit);
+}
