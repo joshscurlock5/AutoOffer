@@ -4,7 +4,7 @@ import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead, claimPendingOffer } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
-import { telegramChatIds, notifyLog } from "@/lib/notify";
+import { telegramChatIds, notifyLog, notifyNewLead } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead, NegotiationEntry } from "@/lib/types";
@@ -39,6 +39,19 @@ function fmtRange(low: number, high: number): string {
 function carText(lead: Lead): string {
   const v = lead.vehicle;
   return v ? `${v.year} ${v.make} ${v.model}` : "their vehicle";
+}
+
+/** Loose email-shape check for /addemail (something@something.tld, no spaces). */
+function looksLikeEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+/** Validate a typed phone for /addphone — keep the owner's formatting, require 10–15 digits. */
+function cleanPhone(s: string): string | null {
+  const t = s.trim();
+  const digits = t.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return null;
+  return t;
 }
 
 
@@ -790,6 +803,74 @@ export async function POST(req: NextRequest) {
         minute: "2-digit",
       });
       await reply(fromChat, `📅 Booked — ${carText(lead)} inspection ${whenLabel} (MT). I'll remind you ~2h before.`);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 8) /addemail <id> <email> — attach or replace the email on a lead (e.g. a
+    //    phone-only lead sent us their email later), then re-post the lead so the
+    //    email-based buttons work. The updated contact flows into their profile.
+    const addEmailCmd = text.match(/^\/addemail(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
+    if (addEmailCmd) {
+      const code = (addEmailCmd[2] || "").trim();
+      const email = (addEmailCmd[3] || "").trim();
+      if (!code || !email) {
+        await reply(fromChat, "Usage: /addemail <id> <email>\nExample: /addemail a1b2c3d4 jordan@email.com");
+        return NextResponse.json({ ok: true });
+      }
+      if (!looksLikeEmail(email)) {
+        await reply(fromChat, `"${email}" doesn't look like an email. Try again, e.g. /addemail ${code} jordan@email.com`);
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const prev = lead.contact.email;
+      const updated = await updateLead(lead.id, { contact: { ...lead.contact, email } });
+      await reply(
+        fromChat,
+        `✅ Email ${prev ? "updated" : "added"} for ${lead.contact.name || "that lead"}: ${email}${prev ? ` (was ${prev})` : ""}. Re-posting the lead below.`,
+      );
+      if (updated) await notifyNewLead(updated);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 8b) /addphone <id> <phone> — attach or replace the phone on a lead (stored for
+    //     the profile now + future SMS button actions once Twilio is on).
+    const addPhoneCmd = text.match(/^\/addphone(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
+    if (addPhoneCmd) {
+      const code = (addPhoneCmd[2] || "").trim();
+      const phoneRaw = (addPhoneCmd[3] || "").trim();
+      if (!code || !phoneRaw) {
+        await reply(fromChat, "Usage: /addphone <id> <phone>\nExample: /addphone a1b2c3d4 (403) 555-0182");
+        return NextResponse.json({ ok: true });
+      }
+      const phone = cleanPhone(phoneRaw);
+      if (!phone) {
+        await reply(fromChat, `"${phoneRaw}" doesn't look like a phone number. Try again, e.g. /addphone ${code} 403-555-0182`);
+        return NextResponse.json({ ok: true });
+      }
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found with ID "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const prev = lead.contact.phone;
+      const updated = await updateLead(lead.id, { contact: { ...lead.contact, phone } });
+      await reply(
+        fromChat,
+        `✅ Phone ${prev ? "updated" : "added"} for ${lead.contact.name || "that lead"}: ${phone}${prev ? ` (was ${prev})` : ""}. Re-posting the lead below.`,
+      );
+      if (updated) await notifyNewLead(updated);
       return NextResponse.json({ ok: true });
     }
 
