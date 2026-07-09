@@ -1,5 +1,6 @@
 import "server-only";
 import type { Lead, Referral } from "./types";
+import { updateLead } from "./store";
 
 /**
  * Owner alert on every new lead, via a Telegram bot.
@@ -57,12 +58,23 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-CA")}`;
 }
 
+/** One-line negotiation trail (💬 ask $X → 💵 offer $Y → ✅ bought $Z), or "" if none.
+ * Folded into the lead alert itself so there's no separate scoreboard message. */
+function negTrail(entries: Lead["negotiation"]): string {
+  if (!entries || !entries.length) return "";
+  const icon = (k: string) => (k === "ask" ? "💬 ask" : k === "offer" ? "💵 offer" : "✅ bought");
+  return entries.map((e) => `${icon(e.kind)} ${money(e.amount)}`).join("  →  ");
+}
+
 // Shopping-cart emoji via codepoint (abandoned-cart partial alert), matching the
 // EMOJI_CHAT/EMOJI_REFERRAL pattern so it survives build + Telegram transport.
 const EMOJI_CART = String.fromCodePoint(0x1f6d2);
+/** Header for an abandoned-form (partial) lead alert — exported so the webhook's
+ * in-place refresh reuses the exact same string and never relabels it as a new lead. */
+export const PARTIAL_LEAD_HEADER = `${EMOJI_CART} Abandoned form — reachable (they left contact info)`;
 
 /** Human-friendly message body. Telegram auto-links phone numbers + emails. */
-function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
+export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
   const c = lead.contact;
   const reach = c.contactMethod ?? "call";
   const lines: string[] = [header, "", c.name];
@@ -96,10 +108,14 @@ function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
   const sid = lead.id.split("-")[0];
   lines.push("", `🆔 ${sid}`);
 
+  // Fold the negotiation trail right into the lead — no separate scoreboard message.
+  const trail = negTrail(lead.negotiation);
+  if (trail) lines.push("", `📊 ${trail}`);
+
   return lines.join("\n");
 }
 
-async function sendText(text: string, chatId: string, replyMarkup?: unknown): Promise<void> {
+async function sendText(text: string, chatId: string, replyMarkup?: unknown): Promise<number | undefined> {
   const r = await fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -111,6 +127,8 @@ async function sendText(text: string, chatId: string, replyMarkup?: unknown): Pr
     }),
   });
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
+  const j = await r.json().catch(() => null);
+  return j?.result?.message_id;
 }
 
 /** Inline buttons on a lead alert. Top rows LOG the negotiation (their ask / our
@@ -141,11 +159,14 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
   const text = buildText(lead);
   const sid = lead.id.split("-")[0];
   try {
-    await sendText(text, chat, negKeyboard(lead));
+    const mid = await sendText(text, chat, negKeyboard(lead));
     // Second message: the bare short ID only — no emoji, no label, nothing else —
     // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
     // only (the /offer, /confirm, /cancel command replies never send it).
     await sendText(sid, chat);
+    // Remember this alert's message so the negotiation trail can later be edited
+    // straight into it (folded in), instead of posting a separate scoreboard.
+    if (mid != null) await updateLead(lead.id, { negMsgId: mid, negChatId: chat });
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
@@ -161,10 +182,11 @@ export async function notifyPartialLead(lead: Lead): Promise<void> {
   const chat = chatFor("leads");
   if (!BOT_TOKEN || !chat) return;
   const sid = lead.id.split("-")[0];
-  const text = buildText(lead, `${EMOJI_CART} Abandoned form — reachable (they left contact info)`);
+  const text = buildText(lead, PARTIAL_LEAD_HEADER);
   try {
-    await sendText(text, chat, negKeyboard(lead));
+    const mid = await sendText(text, chat, negKeyboard(lead));
     await sendText(sid, chat);
+    if (mid != null) await updateLead(lead.id, { negMsgId: mid, negChatId: chat });
   } catch (e) {
     console.error("[notify] partial Telegram alert failed:", e);
   }

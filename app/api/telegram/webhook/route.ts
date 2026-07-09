@@ -4,7 +4,7 @@ import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead, claimPendingOffer } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
-import { telegramChatIds, notifyLog, notifyNewLead } from "@/lib/notify";
+import { telegramChatIds, notifyLog, notifyNewLead, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead, NegotiationEntry } from "@/lib/types";
@@ -192,19 +192,16 @@ async function deleteMessage(chatId: number | string, messageId: number): Promis
   }
 }
 
-/** Create or update the single in-place 📊 Negotiation summary for a lead (carries
- * the action buttons). Returns the message id + chat so the caller can persist them. */
-async function upsertNegSummary(lead: Lead, chatId: number): Promise<{ negMsgId?: number; negChatId?: number }> {
+/** Re-render a lead's alert message in place so the negotiation trail (folded into
+ * buildText) shows right on the lead — no separate scoreboard message. Best-effort:
+ * only works for leads whose alert message we tracked (negMsgId/negChatId, set by
+ * notifyNewLead); older leads simply skip the visible edit (data's still saved + logged). */
+async function refreshLeadAlert(lead: Lead): Promise<void> {
+  if (lead.negMsgId == null || lead.negChatId == null) return;
   const code = lead.id.split("-")[0];
-  const closed = (lead.negotiation || []).some((e) => e.kind === "bought");
-  const text = `📊 Negotiation — ${carText(lead)}\n${negTrail(lead.negotiation)}` + (closed ? "\n(deal closed)" : "");
-  const kb = negKeyboardFor(code);
-  if (lead.negMsgId != null && lead.negChatId != null) {
-    await editMessage(lead.negChatId, lead.negMsgId, text, kb);
-    return { negMsgId: lead.negMsgId, negChatId: lead.negChatId };
-  }
-  const negMsgId = await sendReturningId(chatId, text, kb);
-  return negMsgId != null ? { negMsgId, negChatId: chatId } : {};
+  // Keep the original header (an abandoned-form lead must not get relabeled "new").
+  const header = lead.status === "partial" || lead.partialNotifiedAt ? PARTIAL_LEAD_HEADER : undefined;
+  await editMessage(lead.negChatId, lead.negMsgId, buildText(lead, header), negKeyboardFor(code));
 }
 
 export async function POST(req: NextRequest) {
@@ -329,8 +326,6 @@ export async function POST(req: NextRequest) {
           ...(lead.negotiation || []),
           { at: nowISO, kind: "offer" as const, amount: Math.round((low + high) / 2) },
         ].slice(-100);
-        // Refresh the in-place 📊 summary so the emailed offer shows on the lead.
-        const summary = await upsertNegSummary({ ...lead, negotiation }, cbChat);
         const updatedLead = await updateLead(lead.id, {
           offer: { low, high, sentAt: nowISO },
           negotiation,
@@ -344,8 +339,9 @@ export async function POST(req: NextRequest) {
           pendingOffer: undefined,
           dripEmailIds: [],
           status: lead.status === "new" ? "contacted" : lead.status,
-          ...(summary.negMsgId != null ? { negMsgId: summary.negMsgId, negChatId: summary.negChatId } : {}),
         });
+        // Fold the emailed offer into the lead's own alert message (no scoreboard).
+        await refreshLeadAlert(updatedLead || { ...lead, negotiation });
         await smsOfferReady(lead, low, high);
         await emitOfferSent(updatedLead || lead);
         if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
@@ -420,12 +416,10 @@ export async function POST(req: NextRequest) {
         patch.status = "closed";
         patch.closedAt = lead.closedAt || entry.at;
       }
-      // ONE tidy in-place summary per lead, then delete the prompt + typed number.
-      const summary = await upsertNegSummary({ ...lead, ...patch }, fromChat);
-      await updateLead(lead.id, {
-        ...patch,
-        ...(summary.negMsgId != null ? { negMsgId: summary.negMsgId, negChatId: summary.negChatId } : {}),
-      });
+      // Save it, then fold the trail into the lead's OWN alert message (no separate
+      // scoreboard), and delete the prompt + the typed number.
+      const updated = await updateLead(lead.id, patch);
+      await refreshLeadAlert(updated || { ...lead, ...patch });
       await notifyLog(`📝 ${who} logged ${kind} ${negMoney(amount)} — ${carText(lead)} (${code})\n${negTrail(negotiation)}`);
       await clearPromptAndInput();
       return NextResponse.json({ ok: true });
