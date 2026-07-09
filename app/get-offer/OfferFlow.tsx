@@ -8,6 +8,7 @@ import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track, trackFunnel } from "@/lib/analytics";
 import { getAttribution, getBehavior, getTouches, markFunnelStep } from "@/lib/attribution";
+import { consentDenied } from "@/lib/consent";
 import { trackMeta, newEventId } from "@/lib/metaPixel";
 import { site } from "@/lib/site-config";
 import PhoneButton from "@/components/PhoneButton";
@@ -118,6 +119,18 @@ export default function OfferFlow() {
   // who just converted.
   const submittedRef = useRef(false);
 
+  // --- Passive form-quality signals (Batch 3). Refs only — never trigger a
+  //     render; consent-gating is inherited from track()/logEvent(). We record
+  //     only field NAMES + counts/methods + sizes, NEVER the characters typed.
+  //     Merged into the behavior payload at submit + partial. ---
+  const signals = useRef<{
+    tabSwitches: number;
+    maxScrollPct: number;
+    contactInput?: "typed" | "paste" | "autofill";
+  }>({ tabSwitches: 0, maxScrollPct: 0 });
+  const fieldTiming = useRef<Record<string, { at: number; corrections: number; method: "typed" | "paste" | "autofill" }>>({});
+  const scrollFired = useRef<Set<number>>(new Set());
+
   // Load the real trims for the chosen year/make/model.
   useEffect(() => {
     if (!year || !make || !model) {
@@ -224,6 +237,64 @@ export default function OfferFlow() {
     };
   }, [step, name, email, phone, contactMethod, year, make, model, trim, kmv]);
 
+  // Passive scroll-depth on the offer page (throttled via rAF; each bucket fires
+  // once). Tracks the furthest depth for the profile + fires GA/first-party events.
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+        const pct = scrollable > 0 ? Math.min(100, Math.round((window.scrollY / scrollable) * 100)) : 100;
+        if (pct > signals.current.maxScrollPct) signals.current.maxScrollPct = pct;
+        for (const bkt of [25, 50, 75, 100]) {
+          if (pct >= bkt && !scrollFired.current.has(bkt)) {
+            scrollFired.current.add(bkt);
+            track("scroll_depth", { pct: bkt });
+          }
+        }
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Count tab-away events during the flow (distraction / comparison-shopping signal).
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        signals.current.tabSwitches += 1;
+        track("tab_switch", { count: signals.current.tabSwitches });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // Frustration + intent micro-signals — passive observers, never intercept the
+  // event, never record the copied text.
+  useEffect(() => {
+    let last = { t: 0, x: 0, y: 0, n: 0 };
+    const onClick = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - last.t < 700 && Math.abs(e.clientX - last.x) < 24 && Math.abs(e.clientY - last.y) < 24) {
+        last = { t: now, x: e.clientX, y: e.clientY, n: last.n + 1 };
+        if (last.n === 2) track("rage_click", {}); // 3rd rapid same-spot click
+      } else {
+        last = { t: now, x: e.clientX, y: e.clientY, n: 0 };
+      }
+    };
+    const onCopy = () => track("copy_action", {});
+    document.addEventListener("click", onClick, { passive: true });
+    document.addEventListener("copy", onCopy, { passive: true });
+    return () => {
+      document.removeEventListener("click", onClick);
+      document.removeEventListener("copy", onCopy);
+    };
+  }, []);
+
   const models = make ? modelsFor(make) : [];
   const vehicleValid = Boolean(year && make && model);
   const source = () => (sp.get("make") ? "widget" : "direct");
@@ -278,7 +349,7 @@ export default function OfferFlow() {
         mileageKm: kmv,
         attribution: getAttribution(),
         touches: getTouches(),
-        behavior: getBehavior(),
+        behavior: mergedBehavior(),
       });
       // navigator.sendBeacon's boolean return is the real success signal — a
       // refused beacon (e.g. queue full) must not be treated as delivered.
@@ -317,6 +388,74 @@ export default function OfferFlow() {
       { value: estimate?.mid ?? 0, currency: "CAD" },
     );
   }
+
+  /** getBehavior() + the passive form signals collected this session, for the
+   *  lead + partial payloads. Consent-gated: no passive signals when analytics
+   *  are declined. Best-effort; never throws. */
+  function mergedBehavior() {
+    const b = getBehavior();
+    try {
+      if (consentDenied()) return b;
+      return {
+        ...b,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        ...(signals.current.maxScrollPct ? { maxScrollPct: signals.current.maxScrollPct } : {}),
+        ...(signals.current.tabSwitches ? { tabSwitches: signals.current.tabSwitches } : {}),
+        ...(signals.current.contactInput ? { contactInput: signals.current.contactInput } : {}),
+      };
+    } catch {
+      return b;
+    }
+  }
+
+  // Delegated capture handlers on the contact <form> — measure per-field dwell,
+  // correction count, and fill method (typed / paste / autofill) WITHOUT touching
+  // any input's own handlers, and WITHOUT ever reading the typed value.
+  const contactFieldOf = (t: EventTarget | null): string | null => {
+    const el = t as HTMLElement | null;
+    if (!el || (el.tagName !== "INPUT" && el.tagName !== "SELECT" && el.tagName !== "TEXTAREA")) return null;
+    return el.id || null;
+  };
+  const rememberContactInput = (field: string, method: "typed" | "paste" | "autofill") => {
+    if (field !== "cphone" && field !== "email") return; // primary contact fields only
+    const rank = { typed: 0, autofill: 1, paste: 2 } as const;
+    const prev = signals.current.contactInput;
+    if (!prev || rank[method] >= rank[prev]) signals.current.contactInput = method;
+  };
+  const onContactFocus = (e: React.FocusEvent<HTMLFormElement>) => {
+    const f = contactFieldOf(e.target);
+    if (!f) return;
+    const s = fieldTiming.current[f] || { at: 0, corrections: 0, method: "typed" as const };
+    fieldTiming.current[f] = { ...s, at: Date.now() };
+  };
+  const onContactBlur = (e: React.FocusEvent<HTMLFormElement>) => {
+    const f = contactFieldOf(e.target);
+    if (!f) return;
+    const s = fieldTiming.current[f];
+    if (!s || !s.at) return;
+    const dwellMs = Math.max(0, Date.now() - s.at);
+    s.at = 0;
+    track("field_timing", { field: f, dwellMs, corrections: s.corrections, method: s.method });
+  };
+  const onContactInput = (e: React.FormEvent<HTMLFormElement>) => {
+    const f = contactFieldOf(e.target);
+    if (!f) return;
+    const it = (e.nativeEvent as InputEvent)?.inputType || "";
+    const s = fieldTiming.current[f] || { at: Date.now(), corrections: 0, method: "typed" as const };
+    if (it.startsWith("delete")) s.corrections += 1;
+    else if (it === "insertFromPaste") s.method = "paste";
+    else if (it === "insertReplacementText") s.method = "autofill";
+    fieldTiming.current[f] = s;
+    rememberContactInput(f, s.method);
+  };
+  const onContactPaste = (e: React.ClipboardEvent<HTMLFormElement>) => {
+    const f = contactFieldOf(e.target);
+    if (!f) return;
+    const s = fieldTiming.current[f] || { at: Date.now(), corrections: 0, method: "typed" as const };
+    s.method = "paste";
+    fieldTiming.current[f] = s;
+    rememberContactInput(f, "paste");
+  };
 
   /** Fetch the real (market-based) estimate from the server. */
   async function fetchEstimate(y: string, mk: string, md: string, kmNum: number): Promise<OfferEstimate> {
@@ -521,7 +660,7 @@ export default function OfferFlow() {
       // the per-person profile.
       fd.append("attribution", JSON.stringify(getAttribution()));
       fd.append("touches", JSON.stringify(getTouches()));
-      fd.append("behavior", JSON.stringify(getBehavior()));
+      fd.append("behavior", JSON.stringify(mergedBehavior()));
 
       const res = await fetch("/api/leads", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Request failed");
@@ -588,7 +727,14 @@ export default function OfferFlow() {
   // The shared contact form — rendered inline on both the priced and the unique
   // step. The screen header above it carries the per-path message.
   const renderContactForm = () => (
-    <form onSubmit={submitLead} className="mt-6">
+    <form
+      onSubmit={submitLead}
+      className="mt-6"
+      onFocusCapture={onContactFocus}
+      onBlurCapture={onContactBlur}
+      onInput={onContactInput}
+      onPaste={onContactPaste}
+    >
         <div className="space-y-4">
         <div>
           <span className="label">How should we reach you?</span>

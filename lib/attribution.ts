@@ -280,6 +280,12 @@ export function parseBehavior(raw: unknown): Behavior | undefined {
       pageviews: N(o.pageviews, 100000),
       maxFunnelStep: N(o.maxFunnelStep, 100),
       timeOnSiteMs: N(o.timeOnSiteMs, 1000 * 60 * 60 * 24 * 30), // cap 30 days
+      viewport: S(o.viewport, 16),
+      maxScrollPct: N(o.maxScrollPct, 100),
+      tabSwitches: N(o.tabSwitches, 100000),
+      contactInput: ["typed", "paste", "autofill"].includes(String(o.contactInput))
+        ? (String(o.contactInput) as Behavior["contactInput"])
+        : undefined,
     };
     return Object.values(b).some((v) => v !== undefined) ? b : undefined;
   } catch {

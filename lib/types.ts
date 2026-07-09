@@ -126,6 +126,12 @@ export interface Behavior {
   maxFunnelStep?: number;
   /** lastSeenAt − firstSeenAt, computed at read time. */
   timeOnSiteMs?: number;
+  /** Passive form-quality signals from the offer page (consent-gated). Never
+   * includes any typed value — only sizes / counts / a fill-method label. */
+  viewport?: string; // "WxH" at submit
+  maxScrollPct?: number; // furthest scroll depth on the offer page (0–100)
+  tabSwitches?: number; // times the tab was hidden during the flow
+  contactInput?: "typed" | "paste" | "autofill"; // how the primary contact field was filled
 }
 
 /** Coarse geolocation resolved from the client IP (best-effort). All fields come

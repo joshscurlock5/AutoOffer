@@ -460,6 +460,12 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
             <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />
             <Row k="Furthest step" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
+            {p.behavior?.maxScrollPct != null && <Row k="Scroll depth" v={`${p.behavior.maxScrollPct}%`} />}
+            {p.behavior?.viewport && <Row k="Screen" v={p.behavior.viewport} />}
+            {(p.behavior?.tabSwitches ?? 0) > 0 && <Row k="Tab switches" v={String(p.behavior?.tabSwitches ?? 0)} />}
+            {p.behavior?.contactInput && p.behavior.contactInput !== "typed" && (
+              <Row k="Contact input" v={p.behavior.contactInput} />
+            )}
             <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
               Lead score — {p.score}/100<InfoDot tip={SRC.score} />
             </div>
