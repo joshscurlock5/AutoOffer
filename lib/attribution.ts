@@ -76,6 +76,12 @@ export function captureFirstTouch(): void {
       utmTerm: p.get("utm_term") || undefined,
       gclid: p.get("gclid") || undefined,
       fbclid: p.get("fbclid") || undefined,
+      gbraid: p.get("gbraid") || undefined,
+      wbraid: p.get("wbraid") || undefined,
+      matchType: p.get("matchtype") || undefined,
+      adNetwork: p.get("network") || undefined,
+      placement: p.get("placement") || undefined,
+      utmId: p.get("utm_id") || undefined,
       referrer: referrer || undefined,
       landingPath: url.pathname + (url.search || ""),
       landingAt: new Date().toISOString(),
@@ -124,6 +130,8 @@ function sameTouchSource(a: Touch, b: Touch): boolean {
     (a.utmTerm || "") === (b.utmTerm || "") &&
     (a.gclid || "") === (b.gclid || "") &&
     (a.fbclid || "") === (b.fbclid || "") &&
+    (a.gbraid || "") === (b.gbraid || "") &&
+    (a.wbraid || "") === (b.wbraid || "") &&
     (a.referrer || "") === (b.referrer || "")
   );
 }
@@ -147,13 +155,20 @@ function recordTouch(url: URL, p: URLSearchParams): void {
     utmTerm: p.get("utm_term") || undefined,
     gclid: p.get("gclid") || undefined,
     fbclid: p.get("fbclid") || undefined,
+    gbraid: p.get("gbraid") || undefined,
+    wbraid: p.get("wbraid") || undefined,
+    matchType: p.get("matchtype") || undefined,
+    adNetwork: p.get("network") || undefined,
+    placement: p.get("placement") || undefined,
+    utmId: p.get("utm_id") || undefined,
     referrer: referrer || undefined,
     landingPath: url.pathname + (url.search || ""),
     at: new Date().toISOString(),
   };
   const hasSignal = Boolean(
     touch.utmSource || touch.utmMedium || touch.utmCampaign || touch.utmContent ||
-    touch.utmTerm || touch.gclid || touch.fbclid || touch.referrer,
+    touch.utmTerm || touch.gclid || touch.fbclid || touch.referrer ||
+    touch.gbraid || touch.wbraid,
   );
   const touches = read<Touch[]>(TOUCHES_KEY) || [];
   if (touches.length && !hasSignal) return;
@@ -226,6 +241,12 @@ export function parseAttribution(raw: unknown): Attribution | undefined {
       utmTerm: S(o.utmTerm, 200),
       gclid: S(o.gclid, 400),
       fbclid: S(o.fbclid, 400),
+      gbraid: S(o.gbraid, 400),
+      wbraid: S(o.wbraid, 400),
+      matchType: S(o.matchType, 40),
+      adNetwork: S(o.adNetwork, 40),
+      placement: S(o.placement, 200),
+      utmId: S(o.utmId, 120),
       referrer: S(o.referrer, 400),
       landingPath: S(o.landingPath, 400),
       landingAt: S(o.landingAt, 40),
@@ -254,6 +275,12 @@ export function parseTouches(raw: unknown): Touch[] | undefined {
         utmTerm: S(o.utmTerm, 200),
         gclid: S(o.gclid, 400),
         fbclid: S(o.fbclid, 400),
+        gbraid: S(o.gbraid, 400),
+        wbraid: S(o.wbraid, 400),
+        matchType: S(o.matchType, 40),
+        adNetwork: S(o.adNetwork, 40),
+        placement: S(o.placement, 200),
+        utmId: S(o.utmId, 120),
         referrer: S(o.referrer, 400),
         landingPath: S(o.landingPath, 400),
         at: S(o.at, 40),

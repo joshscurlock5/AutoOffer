@@ -424,6 +424,8 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {a?.utmMedium && <Row k="Medium" v={a.utmMedium} />}
             {a?.utmContent && <Row k="Ad / content" v={a.utmContent} />}
             {a?.utmTerm && <Row k="Term" v={a.utmTerm} />}
+            {a?.matchType && <Row k="Match type" v={a.matchType} />}
+            {a?.placement && <Row k="Placement" v={a.placement} />}
             {a?.referrer && <Row k="Referrer" v={a.referrer} />}
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
             {loc && <Row k="Location" v={loc} />}

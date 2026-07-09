@@ -87,6 +87,16 @@ export interface Attribution {
   utmTerm?: string;
   gclid?: string;
   fbclid?: string;
+  /** Google iOS/privacy-safe click ids, auto-appended alongside gclid (no ad
+   * tracking-template config needed) — recovers attribution gclid loses on iOS. */
+  gbraid?: string;
+  wbraid?: string;
+  /** Google Ads ValueTrack tokens, present only if the ad's tracking template
+   * carries them: search match type, ad network, placement site, and ad id. */
+  matchType?: string;
+  adNetwork?: string;
+  placement?: string;
+  utmId?: string;
   /** External referrer at first touch (same-origin referrers are dropped). */
   referrer?: string;
   /** First landing path (+query). */
@@ -106,6 +116,12 @@ export interface Touch {
   utmTerm?: string;
   gclid?: string;
   fbclid?: string;
+  gbraid?: string;
+  wbraid?: string;
+  matchType?: string;
+  adNetwork?: string;
+  placement?: string;
+  utmId?: string;
   referrer?: string;
   landingPath?: string;
   at?: string;
