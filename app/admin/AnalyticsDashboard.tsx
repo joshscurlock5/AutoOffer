@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
-import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
+import { DATA_SOURCES, STATUS_META, isProfileField, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import {
   computeView,
   filterProfiles,
@@ -1350,6 +1350,22 @@ function SourceStatusChip({ status }: { status: SourceStatus }) {
   );
 }
 
+// Marks a data point that's about ONE identifiable person — i.e. belongs in that
+// seller's single Customer-360 profile (vs. aggregate / market / platform data).
+function ProfileMark() {
+  return (
+    <span
+      title="Person-level — group this into the individual's Customer-360 profile"
+      aria-label="person-profile data"
+      className="ml-1 inline-flex align-middle text-violet-600"
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
+        <path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.87 0-7 2.13-7 4.5V20h14v-1.5c0-2.37-3.13-4.5-7-4.5z" />
+      </svg>
+    </span>
+  );
+}
+
 const GROUP_ORDER: SourceCategory[] = ["firstParty", "connector", "tracker", "comms"];
 const GROUP_HEADING: Record<SourceCategory, string> = {
   firstParty: "First-party — data you collect directly",
@@ -1438,6 +1454,9 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
             </div>
             <SourceStatusChip status={health?.status ?? "empty"} />
           </div>
+          <div className="mt-2 flex items-center text-[11px] text-muted">
+            <ProfileMark /> <span className="ml-1">= person-level — data you&apos;d group into the individual&apos;s Customer-360 profile</span>
+          </div>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Collecting now</div>
@@ -1445,7 +1464,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.collects.map((c) => (
                   <li key={c} className="flex gap-2">
                     <span className="text-brand-600">•</span>
-                    <span>{c}</span>
+                    <span>{c}{isProfileField(def.id, c) && <ProfileMark />}</span>
                   </li>
                 ))}
               </ul>
@@ -1521,7 +1540,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.underutilized.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-amber-500">◐</span>
-                    <span>{it.label}<InfoDot tip={it.why} /></span>
+                    <span>{it.label}<InfoDot tip={it.why} />{isProfileField(def.id, it.label) && <ProfileMark />}</span>
                   </li>
                 ))}
               </ul>
@@ -1537,7 +1556,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.opportunities.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-brand-500">+</span>
-                    <span>{it.label}<InfoDot tip={it.why} /></span>
+                    <span>{it.label}<InfoDot tip={it.why} />{isProfileField(def.id, it.label) && <ProfileMark />}</span>
                   </li>
                 ))}
               </ul>

@@ -1,6 +1,67 @@
 import type { CollectIdea } from "./dataSources";
 
 // ===========================================================================
+//  Person-profile classification — which data points are about ONE identifiable
+//  seller (and so belong in that person's single Customer-360 profile) vs.
+//  aggregate / market / platform-level data that lives in its own section.
+//  Stored as exceptions to stay compact: person-oriented sources default to
+//  "yes, person-level" (list the few that aren't); aggregate sources default to
+//  "no" (list the few that are). Edit these lists to reclassify — the UI's 👤
+//  marker follows automatically.
+// ===========================================================================
+
+const PERSON_SOURCES = new Set([
+  "leads", "partials", "events", "attribution", "referrals", "chat", "geo", "email", "sms", "clarity",
+]);
+
+// Within a person-oriented source: items that are NOT person-level (aggregate
+// rollups, rates, patterns, capabilities, or processing metadata).
+const NOT_PROFILE: Record<string, string[]> = {
+  leads: ["UTM-to-vehicle patterns"],
+  events: ["Form-error field ranking", "Resume-prompt conversion rate"],
+  attribution: ["Landing page path patterns", "Referrer-quality segmentation", "Server-side first-party store"],
+  chat: ["Proactive price-page trigger", "Missed-chat tracking", "Canned offer responses", "First-response time metric"],
+  geo: ["Resolved-at timestamp", "Accuracy radius"],
+  email: ["Idempotency keys", "Native scheduled_at send", "Broadcast open/click analytics", "Dedicated sending domain warmup", "Scheduled-send cancellation"],
+  sms: ["Message segment counts", "Scheduled offer messages", "Messaging Insights analytics", "Delivery-time-to-read gap", "Keyword auto-responder", "Number-reputation / 10DLC campaign data"],
+  clarity: ["Never records typed form data (masked by default)", "Scroll-depth on form steps", "Consent-gated recording"],
+};
+
+// Within an aggregate source: items that ARE person-level (identity keys,
+// per-individual attributes, or per-lead capture).
+const PROFILE_EXTRA: Record<string, string[]> = {
+  metaAds: ["Lead Ads instant forms", "Ad-level UTM & ad ID join"],
+  gtag: [
+    "GA client id / session id (the _ga cookie)",
+    "Alberta city/region geo",
+    "Session source / medium",
+    "Outbound & tel: clicks",
+    "Vehicle params on events",
+    "Lead-value on submit",
+    "User-scoped lead status",
+    "Condition/damage parameter",
+    "Predictive purchase probability",
+  ],
+  pixel: [
+    "Meta browser cookies (fbp / fbc)",
+    "fbclid → server fbc",
+    "Value on Lead event",
+    "Automatic Advanced Matching",
+    "ViewContent content_category",
+    "Search query parameter",
+    "predicted_ltv parameter",
+    "external_id matching",
+  ],
+};
+
+/** Is this data point person-level — i.e. belongs in ONE seller's Customer-360
+ * profile? Drives the 👤 marker across all three detail tiers. */
+export function isProfileField(sourceId: string, label: string): boolean {
+  if (PERSON_SOURCES.has(sourceId)) return !(NOT_PROFILE[sourceId]?.includes(label) ?? false);
+  return PROFILE_EXTRA[sourceId]?.includes(label) ?? false;
+}
+
+// ===========================================================================
 //  Brainstorm content per data source — the two lower tiers of the Sources
 //  detail panel: "Collected but not fully used" + "Could collect but don't".
 //  Curated from a research pass across each platform's real capabilities,
