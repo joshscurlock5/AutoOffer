@@ -501,7 +501,12 @@ export interface Profile {
   /** Per-factor breakdown so every point is explainable. */
   scoreBreakdown: ScoreFactor[];
   timeline: ProfileEvent[];
+  /** The underlying record ids this profile was stitched from — used to soft-delete
+   * (archive) the whole person from the datasets, including profiles with NO lead
+   * (a referrer or a chat-only visitor). */
   leadIds: string[];
+  referralIds: string[];
+  chatIds: string[];
 }
 
 /** One campaign's ad performance pulled from the Meta Marketing API. */

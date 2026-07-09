@@ -1894,21 +1894,40 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const metaConfigured = ads?.configured ?? adLevel?.configured ?? null;
 
   async function deleteProfile(p: Profile) {
-    if (!p.leadIds.length) {
-      alert("This person came from a chat or referral only — there's no lead to delete here.");
+    // Delete ANY profile — including referral-only or chat-only people (they have no
+    // lead). Archives every underlying record so the whole person drops out of the
+    // datasets (profiles, funnel, revenue, scores), restorable from the Deleted tab.
+    if (!p.leadIds.length && !p.referralIds.length && !p.chatIds.length) {
+      alert("Nothing to delete for this profile.");
       return;
     }
     if (!confirm(`Delete ${p.name || p.emails[0] || p.phones[0] || "this profile"}? They're removed from your analytics, but you can restore them from the admin Deleted tab.`)) return;
     setDeletedIds((prev) => new Set(prev).add(p.id));
-    await Promise.all(
-      p.leadIds.map((id) =>
+    const at = new Date().toISOString();
+    const h = { "Content-Type": "application/json" };
+    await Promise.all([
+      ...p.leadIds.map((id) =>
         fetch("/api/admin/leads", {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "lead", id, patch: { archived: true, archivedAt: new Date().toISOString() } }),
+          headers: h,
+          body: JSON.stringify({ type: "lead", id, patch: { archived: true, archivedAt: at } }),
         }).catch(() => {}),
       ),
-    );
+      ...p.referralIds.map((id) =>
+        fetch("/api/admin/leads", {
+          method: "PATCH",
+          headers: h,
+          body: JSON.stringify({ type: "referral", id, patch: { archived: true, archivedAt: at } }),
+        }).catch(() => {}),
+      ),
+      ...p.chatIds.map((id) =>
+        fetch("/api/admin/chats", {
+          method: "PATCH",
+          headers: h,
+          body: JSON.stringify({ conversationId: id, archived: true }),
+        }).catch(() => {}),
+      ),
+    ]);
   }
 
   // Date bounds the active range maps to (drives profile filtering + zero-fill).

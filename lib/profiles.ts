@@ -692,6 +692,8 @@ function buildOne(
     negotiation: negotiation.length ? negotiation : undefined,
     timeline,
     leadIds: leads.map((l) => l.id),
+    referralIds: referrals.map((r) => r.id),
+    chatIds: chats.map((c) => c.id),
   };
   const { score, breakdown } = computeScore(base, leads);
   return { ...base, score, scoreBreakdown: breakdown };
