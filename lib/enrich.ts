@@ -126,6 +126,60 @@ function provinceCode(s?: string): string | undefined {
   return undefined;
 }
 
+/** Coarse, rule-based flags parsed from the seller's condition chips + free-text
+ * note — pre-inspection warnings the owner should see before driving out. Pure
+ * keyword matching over data the customer already gave; deliberately conservative
+ * (never over-infers from short text). */
+export function conditionFlags(condition?: { tags?: string[]; note?: string }): string[] {
+  if (!condition) return [];
+  const hay = [...(condition.tags || []), condition.note || ""].join(" ").toLowerCase();
+  if (!hay.trim()) return [];
+  const has = (...ws: string[]) => ws.some((w) => hay.includes(w));
+  const flags: string[] = [];
+  if (has("salvage", "rebuilt", "branded", "write-off", "write off", "written off", "wrecked", "total loss"))
+    flags.push("branded/salvage title");
+  if (has("lien", "owe", "owing", "financ", "loan", "payoff", "still paying")) flags.push("possible lien");
+  if (has("accident", "collision", "rear-end", "rear end", "fender bender")) flags.push("accident history");
+  if (has("not running", "won't start", "wont start", "doesn't run", "doesnt run", "no start", "not driveable", "not drivable", "won't run"))
+    flags.push("not running");
+  if (has("transmission", "engine", "motor", "head gasket", "mechanical", "check engine", "overheat"))
+    flags.push("mechanical issue");
+  if (has("rust", "rot", "corros")) flags.push("rust");
+  if (has("no key", "lost key", "missing key", "no keys")) flags.push("no key");
+  return [...new Set(flags)];
+}
+
+/** Rough mileage-vs-market band from data we already store (year + km) using a
+ * local Canadian-average km/year model — NOT a MarketCheck call. */
+const KM_PER_YEAR = 20000;
+export function mileageVsMarket(
+  year?: number | string,
+  mileageKm?: number,
+): "low" | "average" | "high" | undefined {
+  const y = Number(year);
+  const km = Number(mileageKm);
+  if (!Number.isFinite(y) || y < 1980 || !Number.isFinite(km) || km <= 0) return undefined;
+  const age = Math.max(1, new Date().getFullYear() - y);
+  const ratio = km / (age * KM_PER_YEAR);
+  return ratio < 0.8 ? "low" : ratio > 1.25 ? "high" : "average";
+}
+
+/** Bucket an external referrer URL into a coarse channel-quality tier. */
+export function referrerQuality(referrer?: string): "search" | "social" | "referral" | undefined {
+  const raw = (referrer || "").toLowerCase();
+  if (!raw) return undefined;
+  let host = raw;
+  try {
+    host = new URL(raw).hostname.replace(/^www\./, "");
+  } catch {
+    /* use the raw string */
+  }
+  if (/google\.|bing\.|yahoo\.|duckduckgo\.|ecosia\.|search\./.test(host)) return "search";
+  if (/facebook\.|fb\.|instagram\.|t\.co|twitter\.|x\.com|tiktok\.|reddit\.|linkedin\.|youtube\.|pinterest\./.test(host))
+    return "social";
+  return "referral";
+}
+
 /** Does the IP-derived location disagree with the phone's area-code region?
  * True when the IP is outside Canada but the phone is Canadian, or both resolve
  * to a Canadian province and they differ. undefined when we can't tell (e.g. a

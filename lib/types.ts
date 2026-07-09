@@ -353,6 +353,13 @@ export interface Enrichment {
    * is outside Canada while the phone is Canadian) — a soft travel/VPN/quality
    * signal, never an auto-reject. */
   regionMismatch?: boolean;
+  /** Pre-inspection warnings parsed from the condition chips + note (branded
+   * title, possible lien, not running, …) — from data the seller already gave. */
+  conditionFlags?: string[];
+  /** Odometer vs a Canadian-average km/year model (not a market API call). */
+  mileageVsMarket?: "low" | "average" | "high";
+  /** Coarse channel tier from the external referrer host. */
+  referrerQuality?: "search" | "social" | "referral";
 }
 
 /** One explainable factor of the lead score. */
@@ -426,6 +433,18 @@ export interface Profile {
   smsOptOut?: boolean;
   /** Zero-input enrichment (email type, phone region, vehicle tier). */
   enrichment?: Enrichment;
+  /** Customer's stated best time to reach them (lifted from their lead). */
+  bestTime?: string;
+  /** Distinct on-site sessions stitched to this person — a return-visit signal. */
+  returnVisits?: number;
+  /** Time from first seen on site to first lead submit (ms). */
+  timeToConvMs?: number;
+  /** Referred someone AND is a seller themselves (repeat customer). */
+  referrerIsSeller?: boolean;
+  /** A referral whose referrer + friend share a contact — likely gaming the reward. */
+  selfReferral?: boolean;
+  /** Minutes from email delivered → first open (hot-lead timing). */
+  emailOpenLatencyMins?: number;
   /** Transparent 0–100 lead score — a prioritization aid, not ML. */
   score: number;
   /** Per-factor breakdown so every point is explainable. */

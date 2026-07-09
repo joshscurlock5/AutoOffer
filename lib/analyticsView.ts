@@ -283,6 +283,7 @@ export const SEGMENT_DIMENSIONS = [
   { key: "region", label: "Province/Region" },
   { key: "make", label: "Vehicle make" },
   { key: "contactMethod", label: "Contact method" },
+  { key: "referrerQuality", label: "Channel quality" },
   { key: "stage", label: "Stage" },
 ] as const;
 
@@ -320,6 +321,8 @@ function dimValue(p: Profile, dim: SegmentDimension): string {
       return p.make || "(none)";
     case "contactMethod":
       return p.contactMethod || "unknown";
+    case "referrerQuality":
+      return p.enrichment?.referrerQuality || "(direct)";
     case "stage":
       return p.stage;
     default:

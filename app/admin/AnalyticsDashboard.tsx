@@ -495,6 +495,36 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                     </span>
                   </div>
                 )}
+                {p.enrichment.conditionFlags && p.enrichment.conditionFlags.length > 0 && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Condition flags</span>
+                    <span className="min-w-0 text-amber-700" title="Parsed from the seller's condition chips + note — worth a look before driving out.">
+                      {p.enrichment.conditionFlags.join(", ")}
+                    </span>
+                  </div>
+                )}
+                {p.enrichment.mileageVsMarket && <Row k="Mileage" v={`${p.enrichment.mileageVsMarket} for its age`} />}
+                {p.enrichment.referrerQuality && <Row k="Channel" v={p.enrichment.referrerQuality} />}
+              </>
+            )}
+            {(p.bestTime || (p.returnVisits ?? 0) > 1 || p.timeToConvMs != null || p.referrerIsSeller || p.selfReferral) && (
+              <>
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">Signals</div>
+                {p.bestTime && <Row k="Best time" v={p.bestTime} />}
+                {(p.returnVisits ?? 0) > 1 && <Row k="Return visits" v={`${p.returnVisits} sessions`} />}
+                {p.timeToConvMs != null && <Row k="Time to convert" v={fmtDur(p.timeToConvMs)} />}
+                {p.referrerIsSeller && <Row k="Referrer" v="Also a seller (repeat)" />}
+                {p.selfReferral && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Referral</span>
+                    <span
+                      className="min-w-0 text-amber-700"
+                      title="The referrer and the friend share the same email or phone — likely a self-referral to game the reward."
+                    >
+                      ⚠ Self-referral
+                    </span>
+                  </div>
+                )}
               </>
             )}
             {(p.emailEngagement || p.smsEngagement) && (
@@ -509,6 +539,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                   />
                 )}
                 {p.emailEngagement?.lastClickedUrl && <Row k="Last click" v={p.emailEngagement.lastClickedUrl} />}
+                {p.emailOpenLatencyMins != null && <Row k="Opened after" v={fmtMins(p.emailOpenLatencyMins)} />}
                 {p.smsEngagement && (
                   <Row
                     k="Texts"

@@ -16,7 +16,7 @@ import type {
   Enrichment,
   ScoreFactor,
 } from "./types";
-import { emailType, phoneRegion, vehicleTier, geoPhoneMismatch } from "./enrich";
+import { emailType, phoneRegion, vehicleTier, geoPhoneMismatch, conditionFlags, mileageVsMarket, referrerQuality } from "./enrich";
 
 // ===========================================================================
 //  Identity stitching — one Profile per PERSON.
@@ -167,8 +167,8 @@ function sourceLabel(a?: Attribution): string {
   return "Direct";
 }
 
-function aggregateBehavior(leads: Lead[]): Behavior | undefined {
-  const bs = leads.map((l) => l.behavior).filter((b): b is Behavior => Boolean(b));
+function aggregateBehavior(recs: Array<{ behavior?: Behavior }>): Behavior | undefined {
+  const bs = recs.map((r) => r.behavior).filter((b): b is Behavior => Boolean(b));
   if (!bs.length) return undefined;
   const firstSeenAt = bs.map((b) => b.firstSeenAt).filter(Boolean).sort()[0];
   const lastSeenAt = bs.map((b) => b.lastSeenAt).filter(Boolean).sort().pop();
@@ -224,7 +224,9 @@ function computeScore(
   if (p.stage !== "partial" && p.stage !== "spam") intent += 10;
   if ((p.behavior?.maxFunnelStep || 0) >= 3) intent += 4;
   if (p.appointmentAt || p.timeline.some((e) => e.label === "Opened the booking page")) intent += 6;
-  b.push({ label: "Intent — submitted, funnel depth, booking", points: Math.min(20, intent), max: 20 });
+  if ((p.returnVisits || 0) > 1) intent += 3; // came back before committing
+  if ((p.behavior?.timeOnSiteMs || 0) >= 3 * 60 * 1000) intent += 3; // real dwell, not a bounce
+  b.push({ label: "Intent — submitted, funnel, booking, return visits, dwell", points: Math.min(20, intent), max: 20 });
 
   // Vehicle value tier (0–15) — from the real offer when present, else make+age.
   const tier = p.enrichment?.vehicleTier;
@@ -253,9 +255,9 @@ function computeScore(
 }
 
 /** Merge every lead's touch history into one deduped, oldest-first journey. */
-function mergeTouches(leads: Lead[]): Touch[] | undefined {
+function mergeTouches(recs: Array<{ touchHistory?: Touch[] }>): Touch[] | undefined {
   const seen = new Map<string, Touch>();
-  for (const l of leads) {
+  for (const l of recs) {
     for (const t of l.touchHistory || []) {
       const key = `${t.at || ""}|${t.utmSource || ""}|${t.utmCampaign || ""}|${t.gclid || ""}|${t.fbclid || ""}|${t.referrer || ""}`;
       if (!seen.has(key)) seen.set(key, t);
@@ -350,6 +352,19 @@ function aggregateSmsEngagement(leads: Lead[]): SmsEngagement | undefined {
   };
 }
 
+/** First email-open latency (delivered → first open) in minutes, if any. */
+function emailOpenLatencyMins(leads: Lead[]): number | undefined {
+  const evs = leads
+    .flatMap((l) => l.commsEvents || [])
+    .filter((e) => e.channel === "email")
+    .sort((a, b) => a.at.localeCompare(b.at));
+  const delivered = evs.find((e) => e.type === "delivered");
+  if (!delivered) return undefined;
+  const opened = evs.find((e) => e.type === "opened" && e.at >= delivered.at);
+  if (!opened) return undefined;
+  return Math.max(0, Math.round((Date.parse(opened.at) - Date.parse(delivered.at)) / 60000));
+}
+
 /** Parse a user-agent into a coarse device profile (type / OS / browser). */
 function deviceFromUA(ua?: string): DeviceInfo | undefined {
   if (!ua) return undefined;
@@ -419,8 +434,9 @@ function buildOne(
   }
 
   const sortedLeads = [...leads].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-  const attribution = sortedLeads.find((l) => l.attribution)?.attribution;
-  const behavior = aggregateBehavior(sortedLeads);
+  const attribution =
+    sortedLeads.find((l) => l.attribution)?.attribution ?? referrals.find((r) => r.attribution)?.attribution;
+  const behavior = aggregateBehavior([...sortedLeads, ...referrals]);
 
   // Leads are sorted oldest-first: seed from the earliest lead's status (not a
   // hardcoded "partial") so people whose only leads are lost/spam don't
@@ -532,9 +548,18 @@ function buildOne(
   timeline.push(...condenseSiteEvents([...siteEvs.values()]));
   timeline.sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
+  // Distinct stitched sessions = a return-visit signal (undefined/1 = single visit).
+  const returnVisits = siteEvs.size ? new Set([...siteEvs.values()].map((e) => e.sessionId)).size : undefined;
+
   const times = timeline.map((e) => e.at).filter(Boolean);
   const firstSeenAt = [behavior?.firstSeenAt, ...times].filter((t): t is string => Boolean(t)).sort()[0];
   const lastActivityAt = [...times].sort().pop();
+  // Deliberation window: first seen on site → first lead submit.
+  const firstLeadAt = sortedLeads[0]?.createdAt;
+  const timeToConvMs =
+    firstLeadAt && firstSeenAt && Date.parse(firstLeadAt) >= Date.parse(firstSeenAt)
+      ? Date.parse(firstLeadAt) - Date.parse(firstSeenAt)
+      : undefined;
 
   const recent = [...sortedLeads].reverse();
   const geo = recent.find((l) => l.geo)?.geo;
@@ -568,15 +593,30 @@ function buildOne(
   const vt = vehicleTier(recentVehicle?.make, recentVehicle?.year, offerMid);
   // IP-derived province vs the phone's area-code province (soft quality flag).
   const mismatch = geoPhoneMismatch(geo?.region, geo?.countryCode, [...phones][0]) === true;
+  const cf = conditionFlags(recentVehicle?.condition);
+  const mvm = mileageVsMarket(recentVehicle?.year, recentVehicle?.mileageKm);
+  const rq = referrerQuality(attribution?.referrer);
   const enrichment: Enrichment | undefined =
-    et || pr || vt || mismatch
+    et || pr || vt || mismatch || cf.length || mvm || rq
       ? {
           ...(et ? { emailType: et } : {}),
           ...(pr ? { phoneRegion: pr } : {}),
           ...(vt ? { vehicleTier: vt.tier, ...(vt.age !== undefined ? { vehicleAge: vt.age } : {}) } : {}),
           ...(mismatch ? { regionMismatch: true } : {}),
+          ...(cf.length ? { conditionFlags: cf } : {}),
+          ...(mvm ? { mileageVsMarket: mvm } : {}),
+          ...(rq ? { referrerQuality: rq } : {}),
         }
       : undefined;
+  // Referral-derived person signals.
+  const referrerIsSeller = referrals.length > 0 && hasRealLead;
+  const selfReferral = referrals.some((rf) => {
+    const re = normEmail(rf.referrer.email);
+    const fe = normEmail(rf.friend.email);
+    const rp = normPhone(rf.referrer.phone);
+    const fp = normPhone(rf.friend.phone);
+    return (!!re && re === fe) || (rp.length >= 7 && rp === fp);
+  });
 
   // No-lead profiles (chat/referral only) have no sortedLeads[0] to anchor on —
   // fall back to the earliest chat/referral createdAt so date filters don't
@@ -595,7 +635,7 @@ function buildOne(
     contactMethod: sortedLeads[0]?.contact.contactMethod,
     source: sourceLabel(attribution),
     attribution,
-    touchHistory: mergeTouches(sortedLeads),
+    touchHistory: mergeTouches([...sortedLeads, ...referrals]),
     behavior,
     geo,
     device,
@@ -625,6 +665,12 @@ function buildOne(
     emailBounced: leads.some((l) => l.emailBounced) || undefined,
     smsOptOut: leads.some((l) => l.smsOptOut) || undefined,
     enrichment,
+    bestTime: sortedLeads[0]?.contact.bestTime,
+    returnVisits,
+    timeToConvMs,
+    referrerIsSeller: referrerIsSeller || undefined,
+    selfReferral: selfReferral || undefined,
+    emailOpenLatencyMins: emailOpenLatencyMins(sortedLeads),
     timeline,
     leadIds: leads.map((l) => l.id),
   };
