@@ -103,7 +103,11 @@ export function buildProfiles(
 
   for (const lead of leads) {
     const keys = keysFor(lead.contact.email, lead.contact.phone);
-    if (keys.length) add(keys, { kind: "lead", keys, lead });
+    // A lead with NO email/phone (e.g. an off-platform manual deal entered without
+    // contact) still deserves its own profile so it counts in closed / revenue /
+    // funnel — key it by its own id so it forms a singleton (never stitches to anyone).
+    const recKeys = keys.length ? keys : [`id:${lead.id}`];
+    add(recKeys, { kind: "lead", keys: recKeys, lead });
   }
   for (const referral of referrals) {
     const keys = keysFor(referral.referrer.email, referral.referrer.phone);
