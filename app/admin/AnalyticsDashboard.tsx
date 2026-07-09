@@ -1354,6 +1354,56 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
         <HBars title="Form errors by reason" rows={ev.errorsByReason} tip={SRC.events} />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="card overflow-x-auto p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            Field behavior — time, retyping, autofill<InfoDot tip={SRC.events} />
+          </h3>
+          {ev.fieldTiming.length === 0 ? (
+            <p className="text-sm text-muted">No field-timing signals yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-2">Field</th>
+                  <th className="px-2 text-right" title="Average seconds spent in the field before moving on">Avg time</th>
+                  <th className="px-2 text-right" title="Total backspaces / deletes across sessions — high = a confusing or mis-validated field">Retypes</th>
+                  <th className="pl-2 text-right" title="Share filled by paste or browser autofill vs typed — an unusually high rate can flag bots or returning devices">Paste/AF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ev.fieldTiming.map((f) => (
+                  <tr key={f.field} className="border-b border-slate-100">
+                    <td className="py-2 pr-2 font-semibold capitalize text-navy">{f.field}</td>
+                    <td className="px-2 text-right">{f.avgDwellSec}s</td>
+                    <td className="px-2 text-right">{f.corrections || "—"}</td>
+                    <td className="pl-2 text-right font-semibold">{f.pasteAutofillPct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="card p-4">
+          <h3 className="mb-3 text-sm font-bold text-navy">
+            Engagement &amp; frustration<InfoDot tip={SRC.events} />
+          </h3>
+          <div className="space-y-1.5 text-sm">
+            {ev.scrollDepth.map((s) => (
+              <div key={s.bucket} className="flex justify-between gap-2">
+                <span className="text-muted">Scrolled {s.bucket}%+</span>
+                <span className="font-semibold text-navy">{s.count}</span>
+              </div>
+            ))}
+            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5">
+              <span className="text-muted" title="3+ rapid clicks in the same spot — usually a broken or confusing element">Rage clicks</span>
+              <span className={`font-semibold ${ev.frustration.rageClicks > 0 ? "text-red-600" : "text-navy"}`}>{ev.frustration.rageClicks}</span>
+            </div>
+            <div className="flex justify-between gap-2"><span className="text-muted" title="Times a visitor switched away from the tab mid-flow (distraction / comparison-shopping)">Tab switches</span><span className="font-semibold text-navy">{ev.frustration.tabSwitches}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted" title="Copy actions on the page — often copying the offer amount or phone number">Copies</span><span className="font-semibold text-navy">{ev.frustration.copies}</span></div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <HBars title="Phone clicks by placement" rows={ev.phoneClicks} tip={SRC.events} />
         <div className="card overflow-x-auto p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">

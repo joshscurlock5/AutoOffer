@@ -31,6 +31,13 @@ export interface EventAnalytics {
   resume: { shown: number; clicked: number };
   /** VIN decode funnel. */
   vin: { submitted: number; failed: number; confirmed: number; rejected: number };
+  /** Per-field input behavior from field_timing events (Batch 3): average seconds
+   * in the field, total backspaces/retypes, and share filled by paste/autofill. */
+  fieldTiming: { field: string; count: number; avgDwellSec: number; corrections: number; pasteAutofillPct: number }[];
+  /** Scroll-depth reach on the offer page — scroll_depth events per bucket. */
+  scrollDepth: { bucket: string; count: number }[];
+  /** Frustration / high-intent micro-signals (raw counts). */
+  frustration: { rageClicks: number; tabSwitches: number; copies: number };
   /** Raw event volume per day (Mountain Time), zero-filled — data-health strip. */
   eventsPerDay: { day: string; events: number; sessions: number }[];
 }
@@ -102,6 +109,12 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
   let vinFailed = 0;
   let vinConfirmed = 0;
   let vinRejected = 0;
+  // Batch 3 form-behavior signals.
+  const fieldTimingAgg = new Map<string, { count: number; dwellSum: number; corrections: number; pasteAutofill: number }>();
+  const scrollDepthCounts = new Map<string, number>();
+  let rageClicks = 0;
+  let tabSwitches = 0;
+  let copies = 0;
   const perDay = new Map<string, { events: number; sessions: Set<string> }>();
 
   for (const e of events) {
@@ -160,6 +173,26 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     if (e.n === "vin_failed") vinFailed += 1;
     if (e.n === "vin_confirmed") vinConfirmed += 1;
     if (e.n === "vin_rejected") vinRejected += 1;
+
+    // Batch 3 form-behavior signals.
+    if (e.n === "field_timing" && typeof e.p?.field === "string") {
+      let agg = fieldTimingAgg.get(e.p.field);
+      if (!agg) {
+        agg = { count: 0, dwellSum: 0, corrections: 0, pasteAutofill: 0 };
+        fieldTimingAgg.set(e.p.field, agg);
+      }
+      agg.count += 1;
+      if (typeof e.p.dwellMs === "number") agg.dwellSum += e.p.dwellMs;
+      if (typeof e.p.corrections === "number") agg.corrections += e.p.corrections;
+      if (e.p.method === "paste" || e.p.method === "autofill") agg.pasteAutofill += 1;
+    }
+    if (e.n === "scroll_depth" && e.p?.pct != null) {
+      const bucket = String(e.p.pct);
+      scrollDepthCounts.set(bucket, (scrollDepthCounts.get(bucket) || 0) + 1);
+    }
+    if (e.n === "rage_click") rageClicks += 1;
+    if (e.n === "tab_switch") tabSwitches += 1;
+    if (e.n === "copy_action") copies += 1;
 
     // Raw volume per day (data-health strip).
     const day = dayKeyMT(e.at);
@@ -229,6 +262,19 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     .sort((a, b) => b.ctaClicks - a.ctaClicks)
     .slice(0, 12);
 
+  const fieldTiming = [...fieldTimingAgg.entries()]
+    .map(([field, a]) => ({
+      field,
+      count: a.count,
+      avgDwellSec: a.count ? Math.round((a.dwellSum / a.count / 1000) * 10) / 10 : 0,
+      corrections: a.corrections,
+      pasteAutofillPct: a.count ? Math.round((a.pasteAutofill / a.count) * 100) : 0,
+    }))
+    .sort((a, b) => b.avgDwellSec - a.avgDwellSec);
+  const scrollDepth = ["25", "50", "75", "100"]
+    .filter((b) => scrollDepthCounts.has(b))
+    .map((bucket) => ({ bucket, count: scrollDepthCounts.get(bucket) || 0 }));
+
   return {
     totalEvents: events.length,
     totalSessions: firstAt.size,
@@ -242,6 +288,9 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     exitIntent: { shown: exitShown, clicked: exitClicked, emailCaptured: exitEmailCaptured },
     resume: { shown: resumeShown, clicked: resumeClicked },
     vin: { submitted: vinSubmitted, failed: vinFailed, confirmed: vinConfirmed, rejected: vinRejected },
+    fieldTiming,
+    scrollDepth,
+    frustration: { rageClicks, tabSwitches, copies },
     eventsPerDay: zeroFillEventDays(perDay),
   };
 }
