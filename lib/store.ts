@@ -208,6 +208,31 @@ export async function releasePurchaseSync(id: string): Promise<void> {
 }
 
 /**
+ * Atomically claim a lead's drafted offer for sending — conditionally REMOVEs
+ * pendingOffer so only ONE caller wins. A double-tapped ✅ Send button (or
+ * Telegram's at-least-once webhook redelivery) can't send the offer email twice:
+ * the loser's condition fails. Returns true only for the winner. If the email
+ * send then fails, the caller restores pendingOffer to allow a retry. Same
+ * conditional-UpdateCommand pattern as claimPurchaseSync.
+ */
+export async function claimPendingOffer(id: string): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "REMOVE pendingOffer",
+        ConditionExpression: "attribute_exists(id) AND attribute_exists(pendingOffer)",
+      }),
+    );
+    return true;
+  } catch {
+    // Condition failed (already claimed/cleared) or the lead is gone — don't send.
+    return false;
+  }
+}
+
+/**
  * Find a lead by the short ID shown in the Telegram alert (the first block of
  * its UUID, e.g. "a1b2c3d4") — or by the full id if pasted. Lead volume is
  * modest, so a scan + match is fine. Reports `multiple` on the rare collision.

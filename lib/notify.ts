@@ -91,14 +91,10 @@ function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
   if (c.bestTime) lines.push(`🕒 Best time: ${c.bestTime}`);
   if (lead.message) lines.push("", `"${lead.message.slice(0, 200)}"`);
 
-  // Short ID + ready-to-copy commands for emailing a custom offer or requesting info.
+  // Short ID for reference. The tap-to-act buttons under the alert (📧 Email offer /
+  // ❓ Ask for info / ✉️ Message) replace the old typed command hints.
   const sid = lead.id.split("-")[0];
   lines.push("", `🆔 ${sid}`);
-  if (c.email) {
-    lines.push(`Send offer → /offer ${sid} 8500-9000`);
-    lines.push(`Need info first → /moreinfo ${sid} then your questions, one per line`);
-    lines.push(`Send a message → /message ${sid} then your message`);
-  }
 
   return lines.join("\n");
 }
@@ -117,9 +113,9 @@ async function sendText(text: string, chatId: string, replyMarkup?: unknown): Pr
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
 }
 
-/** Inline buttons on a lead alert to log the negotiation (their ask / our offer /
- * bought) straight from Telegram. callback_data is `neg|<kind>|<shortId>`; the
- * webhook opens a reply box and appends to Lead.negotiation. */
+/** Inline buttons on a lead alert. Top rows LOG the negotiation (their ask / our
+ * offer / bought); the bottom row ACTS — email an offer, ask for info, or message
+ * the customer — each opening a reply box. callback_data is `neg|…` / `act|…`. */
 function negKeyboard(lead: Lead) {
   const sid = lead.id.split("-")[0];
   return {
@@ -129,6 +125,11 @@ function negKeyboard(lead: Lead) {
         { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
       ],
       [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
+      [
+        { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
+        { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
+        { text: "✉️ Message", callback_data: `act|msg|${sid}` },
+      ],
     ],
   };
 }

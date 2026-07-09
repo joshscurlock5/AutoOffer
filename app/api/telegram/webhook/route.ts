@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
-import { getLeadByShortId, updateLead } from "@/lib/store";
+import { getLeadByShortId, updateLead, claimPendingOffer } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds, notifyLog } from "@/lib/notify";
@@ -84,8 +84,9 @@ async function answerCallback(id: string): Promise<void> {
 }
 
 /** Send a message that pops a reply box (force_reply), threaded under the lead
- * alert. The text carries a ⟨neg|kind|id⟩ marker the reply handler parses back. */
-async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: number): Promise<void> {
+ * alert. The text carries a ⟨neg|kind|id⟩ or ⟨act|kind|id⟩ marker the reply
+ * handler parses back. `placeholder` hints what to type in the reply box. */
+async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: number, placeholder = "e.g. 8500"): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -95,7 +96,7 @@ async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: 
         chat_id: chatId,
         text,
         disable_web_page_preview: true,
-        reply_markup: { force_reply: true, input_field_placeholder: "e.g. 8500" },
+        reply_markup: { force_reply: true, input_field_placeholder: placeholder },
         ...(replyToMsgId ? { reply_to_message_id: replyToMsgId } : {}),
       }),
     });
@@ -114,7 +115,8 @@ function negTrail(entries: NegotiationEntry[] | undefined): string {
   return entries.map((e) => `${negIcon(e.kind)} ${negMoney(e.amount)}`).join("  →  ");
 }
 
-/** The negotiation buttons for a lead's short id (put on the in-place summary). */
+/** The lead-action buttons for a short id (put on the alert + the in-place summary):
+ * negotiation logging (ask/offer/bought) + the tap-to-act row (email/info/message). */
 function negKeyboardFor(sid: string) {
   return {
     inline_keyboard: [
@@ -123,6 +125,11 @@ function negKeyboardFor(sid: string) {
         { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
       ],
       [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
+      [
+        { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
+        { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
+        { text: "✉️ Message", callback_data: `act|msg|${sid}` },
+      ],
     ],
   };
 }
@@ -172,6 +179,21 @@ async function deleteMessage(chatId: number | string, messageId: number): Promis
   }
 }
 
+/** Create or update the single in-place 📊 Negotiation summary for a lead (carries
+ * the action buttons). Returns the message id + chat so the caller can persist them. */
+async function upsertNegSummary(lead: Lead, chatId: number): Promise<{ negMsgId?: number; negChatId?: number }> {
+  const code = lead.id.split("-")[0];
+  const closed = (lead.negotiation || []).some((e) => e.kind === "bought");
+  const text = `📊 Negotiation — ${carText(lead)}\n${negTrail(lead.negotiation)}` + (closed ? "\n(deal closed)" : "");
+  const kb = negKeyboardFor(code);
+  if (lead.negMsgId != null && lead.negChatId != null) {
+    await editMessage(lead.negChatId, lead.negMsgId, text, kb);
+    return { negMsgId: lead.negMsgId, negChatId: lead.negChatId };
+  }
+  const negMsgId = await sendReturningId(chatId, text, kb);
+  return negMsgId != null ? { negMsgId, negChatId: chatId } : {};
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1) Verify Telegram's secret header (set during setWebhook). If we have a
@@ -182,18 +204,22 @@ export async function POST(req: NextRequest) {
 
     const update = await req.json().catch(() => ({}));
 
-    // --- Inline-button taps (negotiation logging). Handled first: a callback
-    //     carries no message.text, so it must not fall through to the msg branch. ---
+    // --- Inline-button taps. Handled first: a callback carries no message.text,
+    //     so it must not fall through to the msg branch. ---
     const cb = update?.callback_query;
     if (cb) {
       await answerCallback(cb.id);
       const cbChat = cb.message?.chat?.id;
       const allowed = telegramChatIds();
       if (allowed.length && !allowed.includes(String(cbChat))) return NextResponse.json({ ok: true });
-      const m = String(cb.data || "").match(/^neg\|(ask|offer|bought)\|(\S+)$/);
-      if (m) {
-        const kind = m[1] as NegotiationEntry["kind"];
-        const code = m[2];
+      const who = cb.from?.first_name || cb.from?.username || "owner";
+      const data = String(cb.data || "");
+
+      // Negotiation logging buttons → open a number reply box under the alert.
+      const negM = data.match(/^neg\|(ask|offer|bought)\|(\S+)$/);
+      if (negM) {
+        const kind = negM[1] as NegotiationEntry["kind"];
+        const code = negM[2];
         const { lead } = await getLeadByShortId(code);
         if (!lead) {
           await reply(cbChat, `No lead found for "${code}".`);
@@ -206,7 +232,115 @@ export async function POST(req: NextRequest) {
           `${label} · ${carText(lead)}\nReply to this message with just the number (e.g. 8500).\n⟨neg|${kind}|${code}⟩`,
           cb.message?.message_id,
         );
+        return NextResponse.json({ ok: true });
       }
+
+      // Action buttons (email offer / ask for info / message) → open a reply box.
+      const actM = data.match(/^act\|(offer|info|msg)\|(\S+)$/);
+      if (actM) {
+        const kind = actM[1];
+        const code = actM[2];
+        const { lead } = await getLeadByShortId(code);
+        if (!lead) {
+          await reply(cbChat, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        const spec =
+          kind === "offer"
+            ? { title: "📧 EMAIL OFFER", hint: "Reply with the price (e.g. 8500 or 8500-9000).", ph: "e.g. 8500" }
+            : kind === "info"
+              ? { title: "❓ ASK FOR INFO", hint: "Reply with your questions — one per line.", ph: "one question per line" }
+              : { title: "✉️ MESSAGE", hint: "Reply with your message to the customer.", ph: "type your message" };
+        await sendPrompt(cbChat, `${spec.title} · ${carText(lead)}\n${spec.hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, spec.ph);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Offer preview → send or cancel the drafted email.
+      const sendM = data.match(/^act\|(offersend|offercancel)\|(\S+)$/);
+      if (sendM) {
+        const action = sendM[1];
+        const code = sendM[2];
+        const { lead, multiple } = await getLeadByShortId(code);
+        const previewMsgId = cb.message?.message_id;
+        const clearPreview = async () => {
+          if (typeof previewMsgId === "number") await deleteMessage(cbChat, previewMsgId);
+        };
+        // Ambiguous short id — never mutate/email a guessed lead (matches every other path).
+        if (multiple) {
+          await reply(cbChat, `More than one lead matches "${code}". Use the full ID with /confirm or /cancel.`);
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead) {
+          await clearPreview();
+          await reply(cbChat, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        if (action === "offercancel") {
+          if (lead.pendingOffer) await updateLead(lead.id, { pendingOffer: undefined });
+          await clearPreview();
+          await notifyLog(`🚫 ${who} cancelled a draft offer — ${carText(lead)} (${code})`);
+          return NextResponse.json({ ok: true });
+        }
+        // offersend
+        if (!lead.pendingOffer) {
+          await clearPreview();
+          await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead.contact.email) {
+          await reply(cbChat, `${lead.contact.name || "That lead"} is phone-only. Reach them at ${lead.contact.phone || "their number"}.`);
+          return NextResponse.json({ ok: true });
+        }
+        const { low, high } = lead.pendingOffer;
+        // Atomically claim the send so a double-tap / Telegram redelivery can't email
+        // the offer twice — only the winner proceeds (mirrors claimPurchaseSync).
+        const claimed = await claimPendingOffer(lead.id);
+        if (!claimed) {
+          await clearPreview();
+          await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+          return NextResponse.json({ ok: true });
+        }
+        const bookingToken = lead.bookingToken || crypto.randomUUID().replace(/-/g, "");
+        lead.bookingToken = bookingToken;
+        const res = await sendOfferEmail(lead, low, high);
+        if (!res.ok) {
+          // Send failed after we claimed — restore the draft so it can be retried.
+          await updateLead(lead.id, { pendingOffer: { low, high, at: new Date().toISOString() } });
+          await reply(cbChat, `Couldn't send — ${res.reason}. The draft is saved; tap 📧 Email offer to try again.`);
+          return NextResponse.json({ ok: true });
+        }
+        if (lead.dripEmailIds?.length) await cancelScheduledEmails(lead.dripEmailIds);
+        const nowISO = new Date().toISOString();
+        const wasNewlyContacted = !lead.contactedAt;
+        const negotiation = [
+          ...(lead.negotiation || []),
+          { at: nowISO, kind: "offer" as const, amount: Math.round((low + high) / 2) },
+        ].slice(-100);
+        // Refresh the in-place 📊 summary so the emailed offer shows on the lead.
+        const summary = await upsertNegSummary({ ...lead, negotiation }, cbChat);
+        const updatedLead = await updateLead(lead.id, {
+          offer: { low, high, sentAt: nowISO },
+          negotiation,
+          bookingToken,
+          nurtureStage: "offer_sent",
+          offerSentAt: nowISO,
+          moreInfoSentAt: undefined,
+          lastNurtureAt: undefined,
+          firstTouchAt: lead.firstTouchAt || nowISO,
+          contactedAt: lead.contactedAt || nowISO,
+          pendingOffer: undefined,
+          dripEmailIds: [],
+          status: lead.status === "new" ? "contacted" : lead.status,
+          ...(summary.negMsgId != null ? { negMsgId: summary.negMsgId, negChatId: summary.negChatId } : {}),
+        });
+        await smsOfferReady(lead, low, high);
+        await emitOfferSent(updatedLead || lead);
+        if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+        await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
+        await clearPreview();
+        return NextResponse.json({ ok: true });
+      }
+
       return NextResponse.json({ ok: true });
     }
 
@@ -228,14 +362,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Audit trail: mirror every command (and, below, every negotiation action) to
-    // the dedicated logs channel so there's a permanent history. Who = the sender.
+    // Audit trail: mirror every command to the logs channel for a permanent history.
+    // Who = the sender. Skip replies to a bot prompt (⟨neg|…⟩/⟨act|…⟩) — those get
+    // their own precise log line in the handlers below, so we don't double-log a
+    // typed message/questions that happen to start with "/".
     const who = msg?.from?.first_name || msg?.from?.username || "owner";
-    if (text.startsWith("/")) await notifyLog(`📝 ${who}: ${text.slice(0, 300)}`);
-
-    // 2b) A reply to a negotiation prompt (from tapping a lead's button). Parse the
-    //     ⟨neg|kind|id⟩ marker off the prompt being replied to and log the number.
     const replyToText = String(msg?.reply_to_message?.text || "");
+    if (text.startsWith("/") && !/⟨(?:neg|act)\|/.test(replyToText)) await notifyLog(`📝 ${who}: ${text.slice(0, 300)}`);
+
+    // 2b) A reply to a tapped button. The prompt carries a marker off which we route:
+    //     ⟨neg|kind|id⟩ → log a negotiation number · ⟨act|kind|id⟩ → email/info/message.
+    const promptId = msg?.reply_to_message?.message_id;
+    // Success path clears the noise: our prompt + whatever the owner typed. The
+    // permanent record lives in the 📒 Logs channel / the 📊 summary instead.
+    const clearPromptAndInput = async () => {
+      if (typeof promptId === "number") await deleteMessage(fromChat, promptId);
+      if (typeof msg?.message_id === "number") await deleteMessage(fromChat, msg.message_id);
+    };
+
     const negRef = replyToText.match(/⟨neg\|(ask|offer|bought)\|(\S+?)⟩/);
     if (negRef) {
       const kind = negRef[1] as NegotiationEntry["kind"];
@@ -263,26 +407,110 @@ export async function POST(req: NextRequest) {
         patch.status = "closed";
         patch.closedAt = lead.closedAt || entry.at;
       }
-      // Keep ONE tidy in-place summary per lead (edited, not re-sent), carrying the
-      // buttons — then delete the prompt + the typed number so nothing piles up.
-      const summaryText = `📊 Negotiation — ${carText(lead)}\n${negTrail(negotiation)}` + (kind === "bought" ? "\n(deal closed)" : "");
-      const kb = negKeyboardFor(code);
-      let negMsgId = lead.negMsgId;
-      if (lead.negMsgId != null && lead.negChatId != null) {
-        await editMessage(lead.negChatId, lead.negMsgId, summaryText, kb);
-      } else {
-        negMsgId = await sendReturningId(fromChat, summaryText, kb);
-      }
+      // ONE tidy in-place summary per lead, then delete the prompt + typed number.
+      const summary = await upsertNegSummary({ ...lead, ...patch }, fromChat);
       await updateLead(lead.id, {
         ...patch,
-        ...(negMsgId != null ? { negMsgId, negChatId: fromChat } : {}),
+        ...(summary.negMsgId != null ? { negMsgId: summary.negMsgId, negChatId: summary.negChatId } : {}),
       });
-      // Audit-log the negotiation action (button + typed number) to the logs channel.
       await notifyLog(`📝 ${who} logged ${kind} ${negMoney(amount)} — ${carText(lead)} (${code})\n${negTrail(negotiation)}`);
-      // Clean up the noise: our prompt, and the bare number the owner typed.
-      const promptId = msg?.reply_to_message?.message_id;
-      if (typeof promptId === "number") await deleteMessage(fromChat, promptId);
-      if (typeof msg?.message_id === "number") await deleteMessage(fromChat, msg.message_id);
+      await clearPromptAndInput();
+      return NextResponse.json({ ok: true });
+    }
+
+    // Action replies — email offer (Send/Cancel check), ask for info, or message.
+    const actRef = replyToText.match(/⟨act\|(offer|info|msg)\|(\S+?)⟩/);
+    if (actRef) {
+      const kind = actRef[1];
+      const code = actRef[2];
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}". Tap the button on the right lead.`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found for "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (kind === "offer") {
+        const price = parsePrice(text);
+        if (!price) {
+          await reply(fromChat, "Please reply with just a number, e.g. 8500 or 8500-9000.");
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead.contact.email) {
+          await reply(fromChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
+          return NextResponse.json({ ok: true });
+        }
+        await updateLead(lead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
+        await clearPromptAndInput();
+        // Quick Send/Cancel check before the offer email actually goes out.
+        const previewText = `📧 Email offer — ${carText(lead)} → ${fmtRange(price.low, price.high)} to ${lead.contact.name || lead.contact.email}. Send?`;
+        const kb = {
+          inline_keyboard: [[
+            { text: "✅ Send", callback_data: `act|offersend|${code}` },
+            { text: "✋ Cancel", callback_data: `act|offercancel|${code}` },
+          ]],
+        };
+        await sendReturningId(fromChat, previewText, kb);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (kind === "info") {
+        const questions = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (!questions.length) {
+          await reply(fromChat, "Type at least one question, one per line.");
+          return NextResponse.json({ ok: true });
+        }
+        const res = await sendMoreInfo(lead, questions);
+        if (!res.ok) {
+          await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
+          return NextResponse.json({ ok: true });
+        }
+        const nowISO = new Date().toISOString();
+        const wasNewlyContacted = !lead.contactedAt;
+        const updatedLead = await updateLead(lead.id, {
+          nurtureStage: "awaiting_info",
+          moreInfoSentAt: nowISO,
+          infoQuestions: questions,
+          lastNurtureAt: undefined,
+          firstTouchAt: lead.firstTouchAt || nowISO,
+          contactedAt: lead.contactedAt || nowISO,
+          status: lead.status === "new" ? "contacted" : lead.status,
+        });
+        await smsMoreInfo(lead);
+        if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+        await notifyLog(`❓ ${who} asked ${questions.length} question${questions.length > 1 ? "s" : ""} — ${carText(lead)} (${code}):\n• ${questions.join("\n• ")}`);
+        await clearPromptAndInput();
+        return NextResponse.json({ ok: true });
+      }
+
+      // kind === "msg"
+      const message = text.trim();
+      if (!message) {
+        await reply(fromChat, "Type your message to the customer.");
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead.contact.email) {
+        await reply(fromChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const res = await sendMessageEmail(lead, message);
+      if (!res.ok) {
+        await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      const nowISO = new Date().toISOString();
+      const wasNewlyContacted = !lead.contactedAt;
+      const updatedLead = await updateLead(lead.id, {
+        firstTouchAt: lead.firstTouchAt || nowISO,
+        contactedAt: lead.contactedAt || nowISO,
+        status: lead.status === "new" ? "contacted" : lead.status,
+      });
+      if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+      await notifyLog(`✉️ ${who} messaged — ${carText(lead)} (${code}): "${message.slice(0, 200)}"`);
+      await clearPromptAndInput();
       return NextResponse.json({ ok: true });
     }
 
