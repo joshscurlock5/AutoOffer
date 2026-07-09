@@ -4,7 +4,7 @@ import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
-import { telegramChatIds } from "@/lib/notify";
+import { telegramChatIds, notifyLog } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead, NegotiationEntry } from "@/lib/types";
@@ -228,6 +228,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Audit trail: mirror every command (and, below, every negotiation action) to
+    // the dedicated logs channel so there's a permanent history. Who = the sender.
+    const who = msg?.from?.first_name || msg?.from?.username || "owner";
+    if (text.startsWith("/")) await notifyLog(`📝 ${who}: ${text.slice(0, 300)}`);
+
     // 2b) A reply to a negotiation prompt (from tapping a lead's button). Parse the
     //     ⟨neg|kind|id⟩ marker off the prompt being replied to and log the number.
     const replyToText = String(msg?.reply_to_message?.text || "");
@@ -272,6 +277,8 @@ export async function POST(req: NextRequest) {
         ...patch,
         ...(negMsgId != null ? { negMsgId, negChatId: fromChat } : {}),
       });
+      // Audit-log the negotiation action (button + typed number) to the logs channel.
+      await notifyLog(`📝 ${who} logged ${kind} ${negMoney(amount)} — ${carText(lead)} (${code})\n${negTrail(negotiation)}`);
       // Clean up the noise: our prompt, and the bare number the owner typed.
       const promptId = msg?.reply_to_message?.message_id;
       if (typeof promptId === "number") await deleteMessage(fromChat, promptId);

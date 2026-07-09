@@ -22,6 +22,9 @@ const CHAT_LEADS = process.env.TELEGRAM_CHAT_LEADS;
 const CHAT_REPLIES = process.env.TELEGRAM_CHAT_REPLIES;
 const CHAT_BOOKINGS = process.env.TELEGRAM_CHAT_BOOKINGS;
 const CHAT_UPDATES = process.env.TELEGRAM_CHAT_UPDATES;
+// Dedicated append-only audit-log channel. Unlike the others it has NO fallback —
+// if it's unset, logging is simply off (so it can never spam the leads group).
+const CHAT_LOGS = process.env.TELEGRAM_CHAT_LOGS;
 const api = (method: string) => `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
 
 export type NotifyChannel = "leads" | "replies" | "bookings" | "updates";
@@ -176,6 +179,18 @@ export async function notifyOwner(text: string, channel: NotifyChannel = "update
     await sendText(text, chat);
   } catch (e) {
     console.error("[notify] owner message failed:", e);
+  }
+}
+
+/** Append a line to the dedicated audit-log channel (TELEGRAM_CHAT_LOGS) — a pure
+ * history feed of every command / action. No-op until that channel is configured,
+ * and it never falls back to another chat, so it can't clutter the leads group. */
+export async function notifyLog(text: string): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_LOGS) return;
+  try {
+    await sendText(text, CHAT_LOGS);
+  } catch (e) {
+    console.error("[notify] audit-log failed:", e);
   }
 }
 
