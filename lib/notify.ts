@@ -100,13 +100,34 @@ function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
   return lines.join("\n");
 }
 
-async function sendText(text: string, chatId: string): Promise<void> {
+async function sendText(text: string, chatId: string, replyMarkup?: unknown): Promise<void> {
   const r = await fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    }),
   });
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
+}
+
+/** Inline buttons on a lead alert to log the negotiation (their ask / our offer /
+ * bought) straight from Telegram. callback_data is `neg|<kind>|<shortId>`; the
+ * webhook opens a reply box and appends to Lead.negotiation. */
+function negKeyboard(lead: Lead) {
+  const sid = lead.id.split("-")[0];
+  return {
+    inline_keyboard: [
+      [
+        { text: "💬 Their ask", callback_data: `neg|ask|${sid}` },
+        { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
+      ],
+      [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
+    ],
+  };
 }
 
 /** Alert the owner about a new lead. No-op if unconfigured; never throws. */
@@ -116,7 +137,7 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
   const text = buildText(lead);
   const sid = lead.id.split("-")[0];
   try {
-    await sendText(text, chat);
+    await sendText(text, chat, negKeyboard(lead));
     // Second message: the bare short ID only — no emoji, no label, nothing else —
     // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
     // only (the /offer, /confirm, /cancel command replies never send it).
@@ -138,7 +159,7 @@ export async function notifyPartialLead(lead: Lead): Promise<void> {
   const sid = lead.id.split("-")[0];
   const text = buildText(lead, `${EMOJI_CART} Abandoned form — reachable (they left contact info)`);
   try {
-    await sendText(text, chat);
+    await sendText(text, chat, negKeyboard(lead));
     await sendText(sid, chat);
   } catch (e) {
     console.error("[notify] partial Telegram alert failed:", e);

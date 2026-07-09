@@ -567,6 +567,33 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                 )}
               </>
             )}
+            {p.negotiation && p.negotiation.length > 0 && (
+              <>
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  Negotiation<InfoDot tip="What they asked for vs. what you offered, logged from Telegram over time. Gap = their latest ask minus your latest offer." />
+                </div>
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  {p.negotiation.map((e, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-slate-300">→</span>}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.kind === "ask" ? "bg-amber-100 text-amber-800" : e.kind === "offer" ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}
+                        title={new Date(e.at).toLocaleString("en-CA")}
+                      >
+                        {e.kind} {money(e.amount)}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                {(() => {
+                  const lastAsk = [...p.negotiation].reverse().find((e) => e.kind === "ask");
+                  const lastOffer = [...p.negotiation].reverse().find((e) => e.kind === "offer");
+                  if (!lastAsk || !lastOffer) return null;
+                  const gap = lastAsk.amount - lastOffer.amount;
+                  return <Row k="Ask vs offer" v={gap > 0 ? `${money(gap)} apart (${money(lastAsk.amount)} vs ${money(lastOffer.amount)})` : "met their ask"} />;
+                })()}
+              </>
+            )}
             {p.offer && <Row k="Offer" v={`${money(p.offer.low)}–${money(p.offer.high)}`} />}
             {p.firstResponseMins != null && <Row k="Response time" v={fmtMins(p.firstResponseMins)} />}
             {p.appointmentAt && <Row k="Inspection" v={new Date(p.appointmentAt).toLocaleString("en-CA")} />}

@@ -631,6 +631,10 @@ function buildOne(
     const fp = normPhone(rf.friend.phone);
     return (!!re && re === fe) || (rp.length >= 7 && rp === fp);
   });
+  // Owner-logged negotiation trail (Telegram), merged across the person's leads.
+  const negotiation = leads
+    .flatMap((l) => l.negotiation || [])
+    .sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
   // No-lead profiles (chat/referral only) have no sortedLeads[0] to anchor on —
   // fall back to the earliest chat/referral createdAt so date filters don't
@@ -685,6 +689,7 @@ function buildOne(
     referrerIsSeller: referrerIsSeller || undefined,
     selfReferral: selfReferral || undefined,
     emailOpenLatencyMins: emailOpenLatencyMins(sortedLeads),
+    negotiation: negotiation.length ? negotiation : undefined,
     timeline,
     leadIds: leads.map((l) => l.id),
   };

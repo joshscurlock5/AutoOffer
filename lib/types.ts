@@ -219,6 +219,13 @@ export interface SmsEngagement {
   segmentsCount?: number;
 }
 
+/** One entry in a lead's owner-logged negotiation trail (from Telegram). */
+export interface NegotiationEntry {
+  at: string;
+  kind: "ask" | "offer" | "bought";
+  amount: number;
+}
+
 export interface Lead {
   id: string;
   kind: LeadKind;
@@ -272,6 +279,10 @@ export interface Lead {
   offer?: { low: number; high: number; sentAt: string };
   /** A drafted offer awaiting /confirm in Telegram; cleared on confirm or cancel. */
   pendingOffer?: { low: number; high: number; at: string };
+  /** Owner-logged negotiation trail from Telegram: the customer's asks + our
+   * offers over time (+ a final "bought"), for ask-vs-offer / realistic-seller
+   * analysis. Decoupled from the email-offer flow so phone-only leads log too. */
+  negotiation?: NegotiationEntry[];
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
@@ -436,6 +447,8 @@ export interface Profile {
   make?: string;
   offer?: { low: number; high: number; sentAt: string };
   offerMid?: number;
+  /** Merged negotiation trail across this person's leads (oldest first). */
+  negotiation?: NegotiationEntry[];
   appointmentAt?: string;
   /** Back-compat: total cost paid out across closed leads (== cashPaidOut). */
   purchasePrice?: number;

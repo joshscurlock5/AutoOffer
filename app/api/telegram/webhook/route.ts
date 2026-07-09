@@ -7,7 +7,7 @@ import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
-import type { Lead } from "@/lib/types";
+import type { Lead, NegotiationEntry } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +69,51 @@ async function reply(chatId: number | string, text: string): Promise<void> {
   }
 }
 
+/** Stop a tapped button's loading spinner. */
+async function answerCallback(id: string): Promise<void> {
+  if (!BOT_TOKEN || !id) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callback_query_id: id }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Send a message that pops a reply box (force_reply), threaded under the lead
+ * alert. The text carries a ⟨neg|kind|id⟩ marker the reply handler parses back. */
+async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: number): Promise<void> {
+  if (!BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+        reply_markup: { force_reply: true, input_field_placeholder: "e.g. 8500" },
+        ...(replyToMsgId ? { reply_to_message_id: replyToMsgId } : {}),
+      }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+const negMoney = (n: number): string => `$${Math.round(n).toLocaleString("en-CA")}`;
+const negIcon = (k: NegotiationEntry["kind"]): string =>
+  k === "ask" ? "💬 ask" : k === "offer" ? "💵 offer" : "✅ bought";
+
+/** The running negotiation log as a one-line arrow trail. */
+function negTrail(entries: NegotiationEntry[] | undefined): string {
+  if (!entries || !entries.length) return "(none yet)";
+  return entries.map((e) => `${negIcon(e.kind)} ${negMoney(e.amount)}`).join("  →  ");
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1) Verify Telegram's secret header (set during setWebhook). If we have a
@@ -78,6 +123,35 @@ export async function POST(req: NextRequest) {
     }
 
     const update = await req.json().catch(() => ({}));
+
+    // --- Inline-button taps (negotiation logging). Handled first: a callback
+    //     carries no message.text, so it must not fall through to the msg branch. ---
+    const cb = update?.callback_query;
+    if (cb) {
+      await answerCallback(cb.id);
+      const cbChat = cb.message?.chat?.id;
+      const allowed = telegramChatIds();
+      if (allowed.length && !allowed.includes(String(cbChat))) return NextResponse.json({ ok: true });
+      const m = String(cb.data || "").match(/^neg\|(ask|offer|bought)\|(\S+)$/);
+      if (m) {
+        const kind = m[1] as NegotiationEntry["kind"];
+        const code = m[2];
+        const { lead } = await getLeadByShortId(code);
+        if (!lead) {
+          await reply(cbChat, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        const label =
+          kind === "ask" ? "💬 THEIR ASK" : kind === "offer" ? "💵 OUR OFFER" : "✅ BOUGHT — final price paid";
+        await sendPrompt(
+          cbChat,
+          `${label} · ${carText(lead)}\nReply to this message with just the number (e.g. 8500).\n⟨neg|${kind}|${code}⟩`,
+          cb.message?.message_id,
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const msg = update?.message ?? update?.channel_post;
     const text: string = String(msg?.text || "").trim();
     const fromChat = msg?.chat?.id;
@@ -93,6 +167,47 @@ export async function POST(req: NextRequest) {
     //    channel group (Leads / Bookings / Updates / Replies / the original chat).
     const allowedChats = telegramChatIds();
     if (!msg || (allowedChats.length && !allowedChats.includes(String(fromChat)))) {
+      return NextResponse.json({ ok: true });
+    }
+
+    // 2b) A reply to a negotiation prompt (from tapping a lead's button). Parse the
+    //     ⟨neg|kind|id⟩ marker off the prompt being replied to and log the number.
+    const replyToText = String(msg?.reply_to_message?.text || "");
+    const negRef = replyToText.match(/⟨neg\|(ask|offer|bought)\|(\S+?)⟩/);
+    if (negRef) {
+      const kind = negRef[1] as NegotiationEntry["kind"];
+      const code = negRef[2];
+      const price = parsePrice(text);
+      if (!price) {
+        await reply(fromChat, "Please reply with just a number, e.g. 8500.");
+        return NextResponse.json({ ok: true });
+      }
+      const amount = price.low === price.high ? price.low : Math.round((price.low + price.high) / 2);
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found for "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      const entry: NegotiationEntry = { at: new Date().toISOString(), kind, amount };
+      const negotiation = [...(lead.negotiation || []), entry].slice(-100);
+      const patch: Partial<Lead> = { negotiation };
+      if (kind === "bought") {
+        patch.purchasePrice = amount;
+        patch.status = "closed";
+        patch.closedAt = lead.closedAt || entry.at;
+      }
+      await updateLead(lead.id, patch);
+      const head =
+        kind === "ask"
+          ? `✅ Logged their ask: ${negMoney(amount)}`
+          : kind === "offer"
+            ? `✅ Logged our offer: ${negMoney(amount)}`
+            : `✅ Marked BOUGHT at ${negMoney(amount)} — deal closed.`;
+      await reply(fromChat, `${head}\n${carText(lead)}\n${negTrail(negotiation)}`);
       return NextResponse.json({ ok: true });
     }
 
@@ -186,6 +301,11 @@ export async function POST(req: NextRequest) {
       const wasNewlyContacted = !lead.contactedAt;
       const updatedLead = await updateLead(lead.id, {
         offer: { low, high, sentAt: nowISO },
+        // Auto-log the emailed offer into the negotiation trail (mid of the range).
+        negotiation: [
+          ...(lead.negotiation || []),
+          { at: nowISO, kind: "offer" as const, amount: Math.round((low + high) / 2) },
+        ].slice(-100),
         bookingToken,
         // Enroll in the cron-driven offer-reminder track (+2/+5/+10 days).
         nurtureStage: "offer_sent",
