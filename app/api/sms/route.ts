@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     const lead = await findLeadByPhone(e164);
 
     if (STOP_WORDS.has(body)) {
-      if (lead) await updateLead(lead.id, { smsOptOut: true });
+      if (lead) await updateLead(lead.id, { smsOptOut: true, smsOptOutAt: new Date().toISOString() });
       await notifyOwner(
         `\u{1F6AB} SMS opt-out from ${from}${lead ? ` (${lead.contact.name || carOf(lead)})` : ""} — no further texts will be sent.`,
         "updates",
@@ -107,10 +107,20 @@ export async function POST(req: NextRequest) {
 
     // A real reply — stamp the person's profile, then forward it (parity with email replies).
     if (lead) {
+      const city = params.get("FromCity") || undefined;
+      const state = params.get("FromState") || undefined;
+      const zip = params.get("FromZip") || undefined;
+      const smsOrigin =
+        city || state || zip
+          ? { ...(city ? { city } : {}), ...(state ? { state } : {}), ...(zip ? { zip } : {}) }
+          : undefined;
       await updateLead(lead.id, {
         lastReplyAt: new Date().toISOString(),
         repliesCount: (lead.repliesCount || 0) + 1,
         lastInboundChannel: "sms",
+        // Actively engaged — pause automated nurture for 7 days (the cron reads this).
+        nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        ...(smsOrigin ? { smsOrigin } : {}),
       });
     }
     await notifyOwner(

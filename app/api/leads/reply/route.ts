@@ -33,7 +33,13 @@ export async function POST(req: NextRequest) {
   // Atomic write — see lib/store.ts atomicLeadEngagement (concurrent replies /
   // webhook stamps racing on the same lead).
   await atomicLeadEngagement(lead.id, {
-    set: { lastReplyAt: new Date().toISOString(), lastInboundChannel: channel },
+    set: {
+      lastReplyAt: new Date().toISOString(),
+      lastInboundChannel: channel,
+      // A reply = actively engaged; pause automated nurture for 7 days so the owner
+      // can handle it without the drip firing at them (the cron reads this gate).
+      nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+    },
     increment: { repliesCount: 1 },
   });
   return NextResponse.json({ ok: true });

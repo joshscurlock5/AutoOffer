@@ -142,7 +142,13 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
       // --- Customer nurture (cron-driven, email-gated; keyed on nurtureStage) ---
       const created = lead.createdAt ? new Date(lead.createdAt).getTime() : 0;
       const lastNurture = lead.lastNurtureAt ? new Date(lead.lastNurtureAt).getTime() : 0;
-      if (lead.nurtureStage === "offer_sent" && lead.offerSentAt && lead.status === "contacted") {
+      // A customer who replied is being handled by the owner — pause automated
+      // nurture for the window their reply set (nurturePausedUntil). Opt-outs are
+      // already enforced by the email/SMS senders; this just stops the drip
+      // pestering an actively-engaged lead. Bounded (the reply sets ~7d) so it
+      // never permanently silences a lead, and win-back (day 21) still fires later.
+      const nurturePaused = lead.nurturePausedUntil ? now < new Date(lead.nurturePausedUntil).getTime() : false;
+      if (!nurturePaused && lead.nurtureStage === "offer_sent" && lead.offerSentAt && lead.status === "contacted") {
         // (A) Offer reminders after the offer was sent: +2 / +5 / +10 days.
         const base = new Date(lead.offerSentAt).getTime();
         const dues = [base + 2 * DAY, base + 5 * DAY, base + 10 * DAY];
@@ -155,7 +161,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
             break;
           }
         }
-      } else if (lead.nurtureStage === "awaiting_info" && lead.moreInfoSentAt && lead.status === "contacted") {
+      } else if (!nurturePaused && lead.nurtureStage === "awaiting_info" && lead.moreInfoSentAt && lead.status === "contacted") {
         // (D) Awaiting-info reminders after /moreinfo or /ask: +2 / +5 days.
         const base = new Date(lead.moreInfoSentAt).getTime();
         const dues = [base + 2 * DAY, base + 5 * DAY];
@@ -168,7 +174,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
             break;
           }
         }
-      } else if (lead.status === "lost" && lead.nurtureStage !== "winback_sent" && created) {
+      } else if (!nurturePaused && lead.status === "lost" && lead.nurtureStage !== "winback_sent" && created) {
         // (B) Day-21 win-back for a declined lead, once.
         const due = created + 21 * DAY;
         if (now >= due) {

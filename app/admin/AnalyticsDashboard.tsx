@@ -548,6 +548,12 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                 )}
                 {p.emailEngagement?.lastClickedUrl && <Row k="Last click" v={p.emailEngagement.lastClickedUrl} />}
                 {p.emailOpenLatencyMins != null && <Row k="Opened after" v={fmtMins(p.emailOpenLatencyMins)} />}
+                {p.emailEngagement?.lastBounceReason && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Bounce reason</span>
+                    <span className="min-w-0 truncate text-red-600" title={p.emailEngagement.lastBounceReason}>{p.emailEngagement.lastBounceReason}</span>
+                  </div>
+                )}
                 {p.smsEngagement && (
                   <Row
                     k="Texts"

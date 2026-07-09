@@ -85,6 +85,8 @@ export async function POST(req: NextRequest) {
     // Resend webhook: concurrent status callbacks for the same lead).
     const set: Record<string, string | number | boolean> = { "smsEngagement.lastStatus": status };
     const increment: Record<string, number> = {};
+    const seg = parseInt(params.get("NumSegments") || "1", 10);
+    if (Number.isFinite(seg) && seg > 0) increment["smsEngagement.segmentsCount"] = seg;
     if (status === "delivered") {
       increment["smsEngagement.deliveredCount"] = 1;
       set["smsEngagement.lastDeliveredAt"] = at;

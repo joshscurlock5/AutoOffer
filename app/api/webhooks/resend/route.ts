@@ -70,6 +70,7 @@ interface ResendEvent {
     to?: string[] | string;
     subject?: string;
     click?: { link?: string };
+    bounce?: { type?: string; subType?: string; message?: string };
   };
 }
 
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
 
     // email.delivered / email.opened / email.clicked / email.bounced / …
     const type = (event.type || "").replace(/^email\./, "");
-    const handled = new Set(["delivered", "opened", "clicked", "bounced", "complained", "failed"]);
+    const handled = new Set(["delivered", "opened", "clicked", "bounced", "complained", "failed", "delivery_delayed"]);
     if (!handled.has(type)) return NextResponse.json({ ok: true });
 
     const toRaw = event.data?.to;
@@ -132,16 +133,23 @@ export async function POST(req: NextRequest) {
       set["emailEngagement.lastClickedAt"] = at;
       if (url) set["emailEngagement.lastClickedUrl"] = url;
     }
-    if (type === "bounced" || type === "failed") set.emailBounced = true;
+    if (type === "delivery_delayed") set["emailEngagement.lastDelayedAt"] = at;
+    if (type === "bounced" || type === "failed") {
+      set.emailBounced = true;
+      const b = event.data?.bounce;
+      const reason = [b?.type, b?.subType, b?.message].filter(Boolean).join(" — ").slice(0, 200);
+      if (reason) set["emailEngagement.lastBounceReason"] = reason;
+    }
     if (type === "complained") set.emailOptOut = true;
     await atomicLeadEngagement(lead.id, { set, increment, appendCommsEvent: entry });
 
     // The two events the owner should actually hear about (rare + actionable).
     if (type === "bounced" || type === "complained") {
+      const bounceReason = type === "bounced" ? set["emailEngagement.lastBounceReason"] : undefined;
       await notifyOwner(
         `⚠️ Email ${type === "bounced" ? "bounced" : "marked as spam"} — ${leadLine(lead)}\n` +
           (type === "bounced"
-            ? "The address looks dead; emails to this lead are now paused. Call or text instead."
+            ? `The address looks dead${bounceReason ? ` (${bounceReason})` : ""}; emails to this lead are now paused. Call or text instead.`
             : "Nurture emails to this lead are now stopped (CASL)."),
         "updates",
       );

@@ -202,6 +202,10 @@ export interface EmailEngagement {
   lastOpenedAt?: string;
   lastClickedAt?: string;
   lastClickedUrl?: string;
+  /** Last soft/greylist delay (delivery_delayed) — a stuck-in-retry signal, not a bounce. */
+  lastDelayedAt?: string;
+  /** Human-readable reason from the last hard bounce (invalid mailbox vs full inbox…). */
+  lastBounceReason?: string;
 }
 
 /** Aggregated SMS delivery receipts from the Twilio status callback. */
@@ -211,6 +215,8 @@ export interface SmsEngagement {
   lastStatus?: string;
   lastErrorCode?: string;
   lastDeliveredAt?: string;
+  /** Total SMS segments billed across this lead's texts (cost signal). */
+  segmentsCount?: number;
 }
 
 export interface Lead {
@@ -309,6 +315,11 @@ export interface Lead {
   lastNurtureAt?: string;
   /** True once the customer texted STOP (or Twilio flagged them) — suppresses ALL further SMS. */
   smsOptOut?: boolean;
+  /** When the customer texted STOP (opt-out timestamp, for CASL audit + timeline). */
+  smsOptOutAt?: string;
+  /** Coarse origin parsed from an inbound SMS (Twilio From* fields) — distinct
+   * from the IP-derived Lead.geo, never overwrites it. */
+  smsOrigin?: { city?: string; state?: string; zip?: string };
   /** First-touch marketing attribution (which ad/campaign/referrer brought them). */
   attribution?: Attribution;
   /** Every marketing source that brought this person in, oldest first (multi-touch). */

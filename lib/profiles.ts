@@ -286,6 +286,8 @@ function aggregateEmailEngagement(leads: Lead[]): EmailEngagement | undefined {
     lastOpenedAt: latest((e) => e.lastOpenedAt),
     lastClickedAt,
     lastClickedUrl: withUrl?.lastClickedUrl,
+    lastDelayedAt: latest((e) => e.lastDelayedAt),
+    lastBounceReason: es.map((e) => e.lastBounceReason).filter((r): r is string => Boolean(r)).pop(),
   };
 }
 
@@ -349,6 +351,7 @@ function aggregateSmsEngagement(leads: Lead[]): SmsEngagement | undefined {
     failedCount: es.reduce((s, e) => s + (e.failedCount || 0), 0),
     lastStatus: es[es.length - 1]?.lastStatus,
     lastDeliveredAt: es.map((e) => e.lastDeliveredAt).filter((t): t is string => Boolean(t)).sort().pop(),
+    segmentsCount: es.reduce((s, e) => s + (e.segmentsCount || 0), 0),
   };
 }
 
