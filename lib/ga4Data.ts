@@ -100,34 +100,38 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
     const df = country
       ? { dimensionFilter: { filter: { fieldName: "country", stringFilter: { value: country } } } }
       : {};
-    const body = {
-      requests: [
-        { dateRanges, ...df, metrics: [{ name: "totalUsers" }, { name: "newUsers" }, { name: "sessions" }, { name: "screenPageViews" }, { name: "engagementRate" }] },
-        { dateRanges, ...df, dimensions: [{ name: "date" }], metrics: [{ name: "totalUsers" }], orderBys: [{ dimension: { dimensionName: "date" } }] },
-        { dateRanges, ...df, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-        { dateRanges, ...df, dimensions: [{ name: "country" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-        { dateRanges, ...df, dimensions: [{ name: "deviceCategory" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
-        { dateRanges, ...df, dimensions: [{ name: "newVsReturning" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }] },
-        { dateRanges, ...df, dimensions: [{ name: "city" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-        { dateRanges, ...df, dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
-        { dateRanges, ...df, dimensions: [{ name: "landingPage" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
-      ],
-    };
-    const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}:batchRunReports`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      console.error("[ga4] report", r.status, body.slice(0, 300));
-      let msg: string | undefined;
-      try { msg = JSON.parse(body)?.error?.message; } catch { /* non-JSON */ }
-      lastGa4Error = `report failed (${r.status})${msg ? ": " + msg.slice(0, 120) : ""}`;
-      return dataCache.get(key)?.data || null;
+    const requests = [
+      { dateRanges, ...df, metrics: [{ name: "totalUsers" }, { name: "newUsers" }, { name: "sessions" }, { name: "screenPageViews" }, { name: "engagementRate" }] },
+      { dateRanges, ...df, dimensions: [{ name: "date" }], metrics: [{ name: "totalUsers" }], orderBys: [{ dimension: { dimensionName: "date" } }] },
+      { dateRanges, ...df, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+      { dateRanges, ...df, dimensions: [{ name: "country" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+      { dateRanges, ...df, dimensions: [{ name: "deviceCategory" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
+      { dateRanges, ...df, dimensions: [{ name: "newVsReturning" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }] },
+      { dateRanges, ...df, dimensions: [{ name: "city" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+      { dateRanges, ...df, dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
+      { dateRanges, ...df, dimensions: [{ name: "landingPage" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+    ];
+    // GA4's batchRunReports caps at 5 report requests per call — we ask for 9, so
+    // chunk into batches of 5, preserving order so the index mapping below holds.
+    const CHUNK = 5;
+    const reports: GaReport[] = [];
+    for (let i = 0; i < requests.length; i += CHUNK) {
+      const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}:batchRunReports`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ requests: requests.slice(i, i + CHUNK) }),
+      });
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        console.error("[ga4] report", r.status, errBody.slice(0, 300));
+        let msg: string | undefined;
+        try { msg = JSON.parse(errBody)?.error?.message; } catch { /* non-JSON */ }
+        lastGa4Error = `report failed (${r.status})${msg ? ": " + msg.slice(0, 120) : ""}`;
+        return dataCache.get(key)?.data || null;
+      }
+      const j = (await r.json()) as { reports?: GaReport[] };
+      reports.push(...(j.reports || []));
     }
-    const j = (await r.json()) as { reports?: GaReport[] };
-    const reports = j.reports || [];
     const t = reports[0]?.rows?.[0]?.metricValues || [];
     const data: Ga4Traffic = {
       totals: {
