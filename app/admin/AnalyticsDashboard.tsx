@@ -427,6 +427,14 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {a?.referrer && <Row k="Referrer" v={a.referrer} />}
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
             {loc && <Row k="Location" v={loc} />}
+            {p.geo?.postal && <Row k="Postal" v={p.geo.postal} />}
+            {(p.geo?.isp || p.geo?.org) && (
+              <Row k="Network" v={[...new Set([p.geo.isp, p.geo.org].filter(Boolean) as string[])].join(" · ")} />
+            )}
+            {p.geo?.timezone && <Row k="Timezone" v={p.geo.timezone} />}
+            {p.geo?.latitude != null && p.geo?.longitude != null && (
+              <Row k="Coordinates" v={`${p.geo.latitude.toFixed(3)}, ${p.geo.longitude.toFixed(3)} (approx)`} />
+            )}
             {p.device?.type && <Row k="Device" v={[p.device.type, p.device.os, p.device.browser].filter(Boolean).join(" · ")} />}
             {p.touchHistory && p.touchHistory.length > 0 && (
               <>
@@ -475,6 +483,17 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                     k="Vehicle tier"
                     v={`${p.enrichment.vehicleTier}${p.enrichment.vehicleAge !== undefined ? ` (${p.enrichment.vehicleAge} yrs old)` : ""}`}
                   />
+                )}
+                {p.enrichment.regionMismatch && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Location check</span>
+                    <span
+                      className="min-w-0 text-amber-700"
+                      title="The IP location and the phone's area code point to different provinces (or the IP is outside Canada while the phone is Canadian). Could be travel, a VPN, a recent move, or a lower-quality lead — a soft signal, not a reject."
+                    >
+                      ⚠ IP vs phone region differ
+                    </span>
+                  </div>
                 )}
               </>
             )}

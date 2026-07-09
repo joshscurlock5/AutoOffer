@@ -16,7 +16,7 @@ import type {
   Enrichment,
   ScoreFactor,
 } from "./types";
-import { emailType, phoneRegion, vehicleTier } from "./enrich";
+import { emailType, phoneRegion, vehicleTier, geoPhoneMismatch } from "./enrich";
 
 // ===========================================================================
 //  Identity stitching — one Profile per PERSON.
@@ -566,12 +566,15 @@ function buildOne(
   const et = emailType([...emails][0]);
   const pr = phoneRegion([...phones][0]);
   const vt = vehicleTier(recentVehicle?.make, recentVehicle?.year, offerMid);
+  // IP-derived province vs the phone's area-code province (soft quality flag).
+  const mismatch = geoPhoneMismatch(geo?.region, geo?.countryCode, [...phones][0]) === true;
   const enrichment: Enrichment | undefined =
-    et || pr || vt
+    et || pr || vt || mismatch
       ? {
           ...(et ? { emailType: et } : {}),
           ...(pr ? { phoneRegion: pr } : {}),
           ...(vt ? { vehicleTier: vt.tier, ...(vt.age !== undefined ? { vehicleAge: vt.age } : {}) } : {}),
+          ...(mismatch ? { regionMismatch: true } : {}),
         }
       : undefined;
 

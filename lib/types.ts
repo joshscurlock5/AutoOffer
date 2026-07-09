@@ -128,12 +128,29 @@ export interface Behavior {
   timeOnSiteMs?: number;
 }
 
-/** Coarse geolocation resolved from the client IP (best-effort, ~province-level). */
+/** Coarse geolocation resolved from the client IP (best-effort). All fields come
+ * FREE from the same ipwho.is lookup (no paid tier). IP-derived, so coordinates /
+ * postal are approximate (city-centroid, never house-level), and everything here
+ * is only resolved for consented visitors. */
 export interface Geo {
   country?: string;
   countryCode?: string;
   region?: string; // province / state
   city?: string;
+  /** Full postal / ZIP from IP (approximate — IP-derived, not GPS). */
+  postal?: string;
+  /** IP city-centroid coordinates (approximate, never house-level). */
+  latitude?: number;
+  longitude?: number;
+  /** IANA timezone id of the IP (e.g. "America/Edmonton"). */
+  timezone?: string;
+  /** International calling code of the IP's country (e.g. "1" for CA/US). */
+  callingCode?: string;
+  /** Connection owner — distinguishes a home ISP from a datacenter / VPN / corp net. */
+  isp?: string;
+  org?: string;
+  /** Autonomous System Number of the connection (for repeat-network detection). */
+  asn?: number;
   resolvedAt?: string;
 }
 
@@ -332,6 +349,10 @@ export interface Enrichment {
   phoneRegion?: string;
   vehicleTier?: "high" | "mid" | "low";
   vehicleAge?: number;
+  /** IP-derived province disagrees with the phone's area-code province (or the IP
+   * is outside Canada while the phone is Canadian) — a soft travel/VPN/quality
+   * signal, never an auto-reject. */
+  regionMismatch?: boolean;
 }
 
 /** One explainable factor of the lead score. */

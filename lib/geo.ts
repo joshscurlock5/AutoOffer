@@ -25,9 +25,14 @@ export async function resolveGeo(ip?: string): Promise<Geo | undefined> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(`https://ipwho.is/${encodeURIComponent(clean)}?fields=success,country,country_code,region,city`, {
-      signal: ctrl.signal,
-    });
+    // All of these come back in the SAME free response — postal, coordinates,
+    // timezone, calling code and the connection block (isp/org/asn) are not a
+    // paid tier. Nested objects (connection/timezone) are requested by naming the
+    // parent in fields=. (Verified live: `currency` is NOT returned, so it's omitted.)
+    const r = await fetch(
+      `https://ipwho.is/${encodeURIComponent(clean)}?fields=success,country,country_code,region,city,postal,latitude,longitude,calling_code,connection,timezone`,
+      { signal: ctrl.signal },
+    );
     clearTimeout(timer);
     if (!r.ok) return undefined;
     const d = (await r.json()) as {
@@ -36,13 +41,28 @@ export async function resolveGeo(ip?: string): Promise<Geo | undefined> {
       country_code?: string;
       region?: string;
       city?: string;
+      postal?: string;
+      latitude?: number;
+      longitude?: number;
+      calling_code?: string;
+      connection?: { asn?: number; org?: string; isp?: string; domain?: string };
+      timezone?: { id?: string };
     };
     if (!d || d.success === false) return undefined;
+    const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
     const geo: Geo = {
       country: d.country || undefined,
       countryCode: d.country_code || undefined,
       region: d.region || undefined,
       city: d.city || undefined,
+      postal: d.postal || undefined,
+      latitude: num(d.latitude),
+      longitude: num(d.longitude),
+      callingCode: d.calling_code || undefined,
+      isp: d.connection?.isp || undefined,
+      org: d.connection?.org || undefined,
+      asn: num(d.connection?.asn),
+      timezone: d.timezone?.id || undefined,
       resolvedAt: new Date().toISOString(),
     };
     // Only return if we got at least a country — else leave unset so it retries later.

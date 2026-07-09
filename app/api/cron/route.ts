@@ -107,8 +107,11 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
   for (const lead of leads) {
     try {
       // --- Backfill coarse geolocation from the stored IP (best-effort, capped).
-      //     Keeps geo off the lead-submit path; new + historical leads fill in here. ---
-      if (geoAttempts < GEO_CAP && lead.meta?.clientIp && !lead.geo) {
+      //     Keeps geo off the lead-submit path; new + historical leads fill in here.
+      //     Also re-resolves OLD-shape geos captured before the richer fields
+      //     (postal/timezone/isp/asn) were added, so existing leads upgrade in place. ---
+      const needsGeo = !lead.geo || (!lead.geo.timezone && !lead.geo.postal);
+      if (geoAttempts < GEO_CAP && lead.meta?.clientIp && needsGeo) {
         geoAttempts += 1;
         const g = await resolveGeo(lead.meta.clientIp);
         if (g) {

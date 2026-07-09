@@ -91,3 +91,55 @@ export function vehicleTier(
   const tier: VehicleTier = age <= 5 || (lux && age <= 8) ? "high" : age <= 12 ? "mid" : "low";
   return { tier, age };
 }
+
+/** Full Canadian province names + 2-letter codes → a canonical 2-letter code.
+ * Handles both the ipwho.is `region` (full name, e.g. "Alberta") and our
+ * phoneRegion() labels (which embed a code/word, e.g. "Calgary & Southern AB"). */
+const PROVINCE_NAMES: Record<string, string> = {
+  "alberta": "AB",
+  "british columbia": "BC",
+  "ontario": "ON",
+  "quebec": "QC",
+  "québec": "QC",
+  "saskatchewan": "SK",
+  "manitoba": "MB",
+  "nova scotia": "NS",
+  "new brunswick": "NB",
+  "newfoundland": "NL",
+  "newfoundland and labrador": "NL",
+  "prince edward island": "PE",
+};
+const PROVINCE_CODES = new Set(["AB", "BC", "ON", "QC", "SK", "MB", "NS", "NB", "NL", "PE"]);
+
+function provinceCode(s?: string): string | undefined {
+  const t = (s || "").trim().toLowerCase();
+  if (!t) return undefined;
+  if (PROVINCE_NAMES[t]) return PROVINCE_NAMES[t];
+  // Full-name substring (e.g. ipwho "British Columbia").
+  for (const [name, code] of Object.entries(PROVINCE_NAMES)) {
+    if (t.includes(name)) return code;
+  }
+  // 2-letter code as a standalone token (e.g. phoneRegion "Toronto, ON").
+  for (const code of PROVINCE_CODES) {
+    if (new RegExp(`\\b${code.toLowerCase()}\\b`).test(t)) return code;
+  }
+  return undefined;
+}
+
+/** Does the IP-derived location disagree with the phone's area-code region?
+ * True when the IP is outside Canada but the phone is Canadian, or both resolve
+ * to a Canadian province and they differ. undefined when we can't tell (e.g. a
+ * non-Canadian / unparseable phone, or an unresolved IP province). A soft
+ * travel/VPN/quality signal — never an auto-reject. */
+export function geoPhoneMismatch(
+  geoRegion?: string,
+  geoCountryCode?: string,
+  phone?: string,
+): boolean | undefined {
+  const pPhone = provinceCode(phoneRegion(phone));
+  if (!pPhone) return undefined; // no recognizable Canadian phone province to compare against
+  if (geoCountryCode && geoCountryCode.toUpperCase() !== "CA") return true; // CA phone, non-CA IP
+  const gRegion = provinceCode(geoRegion);
+  if (!gRegion) return undefined; // couldn't resolve the IP's province
+  return gRegion !== pPhone;
+}
