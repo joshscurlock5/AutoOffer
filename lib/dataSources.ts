@@ -18,9 +18,18 @@
 //  append connector / tracker / comms entries here.
 // ===========================================================================
 
+import { BRAINSTORM } from "./dataSourcesBrainstorm";
+
 export type SourceCategory = "firstParty" | "tracker" | "connector" | "comms";
 
 export type SourceStatus = "active" | "quiet" | "stale" | "empty" | "unconfigured" | "external";
+
+/** One brainstorm item in the underutilized / opportunities tiers. */
+export interface CollectIdea {
+  label: string;
+  /** Hover text: what it is + the reasoning (why underused, or why not collected yet). */
+  why: string;
+}
 
 export interface DataSourceDef {
   id: string;
@@ -47,6 +56,12 @@ export interface DataSourceDef {
   vendorUrl?: string;
   /** Plain-language "where to look if it's broken". */
   fixHint?: string;
+  /** Brainstorm tier — data already collected/available but not used to its
+   * fullest; each item's `why` explains the missed opportunity. */
+  underutilized?: CollectIdea[];
+  /** Brainstorm tier — data this source COULD collect but currently doesn't;
+   * each item's `why` explains what it is + why it's worth adding (or the tradeoff). */
+  opportunities?: CollectIdea[];
 }
 
 /** Per-source computed health returned by /api/admin/sources. */
@@ -113,7 +128,7 @@ export const CATEGORY_LABEL: Record<SourceCategory, string> = {
 //  STEP 1 — first-party data streams we own (all DynamoDB-backed, so each has
 //  a real stored timestamp → true passive "last data seen").
 // ---------------------------------------------------------------------------
-export const DATA_SOURCES: DataSourceDef[] = [
+const BASE_SOURCES: DataSourceDef[] = [
   {
     id: "leads",
     label: "Lead form",
@@ -400,3 +415,10 @@ export const DATA_SOURCES: DataSourceDef[] = [
       "Inbound + status callbacks hit /api/sms and /api/sms/status (Twilio, signature-validated). Ships dormant until TWILIO_AUTH_TOKEN is set. If stale while texts send, check the Twilio webhooks point at the site.",
   },
 ];
+
+/** The exported source of truth: health defs with their brainstorm tiers
+ * (underutilized + opportunities) merged in from dataSourcesBrainstorm.ts. */
+export const DATA_SOURCES: DataSourceDef[] = BASE_SOURCES.map((d) => ({
+  ...d,
+  ...(BRAINSTORM[d.id] || {}),
+}));

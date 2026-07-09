@@ -1440,7 +1440,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
           </div>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted">What it collects</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Collecting now</div>
               <ul className="mt-2 space-y-1 text-sm text-navy">
                 {def.collects.map((c) => (
                   <li key={c} className="flex gap-2">
@@ -1511,6 +1511,38 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
               )}
             </div>
           </div>
+          {def.underutilized && def.underutilized.length > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Collected — not fully used yet
+                <InfoDot tip="Data this source already captures (or trivially can) but that isn't surfaced or acted on yet — low-effort wins. Hover each for the missed opportunity." />
+              </div>
+              <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {def.underutilized.map((it) => (
+                  <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
+                    <span className="mt-0.5 text-amber-500">◐</span>
+                    <span>{it.label}<InfoDot tip={it.why} /></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {def.opportunities && def.opportunities.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-brand-600">
+                Could collect — not set up
+                <InfoDot tip="Data this source could capture but currently doesn't — brainstorm ideas to add. Hover each for what it is and why it's worth it (or the tradeoff)." />
+              </div>
+              <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {def.opportunities.map((it) => (
+                  <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
+                    <span className="mt-0.5 text-brand-500">+</span>
+                    <span>{it.label}<InfoDot tip={it.why} /></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </>
