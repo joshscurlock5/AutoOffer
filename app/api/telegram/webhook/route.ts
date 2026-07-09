@@ -83,13 +83,14 @@ async function reply(chatId: number | string, text: string): Promise<void> {
 }
 
 /** Stop a tapped button's loading spinner. */
-async function answerCallback(id: string): Promise<void> {
+async function answerCallback(id: string, text?: string): Promise<void> {
   if (!BOT_TOKEN || !id) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ callback_query_id: id }),
+      // A `text` shows as a brief toast at the top of the chat (no message to clean up).
+      body: JSON.stringify({ callback_query_id: id, ...(text ? { text } : {}) }),
     });
   } catch {
     /* best-effort */
@@ -143,6 +144,7 @@ function negKeyboardFor(sid: string) {
         { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
         { text: "✉️ Message", callback_data: `act|msg|${sid}` },
       ],
+      [{ text: "📞 Called", callback_data: `act|called|${sid}` }],
     ],
   };
 }
@@ -218,12 +220,18 @@ export async function POST(req: NextRequest) {
     //     so it must not fall through to the msg branch. ---
     const cb = update?.callback_query;
     if (cb) {
-      await answerCallback(cb.id);
       const cbChat = cb.message?.chat?.id;
       const allowed = telegramChatIds();
-      if (allowed.length && !allowed.includes(String(cbChat))) return NextResponse.json({ ok: true });
+      if (allowed.length && !allowed.includes(String(cbChat))) {
+        await answerCallback(cb.id);
+        return NextResponse.json({ ok: true });
+      }
       const who = cb.from?.first_name || cb.from?.username || "owner";
       const data = String(cb.data || "");
+      // Stop the button spinner now for every tap EXCEPT the "Called" toggle, which
+      // answers with a confirmation toast instead (a callback can be answered once).
+      const isCalledToggle = /^act\|called\|/.test(data);
+      if (!isCalledToggle) await answerCallback(cb.id);
 
       // Negotiation logging buttons → open a number reply box under the alert.
       const negM = data.match(/^neg\|(ask|offer|bought)\|(\S+)$/);
@@ -347,6 +355,48 @@ export async function POST(req: NextRequest) {
         if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
         await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
         await clearPreview();
+        return NextResponse.json({ ok: true });
+      }
+
+      // "📞 Called" toggle — mark/unmark the lead contacted-by-phone (misclick-safe:
+      // tap again to undo, which reverts the status). Confirms with a brief toast and
+      // folds a 📞 Called marker into the alert. No email or Meta/GA4 event fires — a
+      // phone call isn't a digital conversion, and this keeps a misclick harmless.
+      const calledM = data.match(/^act\|called\|(\S+)$/);
+      if (calledM) {
+        const code = calledM[1];
+        const { lead, multiple } = await getLeadByShortId(code);
+        if (multiple) {
+          await answerCallback(cb.id, `More than one lead matches "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead) {
+          await answerCallback(cb.id, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        const nowISO = new Date().toISOString();
+        const turningOn = !lead.calledAt;
+        const patch: Partial<Lead> = turningOn
+          ? {
+              calledAt: nowISO,
+              calledPrevStatus: lead.status,
+              // Advance a brand-new lead to contacted (the call IS the contact).
+              ...(lead.status === "new" ? { status: "contacted" as const, contactedAt: nowISO } : {}),
+            }
+          : {
+              calledAt: undefined,
+              calledPrevStatus: undefined,
+              // Only undo the change the toggle itself made (new→contacted). If the
+              // lead advanced since (scheduled/closed/…) or was already past "new",
+              // leave its status + contactedAt exactly as they are.
+              ...(lead.calledPrevStatus === "new" && lead.status === "contacted"
+                ? { status: "new" as const, contactedAt: undefined }
+                : {}),
+            };
+        const updated = await updateLead(lead.id, patch);
+        await refreshLeadAlert(updated || { ...lead, ...patch });
+        await notifyLog(`📞 ${who} ${turningOn ? "marked CALLED (contacted)" : "un-marked called"} — ${carText(lead)} (${code})`);
+        await answerCallback(cb.id, turningOn ? "✅ Marked contacted — customer was called" : "↩️ Reverted — no longer marked contacted");
         return NextResponse.json({ ok: true });
       }
 
