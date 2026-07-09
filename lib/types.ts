@@ -519,6 +519,11 @@ export interface Ga4Traffic {
   bySource: { label: string; users: number; sessions: number }[];
   byCountry: { label: string; users: number }[];
   byDevice: { label: string; users: number }[];
+  /** Additional aggregate breakdowns (Batch 7) — all from the same batch call. */
+  byNewReturning?: { label: string; users: number; sessions: number }[];
+  byCity?: { label: string; users: number }[];
+  byChannel?: { label: string; users: number; sessions: number }[];
+  byLanding?: { label: string; users: number; sessions: number }[];
 }
 
 export interface Referral {

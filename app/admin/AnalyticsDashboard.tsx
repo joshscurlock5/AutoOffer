@@ -1018,6 +1018,7 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
             <th className="px-2" title="Ad set name.">Ad set</th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
             <th className="px-2 text-right" title="Meta Ads API — times shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — average times each person saw this ad (impressions ÷ reach). 4+ often signals ad fatigue — refresh the creative.">Freq</th>
             <th className="px-2 text-right" title="Meta Ads API — link click-through rate.">Link CTR</th>
             <th className="px-2 text-right" title="3-second video plays ÷ impressions.">Hook %</th>
             <th className="px-2 text-right" title="ThruPlays ÷ 3-second video plays.">Hold %</th>
@@ -1027,7 +1028,7 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={9} className="py-3 text-muted">No ads in range.</td></tr>
+            <tr><td colSpan={10} className="py-3 text-muted">No ads in range.</td></tr>
           ) : (
             rows.map((r) => (
               <tr key={r.adId || r.ad} className="border-b border-slate-100">
@@ -1035,6 +1036,13 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
                 <td className="px-2 text-muted" title={r.adset}>{r.adset}</td>
                 <td className="px-2 text-right">{money(r.spend)}</td>
                 <td className="px-2 text-right">{r.impressions.toLocaleString("en-CA")}</td>
+                <td className="px-2 text-right">
+                  {r.frequency != null ? (
+                    <span className={r.frequency >= 4 ? "font-semibold text-amber-700" : ""}>{r.frequency.toFixed(1)}</span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="px-2 text-right">{r.linkCtr != null ? `${r.linkCtr.toFixed(1)}%` : "—"}</td>
                 <td className="px-2 text-right">{r.hookRate != null ? `${r.hookRate.toFixed(1)}%` : "—"}</td>
                 <td className="px-2 text-right">{r.holdRate != null ? `${r.holdRate.toFixed(1)}%` : "—"}</td>
@@ -1171,6 +1179,18 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
         <HBars title={country ? `Traffic sources — visitors (${country})` : "Traffic sources — visitors"} rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
         <HBars title="By country" rows={full.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
         <HBars title={country ? `By device (${country})` : "By device"} rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
+        {t.byChannel && t.byChannel.length > 0 && (
+          <HBars title="By channel group" rows={t.byChannel.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — default channel grouping (Organic Search, Paid Social, Direct, Referral…)." />
+        )}
+        {t.byNewReturning && t.byNewReturning.length > 0 && (
+          <HBars title="New vs returning" rows={t.byNewReturning.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — first-time vs returning visitors." />
+        )}
+        {t.byCity && t.byCity.length > 0 && (
+          <HBars title={country ? `By city (${country})` : "By city"} rows={t.byCity.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — visitors by city (IP-derived; sparse cities are withheld)." />
+        )}
+        {t.byLanding && t.byLanding.length > 0 && (
+          <HBars title="Top landing pages" rows={t.byLanding.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — the pages visitors entered the site on." />
+        )}
       </div>
     </div>
   );

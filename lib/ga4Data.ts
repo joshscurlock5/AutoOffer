@@ -107,6 +107,10 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
         { dateRanges, ...df, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
         { dateRanges, ...df, dimensions: [{ name: "country" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
         { dateRanges, ...df, dimensions: [{ name: "deviceCategory" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
+        { dateRanges, ...df, dimensions: [{ name: "newVsReturning" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }] },
+        { dateRanges, ...df, dimensions: [{ name: "city" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+        { dateRanges, ...df, dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
+        { dateRanges, ...df, dimensions: [{ name: "landingPage" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
       ],
     };
     const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY}:batchRunReports`, {
@@ -137,6 +141,10 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
       bySource: (reports[2]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
       byCountry: (reports[3]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
       byDevice: (reports[4]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
+      byNewReturning: (reports[5]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
+      byCity: (reports[6]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
+      byChannel: (reports[7]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
+      byLanding: (reports[8]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
     };
     dataCache.set(key, { at: Date.now(), data });
     lastGa4Error = null;
