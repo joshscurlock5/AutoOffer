@@ -5,7 +5,8 @@ import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
-import { DATA_SOURCES, STATUS_META, isProfileField, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
+import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
+import { tagsFor, TAG_META, EFFORT_META, TAG_ORDER, type EffortTag } from "@/lib/dataSourceTags";
 import {
   computeView,
   filterProfiles,
@@ -1350,18 +1351,20 @@ function SourceStatusChip({ status }: { status: SourceStatus }) {
   );
 }
 
-// Marks a data point that's about ONE identifiable person — i.e. belongs in that
-// seller's single Customer-360 profile (vs. aggregate / market / platform data).
-function ProfileMark() {
+// Renders the "answer key" symbols for a data point — its category tags plus,
+// for a "could collect" idea, an effort tag. Hover any symbol for its meaning.
+function TagMarks({ sourceId, label }: { sourceId: string; label: string }) {
+  const { tags, effort } = tagsFor(sourceId, label);
+  if (!tags.length && !effort) return null;
+  const ordered = TAG_ORDER.filter((t) => tags.includes(t));
   return (
-    <span
-      title="Person-level — group this into the individual's Customer-360 profile"
-      aria-label="person-profile data"
-      className="ml-1 inline-flex align-middle text-violet-600"
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
-        <path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.87 0-7 2.13-7 4.5V20h14v-1.5c0-2.37-3.13-4.5-7-4.5z" />
-      </svg>
+    <span className="ml-1 inline-flex items-center gap-0.5 align-middle text-[11px] leading-none">
+      {ordered.map((t) => (
+        <span key={t} title={`${TAG_META[t].label} — ${TAG_META[t].desc}`} aria-label={TAG_META[t].label}>{TAG_META[t].icon}</span>
+      ))}
+      {effort && (
+        <span title={`${EFFORT_META[effort].label} — ${EFFORT_META[effort].desc}`} aria-label={EFFORT_META[effort].label}>{EFFORT_META[effort].icon}</span>
+      )}
     </span>
   );
 }
@@ -1395,6 +1398,23 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
         you already have; the connected platforms also report whether their last API call succeeded. Click a source
         to see exactly what it collects.
       </p>
+      <div className="card mb-5 p-3">
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Symbol key — what each icon on a data point means</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-navy">
+          {TAG_ORDER.map((t) => (
+            <span key={t} title={TAG_META[t].desc} className="cursor-help whitespace-nowrap">
+              <span className="mr-1">{TAG_META[t].icon}</span>{TAG_META[t].label}
+            </span>
+          ))}
+          <span className="text-slate-300">|</span>
+          {(["config", "dev", "paid"] as EffortTag[]).map((e) => (
+            <span key={e} title={EFFORT_META[e].desc} className="cursor-help whitespace-nowrap">
+              <span className="mr-1">{EFFORT_META[e].icon}</span>{EFFORT_META[e].label}
+            </span>
+          ))}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted">A data point can carry several. Effort tags (⚙️ 🔧 💵) show only on “could collect” ideas. Hover any label or icon for its full meaning.</div>
+      </div>
       {groups.map((g) => (
         <div key={g.cat} className="mb-6">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{GROUP_HEADING[g.cat]}</h3>
@@ -1454,9 +1474,6 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
             </div>
             <SourceStatusChip status={health?.status ?? "empty"} />
           </div>
-          <div className="mt-2 flex items-center text-[11px] text-muted">
-            <ProfileMark /> <span className="ml-1">= person-level — data you&apos;d group into the individual&apos;s Customer-360 profile</span>
-          </div>
           <div className="mt-4 grid gap-5 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Collecting now</div>
@@ -1464,7 +1481,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.collects.map((c) => (
                   <li key={c} className="flex gap-2">
                     <span className="text-brand-600">•</span>
-                    <span>{c}{isProfileField(def.id, c) && <ProfileMark />}</span>
+                    <span>{c}<TagMarks sourceId={def.id} label={c} /></span>
                   </li>
                 ))}
               </ul>
@@ -1540,7 +1557,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.underutilized.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-amber-500">◐</span>
-                    <span>{it.label}<InfoDot tip={it.why} />{isProfileField(def.id, it.label) && <ProfileMark />}</span>
+                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /></span>
                   </li>
                 ))}
               </ul>
@@ -1556,7 +1573,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
                 {def.opportunities.map((it) => (
                   <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
                     <span className="mt-0.5 text-brand-500">+</span>
-                    <span>{it.label}<InfoDot tip={it.why} />{isProfileField(def.id, it.label) && <ProfileMark />}</span>
+                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /></span>
                   </li>
                 ))}
               </ul>

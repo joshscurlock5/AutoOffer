@@ -19,7 +19,6 @@
 // ===========================================================================
 
 import { BRAINSTORM } from "./dataSourcesBrainstorm";
-export { isProfileField } from "./dataSourcesBrainstorm";
 
 export type SourceCategory = "firstParty" | "tracker" | "connector" | "comms";
 
