@@ -374,29 +374,28 @@ export async function POST(req: NextRequest) {
           await answerCallback(cb.id, `No lead found for "${code}".`);
           return NextResponse.json({ ok: true });
         }
+        // A toggle on the CONTACTED state (not on the button's own history): if the
+        // lead is contacted by ANY means — including an auto email-contact — pressing
+        // it moves them back to "new". Leads already past contacted (scheduled/closed/
+        // …) are left untouched so a misclick can't undo a booking.
         const nowISO = new Date().toISOString();
-        const turningOn = !lead.calledAt;
-        const patch: Partial<Lead> = turningOn
-          ? {
-              calledAt: nowISO,
-              calledPrevStatus: lead.status,
-              // Advance a brand-new lead to contacted (the call IS the contact).
-              ...(lead.status === "new" ? { status: "contacted" as const, contactedAt: nowISO } : {}),
-            }
-          : {
-              calledAt: undefined,
-              calledPrevStatus: undefined,
-              // Only undo the change the toggle itself made (new→contacted). If the
-              // lead advanced since (scheduled/closed/…) or was already past "new",
-              // leave its status + contactedAt exactly as they are.
-              ...(lead.calledPrevStatus === "new" && lead.status === "contacted"
-                ? { status: "new" as const, contactedAt: undefined }
-                : {}),
-            };
-        const updated = await updateLead(lead.id, patch);
-        await refreshLeadAlert(updated || { ...lead, ...patch });
-        await notifyLog(`📞 ${who} ${turningOn ? "marked CALLED (contacted)" : "un-marked called"} — ${carText(lead)} (${code})`);
-        await answerCallback(cb.id, turningOn ? "✅ Marked contacted — customer was called" : "↩️ Reverted — no longer marked contacted");
+        let patch: Partial<Lead> | null = null;
+        let toast: string;
+        if (lead.status === "new") {
+          patch = { status: "contacted", contactedAt: nowISO, calledAt: nowISO };
+          toast = "✅ Marked contacted";
+        } else if (lead.status === "contacted") {
+          patch = { status: "new", contactedAt: undefined, calledAt: undefined };
+          toast = "↩️ Marked NOT contacted";
+        } else {
+          toast = `Already ${lead.status} — left unchanged.`;
+        }
+        if (patch) {
+          const updated = await updateLead(lead.id, patch);
+          await refreshLeadAlert(updated || { ...lead, ...patch });
+          await notifyLog(`📞 ${who} marked ${patch.status === "contacted" ? "CONTACTED" : "NOT contacted"} — ${carText(lead)} (${code})`);
+        }
+        await answerCallback(cb.id, toast);
         return NextResponse.json({ ok: true });
       }
 

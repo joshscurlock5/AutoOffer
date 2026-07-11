@@ -288,11 +288,11 @@ export interface Lead {
    * negChatId may be a numeric id OR an @channelusername, hence number | string. */
   negMsgId?: number;
   negChatId?: number | string;
-  /** Set when the owner taps "📞 Called" (a toggle) — marks the lead contacted by
-   * phone. calledPrevStatus stores the status before the toggle so un-toggling
-   * restores it (e.g. back to "new"). */
+  /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
+   * button is a toggle on the contacted state (new↔contacted): pressing it when the
+   * lead is already contacted — even from an auto email-contact — moves it back to
+   * new. Drives the "📞 Called" marker on the alert. */
   calledAt?: string;
-  calledPrevStatus?: LeadStatus;
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
