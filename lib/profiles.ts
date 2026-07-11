@@ -698,6 +698,7 @@ function buildOne(
     leadIds: leads.map((l) => l.id),
     referralIds: referrals.map((r) => r.id),
     chatIds: chats.map((c) => c.id),
+    assignedCampaign: leads.find((l) => l.assignedCampaign)?.assignedCampaign,
   };
   const { score, breakdown } = computeScore(base, leads);
   return { ...base, score, scoreBreakdown: breakdown };

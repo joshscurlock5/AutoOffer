@@ -823,15 +823,19 @@ function ControlBar({
 //  match no campaign. Joins DB leads to campaigns by any-touch utm_campaign.
 // ---------------------------------------------------------------------------
 
-/** Does a profile carry this campaign name on any touch (or first-touch attr)? */
+/** Does a profile carry this campaign name on any touch (or first-touch attr)? A
+ * manual "assign to campaign" override counts too — it's your correction, so it
+ * only affects this (corrected / "my data") view, never the tracked record. */
 function profileMatchesCampaign(p: Profile, campaign: string): boolean {
   if (!campaign) return false;
+  if (p.assignedCampaign === campaign) return true;
   if (p.attribution?.utmCampaign === campaign) return true;
   return (p.touchHistory || []).some((t) => t.utmCampaign === campaign);
 }
 
 /** Any campaign at all (used to bucket the organic remainder). */
 function profileHasAnyCampaign(p: Profile, campaigns: Set<string>): boolean {
+  if (p.assignedCampaign && campaigns.has(p.assignedCampaign)) return true;
   if (p.attribution?.utmCampaign && campaigns.has(p.attribution.utmCampaign)) return true;
   return (p.touchHistory || []).some((t) => t.utmCampaign && campaigns.has(t.utmCampaign));
 }
@@ -847,6 +851,33 @@ function FunnelEconomics({
   configured: boolean;
   dateBounds: { dateFrom?: string; dateTo?: string };
 }) {
+  const [assignTo, setAssignTo] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const allCampaignNames = useMemo(() => new Set(ads.map((a) => a.campaign).filter(Boolean)), [ads]);
+  const organicProfiles = useMemo(
+    // Only profiles that actually OWN a lead can carry the correction (assignedCampaign
+    // lives on the Lead), so count + assign the exact same set — never promise to move
+    // a chat/referral-only person we can't tag.
+    () => profiles.filter((p) => p.leadIds.length > 0 && !profileHasAnyCampaign(p, allCampaignNames)),
+    [profiles, allCampaignNames],
+  );
+  async function bulkAssign() {
+    if (!assignTo || !organicProfiles.length || assigning) return;
+    if (
+      !confirm(
+        `Assign all ${organicProfiles.length} untagged ${organicProfiles.length === 1 ? "person" : "people"} to "${assignTo}"?\n\nThis is YOUR correction — it won't change what Meta actually tracked.`,
+      )
+    )
+      return;
+    setAssigning(true);
+    const leadIds = organicProfiles.flatMap((p) => p.leadIds);
+    await fetch("/api/admin/assign-campaign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadIds, campaign: assignTo }),
+    }).catch(() => {});
+    window.location.reload();
+  }
   const rows = useMemo(() => {
     // Margin counts deals CLOSED inside the selected window (same attribution
     // window as the Acquisition campaign table), not deals whose LEAD arrived
@@ -974,6 +1005,30 @@ function FunnelEconomics({
       <p className="mt-2 text-xs text-muted">
         Spend/impressions/link-clicks from Meta (grouped from level=ad rows). Leads, qualified (score ≥ 70), booked, closed &amp; margin come from your own database, matched to the campaign by any UTM touch — ads must carry <code className="rounded bg-slate-100 px-1">utm_campaign={"{{campaign.name}}"}</code> for the join to work. Untagged / organic collects leads that match no Meta campaign.
       </p>
+      {allCampaignNames.size > 0 && organicProfiles.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-3 text-xs">
+          <span className="font-semibold text-navy">Clean up untagged:</span>
+          <span className="text-muted">
+            move the {organicProfiles.length} untagged {organicProfiles.length === 1 ? "person" : "people"} to
+          </span>
+          <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} className="rounded border border-slate-300 px-2 py-1">
+            <option value="">choose a campaign…</option>
+            {[...allCampaignNames].map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={bulkAssign}
+            disabled={!assignTo || assigning}
+            className="rounded bg-navy px-3 py-1 font-semibold text-white disabled:opacity-40"
+          >
+            {assigning ? "Assigning…" : "Assign"}
+          </button>
+          <span className="text-muted">Saved as your correction — never touches what Meta tracked.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -988,6 +1043,8 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
     const cutoff = Date.now() - days * 86_400_000;
     return insights.map((ins) => {
       const ps = profiles.filter(
+        // NOTE: this is the Meta-tracked view (matches Ads Manager) — it deliberately
+        // does NOT honor assignedCampaign, so manual corrections never leak in here.
         (p) => p.attribution?.utmCampaign === ins.campaign || (p.touchHistory || []).some((t) => t.utmCampaign === ins.campaign),
       );
       const closed = ps.filter((p) => p.stage === "closed" && p.closedAt && Date.parse(p.closedAt) >= cutoff);

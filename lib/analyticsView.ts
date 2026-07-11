@@ -310,7 +310,8 @@ function dimValue(p: Profile, dim: SegmentDimension): string {
     case "source":
       return p.source || "Direct";
     case "campaign":
-      return p.attribution?.utmCampaign || "(untagged)";
+      // A manual "assign to campaign" correction wins over the tracked UTM here too.
+      return p.assignedCampaign || p.attribution?.utmCampaign || "(untagged)";
     case "device":
       return p.device?.type || "unknown";
     case "country":

@@ -293,6 +293,10 @@ export interface Lead {
    * lead is already contacted — even from an auto email-contact — moves it back to
    * new. Drives the "📞 Called" marker on the alert. */
   calledAt?: string;
+  /** Manual campaign attribution set from the admin "assign to campaign" cleanup.
+   * Kept SEPARATE from the tracked attribution.utmCampaign so it never pollutes the
+   * "as-tracked / Meta" view — only the "my data" (corrected) view uses it. */
+  assignedCampaign?: string;
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
@@ -512,6 +516,9 @@ export interface Profile {
   leadIds: string[];
   referralIds: string[];
   chatIds: string[];
+  /** Manual campaign override derived from the profile's leads (admin "assign to
+   * campaign"). Only the corrected/"my data" dashboard view honors it. */
+  assignedCampaign?: string;
 }
 
 /** One campaign's ad performance pulled from the Meta Marketing API. */
