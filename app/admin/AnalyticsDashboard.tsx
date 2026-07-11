@@ -896,11 +896,13 @@ function FunnelEconomics({
   profiles,
   ads,
   configured,
+  loading,
   dateBounds,
 }: {
   profiles: Profile[];
   ads: AdInsightAd[];
   configured: boolean;
+  loading?: boolean;
   dateBounds: { dateFrom?: string; dateTo?: string };
 }) {
   const [assignTo, setAssignTo] = useState("");
@@ -1007,11 +1009,13 @@ function FunnelEconomics({
           <InfoDot tip="Spend / impressions / link clicks come from Meta (level=ad rows, grouped by campaign). Leads, qualified, booked, closed & margin come from YOUR database, matched to the campaign by any UTM touch (utm_campaign={{campaign.name}}). Untagged / organic = leads matching no Meta campaign." />
         </h3>
       </div>
-      {!configured && (
+      {loading ? (
+        <p className="mb-3 text-xs text-muted">Loading Meta spend…</p>
+      ) : !configured ? (
         <p className="mb-3 text-xs text-muted">
           <span className="font-semibold text-navy">Meta not connected</span> — spend columns read zero. DB-side columns (leads/qualified/booked/closed/margin) still populate.
         </p>
-      )}
+      ) : null}
       <table className="w-full min-w-[980px] text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
@@ -2270,7 +2274,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             {meta.approx && (
               <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta here supports 7/30/90-day windows only.</p>
             )}
-            <FunnelEconomics profiles={filtered} ads={adLevel?.ads || []} configured={Boolean(adLevel?.configured)} dateBounds={dateBounds} />
+            <FunnelEconomics profiles={filtered} ads={adLevel?.ads || []} configured={Boolean(adLevel?.configured)} loading={adLevel === null} dateBounds={dateBounds} />
           </Section>
 
           <Section title="Data health" tip={SRC.events}>
