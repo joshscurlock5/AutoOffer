@@ -56,11 +56,17 @@ export interface DataSourceDef {
   vendorUrl?: string;
   /** Plain-language "where to look if it's broken". */
   fixHint?: string;
-  /** Brainstorm tier — data already collected/available but not used to its
-   * fullest; each item's `why` explains the missed opportunity. */
+  /** Brainstorm tier — derived uses of already-collected data that are LIVE
+   * today (surfaced in the dashboard or driving an action); the `why` explains
+   * what each one is for. */
   underutilized?: CollectIdea[];
-  /** Brainstorm tier — data this source COULD collect but currently doesn't;
-   * each item's `why` explains what it is + why it's worth adding (or the tradeoff). */
+  /** Brainstorm tier — the zero-friction to-do list: data or views this source
+   * could have WITHOUT asking the seller for anything extra, each either
+   * partially set up or not set up yet (the status pill says which). */
+  buildNext?: CollectIdea[];
+  /** Brainstorm tier — data this source COULD collect but deliberately doesn't
+   * (yet): each would add customer friction, need a paid tier, or depend on a
+   * feature that doesn't exist; the `why` explains the tradeoff. */
   opportunities?: CollectIdea[];
 }
 
@@ -163,6 +169,8 @@ const BASE_SOURCES: DataSourceDef[] = [
       "Partial contact (name / email / phone as typed)",
       "Partial vehicle info",
       "Attribution + behavior",
+      "Device and input type",
+      "Focus/blur tab-switching",
       "Whether an owner alert was already sent",
     ],
     storage: "AutoOfferLeads (status = partial)",
@@ -182,6 +190,9 @@ const BASE_SOURCES: DataSourceDef[] = [
       "Field focus / blur + form errors",
       "VIN decode funnel",
       "Exit-intent + resume prompts",
+      "Scroll depth on offer page",
+      "Copy-to-clipboard & phone tap",
+      "Field autofill vs typed",
       "Session + visitor ids",
     ],
     storage: "AutoOfferEvents (DynamoDB, ~12-month TTL)",
@@ -199,6 +210,9 @@ const BASE_SOURCES: DataSourceDef[] = [
       "UTM source / medium / campaign / content / term",
       "Google click id (gclid)",
       "Meta click id (fbclid)",
+      "gbraid / wbraid capture",
+      "Network + placement",
+      "Ad creative + campaign ID",
       "External referrer + landing page",
       "Full multi-touch journey (oldest → newest)",
     ],
@@ -252,6 +266,8 @@ const BASE_SOURCES: DataSourceDef[] = [
       "Conversation + message history",
       "Visitor name + contact",
       "Who replied last (the needs-reply cue)",
+      "Page the chat started on",
+      "Device and OS",
     ],
     storage: "AutoOfferChats (DynamoDB)",
     freshHrs: 168,
@@ -263,7 +279,15 @@ const BASE_SOURCES: DataSourceDef[] = [
     label: "Geo enrichment",
     category: "firstParty",
     purpose: "Coarse location resolved from each lead's IP address.",
-    collects: ["Country / province / city", "Resolved-at timestamp"],
+    collects: [
+      "Country / province / city",
+      "Postal / FSA code",
+      "Latitude / longitude",
+      "ISP / connection org",
+      "ASN + calling code",
+      "Timezone (IANA)",
+      "Resolved-at timestamp",
+    ],
     storage: "Embedded on each lead (Lead.geo)",
     freshHrs: 168,
     quietDays: 30,
@@ -335,6 +359,9 @@ const BASE_SOURCES: DataSourceDef[] = [
     collects: [
       "Page views + route changes",
       "Funnel + click events (mirrored to GA4)",
+      "Vehicle params on events",
+      "Form-error / validation events",
+      "Custom scroll & timing events",
       "GA client id / session id (the _ga cookie)",
     ],
     storage: "Sent to Google — measured here only by proxy",
@@ -352,6 +379,11 @@ const BASE_SOURCES: DataSourceDef[] = [
     purpose: "The browser pixel that sends PageView / Lead events to Meta.",
     collects: [
       "PageView, Search, ViewContent, InitiateCheckout, Lead",
+      "Contact standard event",
+      "Schedule standard event",
+      "Purchase on car bought",
+      "CompleteRegistration event",
+      "external_id matching",
       "Meta browser cookies (fbp / fbc)",
       "Deduplicated with the server-side CAPI events",
     ],

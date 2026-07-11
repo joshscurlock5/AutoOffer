@@ -1715,7 +1715,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
             </span>
           ))}
         </div>
-        <div className="mt-1.5 text-[10px] text-muted">A data point can carry several. Effort tags (⚙️ 🔧 💵) show only on “could collect” ideas. Hover any label or icon for its full meaning.</div>
+        <div className="mt-1.5 text-[10px] text-muted">A data point can carry several. Effort tags (⚙️ 🔧 💵) show on “worth building” and “could collect” ideas. Hover any label or icon for its full meaning.</div>
       </div>
       {groups.map((g) => (
         <div key={g.cat} className="mb-6">
@@ -1853,7 +1853,7 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
             <div className="mt-5 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
                 Collected — usage at a glance
-                <InfoDot tip="Data this source already captures. The pill on each shows its real status right now: In use (surfaced in the dashboard), Partly used, Not built yet (data exists, view pending), Needs a setting (a toggle in GA4/Meta/Clarity), or Waiting (idle until the instant estimate or SMS is switched on). Hover a pill for detail." />
+                <InfoDot tip="What's being done with data this source already collects — everything here is live today: surfaced in the dashboard or driving an automated action. Hover an item for what it's for." />
               </div>
               <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {def.underutilized.map((it) => (
@@ -1865,11 +1865,27 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
               </ul>
             </div>
           )}
+          {def.buildNext && def.buildNext.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                Worth building — zero-friction upgrades
+                <InfoDot tip="The to-do list: data or views this source could have WITHOUT asking the seller for anything extra. The pill shows how far along each is — Partly used = partially set up; Not built yet = not set up at all; Needs a setting = just a toggle in the vendor's dashboard; Waiting = wired but idle until an upstream feature (the instant estimate, or SMS) is switched on." />
+              </div>
+              <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {def.buildNext.map((it) => (
+                  <li key={it.label} className="flex items-start gap-2 text-sm text-navy">
+                    <span className="mt-0.5 text-sky-500">◔</span>
+                    <span>{it.label}<InfoDot tip={it.why} /><TagMarks sourceId={def.id} label={it.label} /><UseStatusBadge sourceId={def.id} label={it.label} /></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {def.opportunities && def.opportunities.length > 0 && (
             <div className="mt-4 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-brand-600">
                 Could collect — status at a glance
-                <InfoDot tip="More this source could capture. A green 'In use' pill means it has since been built (it's live) — anything without a pill genuinely isn't set up yet; hover its effort tag (⚙️ config · 🔧 dev · 💵 paid) for what adding it would take, and hover the idea for why it's worth it." />
+                <InfoDot tip="Deliberately not collected (yet): each of these would add friction for the seller (another form field, a survey), need a paid tier, or depend on a feature that doesn't exist. Hover the effort tag (⚙️ config · 🔧 dev · 💵 paid) for what adding it would take, and the idea itself for why it might be worth it." />
               </div>
               <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {def.opportunities.map((it) => (
