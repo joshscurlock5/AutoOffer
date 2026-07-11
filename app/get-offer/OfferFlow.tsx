@@ -312,6 +312,7 @@ export default function OfferFlow() {
   // Toggle the single "No known issues" chip. Selecting it clears any typed note
   // (the two states are mutually exclusive).
   function toggleNoKnownIssues() {
+    track("condition_chip", { tag: DAMAGE_CLEAN, on: !noKnownIssues });
     if (noKnownIssues) {
       setDamageTags([]);
     } else {
@@ -355,6 +356,7 @@ export default function OfferFlow() {
         model,
         trim: trim === TRIM_UNSURE ? "" : trim,
         mileageKm: kmv,
+        condition: { tags: damageTags, note: damageNote.trim().slice(0, 500) },
         attribution: getAttribution(),
         touches: getTouches(),
         behavior: mergedBehavior(),
@@ -936,6 +938,7 @@ export default function OfferFlow() {
                     autoCapitalize="characters"
                     autoCorrect="off"
                     spellCheck={false}
+                    data-clarity-unmask="true"
                   />
                   <p className="mt-1.5 text-xs text-muted">
                     Find it on your registration, insurance card, or the driver-side dashboard / door jamb.
@@ -954,14 +957,14 @@ export default function OfferFlow() {
                 <div className="mt-6 grid grid-cols-1 gap-4">
                   <div>
                     <label className="label" htmlFor="year">Year</label>
-                    <select id="year" className="field" value={year} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_year_selected"); setYear(e.target.value); }}>
+                    <select id="year" className="field" value={year} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_year_selected"); setYear(e.target.value); }} data-clarity-unmask="true">
                       <option value="">Select year</option>
                       {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="label" htmlFor="make">Make</label>
-                    <select id="make" className="field" value={make} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_make_selected"); setMake(e.target.value); setModel(""); setTrim(""); }}>
+                    <select id="make" className="field" value={make} onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_make_selected"); setMake(e.target.value); setModel(""); setTrim(""); }} data-clarity-unmask="true">
                       <option value="">Select make</option>
                       {MAKES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
@@ -974,6 +977,7 @@ export default function OfferFlow() {
                       value={model}
                       disabled={!make}
                       onChange={(e) => { once("offer_form_start"); if (e.target.value) once("offer_model_selected"); setModel(e.target.value); setTrim(""); }}
+                      data-clarity-unmask="true"
                     >
                       <option value="">{make ? "Select model" : "Select a make first"}</option>
                       {models.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -1027,6 +1031,7 @@ export default function OfferFlow() {
                     value={trim}
                     disabled={trimsLoading}
                     onChange={(e) => { if (e.target.value) once("details_trim_selected"); setTrim(e.target.value); }}
+                    data-clarity-unmask="true"
                   >
                     <option value="">{trimsLoading ? "Loading trims…" : "Select trim"}</option>
                     {[...trims].sort((a, b) => a.item.localeCompare(b.item)).map((t) => (
@@ -1040,7 +1045,7 @@ export default function OfferFlow() {
                 </div>
                 <div>
                   <label className="label" htmlFor="km">Mileage (km)</label>
-                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => { if (e.target.value) once("details_mileage_entered"); setKmv(e.target.value); }} onFocus={() => track("field_focus", { field: "mileage" })} onBlur={() => track("field_blur", { field: "mileage", filled: !!kmv })} />
+                  <input id="km" type="number" inputMode="numeric" min={0} className="field" placeholder="e.g. 80000" value={kmv} onChange={(e) => { if (e.target.value) once("details_mileage_entered"); setKmv(e.target.value); }} onFocus={() => track("field_focus", { field: "mileage" })} onBlur={() => track("field_blur", { field: "mileage", filled: !!kmv })} data-clarity-unmask="true" />
                   <p className="mt-1.5 text-xs text-muted">A rough, approximate number is totally fine.</p>
                 </div>
               </div>

@@ -98,6 +98,11 @@ export interface Attribution {
   matchType?: string;
   adNetwork?: string;
   placement?: string;
+  /** More ValueTrack tokens ({keyword} / {device} / {loc_physical_ms}) — the
+   * exact search typed, device at the ad click, and click-location criterion. */
+  keyword?: string;
+  adDevice?: string;
+  locPhysical?: string;
   utmId?: string;
   /** External referrer at first touch (same-origin referrers are dropped). */
   referrer?: string;
@@ -123,6 +128,9 @@ export interface Touch {
   matchType?: string;
   adNetwork?: string;
   placement?: string;
+  keyword?: string;
+  adDevice?: string;
+  locPhysical?: string;
   utmId?: string;
   referrer?: string;
   landingPath?: string;
@@ -413,6 +421,15 @@ export interface Enrichment {
    * is outside Canada while the phone is Canadian) — a soft travel/VPN/quality
    * signal, never an auto-reject. */
   regionMismatch?: boolean;
+  /** The IP's international calling code isn't Canada/US (+1) — a cheap
+   * offshore-submission tell computed from geo already on the lead. */
+  foreignNumber?: boolean;
+  /** The IP's IANA timezone is outside Canada — a "local" lead browsing from
+   * another time zone (travel, VPN, or out-of-province spam). */
+  tzMismatch?: boolean;
+  /** How many OTHER leads share this lead's network (geo.asn) — 2+ from one
+   * unusual network suggests a single actor spamming the form. */
+  sameNetworkLeads?: number;
   /** Pre-inspection warnings parsed from the condition chips + note (branded
    * title, possible lien, not running, …) — from data the seller already gave. */
   conditionFlags?: string[];
@@ -572,6 +589,12 @@ export interface Ga4Traffic {
   byCity?: { label: string; users: number }[];
   byChannel?: { label: string; users: number; sessions: number }[];
   byLanding?: { label: string; users: number; sessions: number }[];
+  /** Key events (conversions) crossed with session source/medium — GA4's own
+   * leads-per-source view. Zero rows until events are marked Key in GA4 admin. */
+  leadsBySource?: { label: string; keyEvents: number; sessions: number }[];
+  /** Day-of-week (0=Sun per GA4) × hour sessions grid — when VISITORS browse,
+   * the traffic-side twin of the first-party lead-arrival heatmap. */
+  visitHeat?: { dow: number; hour: number; sessions: number }[];
 }
 
 export interface Referral {
@@ -656,6 +679,9 @@ export interface ChatConversation {
   visitorId?: string;
   sessionId?: string;
   startedOnPath?: string;
+  /** Most recent page the visitor messaged from (updated on every message,
+   * unlike startedOnPath which keeps the first). */
+  lastPath?: string;
   attribution?: Attribution;
   userAgent?: string;
   clientIp?: string;

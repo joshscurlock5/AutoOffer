@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, getLeads, markLookupConverted, updateLead } from "@/lib/store";
+import { addLead, getLeads, getReferrals, markLookupConverted, updateLead, updateReferral } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
@@ -245,6 +245,21 @@ export async function POST(req: NextRequest) {
     // block or fail a lead.
     const lookupId = str(form.get("lookupId"));
     if (lookupId) await markLookupConverted(lookupId, id);
+    // Referral redemption: if this lead typed in a referrer's code, auto-advance
+    // that referral from "new" to "qualified". Best-effort and strictly after the
+    // lead is saved — a lookup/match/update failure here must never block or fail
+    // lead creation.
+    if (lead.referralCode) {
+      try {
+        const code = lead.referralCode.trim().toLowerCase();
+        const match = (await getReferrals()).find((r) => r.code.trim().toLowerCase() === code);
+        if (match && match.status === "new") {
+          await updateReferral(match.id, { status: "qualified" });
+        }
+      } catch (e) {
+        console.error("[leads] referral redemption failed", e);
+      }
+    }
     // Meta Conversions API "Lead" event (server-side; best-effort, after the lead
     // is saved — can never affect it). Shares metaEventId with the browser Pixel
     // event so Meta dedupes; PII is hashed inside sendCapiLead. Skipped entirely

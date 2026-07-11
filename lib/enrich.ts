@@ -197,3 +197,35 @@ export function geoPhoneMismatch(
   if (!gRegion) return undefined; // couldn't resolve the IP's province
   return gRegion !== pPhone;
 }
+
+/** True when the IP's international calling code is present and it's NOT
+ * Canada/US (+1) — a cheap offshore-submission tell from geo data already on
+ * the lead (no phone parsing needed). */
+export function foreignCallingCode(callingCode?: string): boolean {
+  const c = (callingCode || "").trim().replace(/^\+/, "");
+  if (!c) return false;
+  return c !== "1";
+}
+
+/** Canadian IANA time zones, including the deprecated Canada/* aliases some
+ * lookups still return. */
+const CANADA_TIMEZONES = new Set([
+  "America/Vancouver", "America/Edmonton", "America/Regina", "America/Swift_Current",
+  "America/Winnipeg", "America/Toronto", "America/Montreal", "America/Halifax",
+  "America/Moncton", "America/Glace_Bay", "America/Goose_Bay", "America/St_Johns",
+  "America/Whitehorse", "America/Dawson", "America/Dawson_Creek", "America/Fort_Nelson",
+  "America/Yellowknife", "America/Inuvik", "America/Cambridge_Bay", "America/Resolute",
+  "America/Rankin_Inlet", "America/Iqaluit", "America/Blanc-Sablon", "America/Atikokan",
+  "America/Creston",
+  "Canada/Atlantic", "Canada/Central", "Canada/Eastern", "Canada/Mountain",
+  "Canada/Newfoundland", "Canada/Pacific", "Canada/Saskatchewan", "Canada/Yukon",
+]);
+
+/** True when the IP's IANA timezone is present and it's NOT a Canadian zone —
+ * a "local" lead browsing from another time zone (travel, VPN, or
+ * out-of-province spam). */
+export function timezoneOutsideCanada(tz?: string): boolean {
+  const t = (tz || "").trim();
+  if (!t) return false;
+  return !CANADA_TIMEZONES.has(t);
+}

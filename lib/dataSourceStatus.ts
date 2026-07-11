@@ -46,7 +46,6 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     // worth building
     "Field completion order": "todo",
     "Scroll depth / CTA seen": "partial",
-    "Condition on the partial beacon": "todo",
     // could collect (dormant machinery: the lookups table covers it when the estimate returns)
     "Vehicle info without contact": "dormant",
   },
@@ -62,7 +61,6 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Resume-prompt conversion rate": "partial",
     "Rage & dead clicks": "partial",
     "Referrer & UTM on event": "partial",
-    "Condition-chip engagement": "todo",
     "Session-level intent score": "partial",
   },
   attribution: {
@@ -72,10 +70,11 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Touch count per lead": "live",
     "Landing page path patterns": "live",
     "Referrer-quality segmentation": "live",
-    // worth building
-    "Keyword + match type": "partial",
-    "Device type at click": "partial",
-    "Physical location ID": "todo",
+    // worth building — the three ValueTrack params are captured in code; they
+    // populate only once a Google Ads tracking template carries them
+    "Keyword + match type": "config",
+    "Device type at click": "config",
+    "Physical location ID": "config",
     "gclid campaign-side join": "todo",
     "Cross-device stitch key": "partial",
   },
@@ -94,9 +93,9 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Referrer's own attribution": "live",
     "Referral message intent": "live",
     "Self-referral / fraud flags": "live",
+    "Referral code redemption status": "live",
     // worth building
     "Friend contact = warm lead": "todo",
-    "Referral code redemption status": "partial",
     "Referrer-friend relationship graph": "todo",
     "Time-to-referral latency": "todo",
     "Share channel used": "todo",
@@ -109,8 +108,8 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Returning vs new visitor": "live",
     "Referrer and search terms": "live",
     "Chat-to-lead linkage": "live",
+    "Current page context": "live",
     // worth building
-    "Current page context": "partial",
     "Chat tags/dispositions": "todo",
     "Missed-chat tracking": "partial",
     "First-response time metric": "partial",
@@ -120,10 +119,9 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
   geo: {
     // usage at a glance
     "IP vs phone-region check": "live",
-    // worth building
-    "Timezone vs. form time": "partial",
-    "ASN-based repeat detection": "todo",
-    "Foreign-number flag": "todo",
+    "Timezone vs. form time": "live",
+    "ASN-based repeat detection": "live",
+    "Foreign-number flag": "live",
   },
   metaAds: {
     // usage at a glance
@@ -131,12 +129,12 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Offline conversion upload": "live",
     "CRM custom-audience sync": "live",
     "Suppression of bought sellers": "live",
+    "Region + DMA breakdown": "live",
+    "Placement-level cost-per-lead": "live",
+    "Ad relevance diagnostics": "live",
     // worth building
-    "Region + DMA breakdown": "todo",
     "Hourly performance breakdown": "todo",
-    "Placement-level cost-per-lead": "todo",
     "Age & gender of leads": "todo",
-    "Ad relevance diagnostics": "todo",
     "Ad-level UTM & ad ID join": "partial",
     "Value-based lookalike audiences": "config",
     "Audience match rate": "config",
@@ -147,13 +145,13 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "City and region breakdown": "live",
     "New vs returning behavior": "live",
     "Session default channel group": "live",
+    "Hour and day-of-week": "live",
     // worth building
-    "Source/medium by conversion": "partial",
+    "Source/medium by conversion": "config",
     "Engagement rate by segment": "partial",
     "Device category conversion gap": "config",
-    "Form-funnel key events": "partial",
+    "Form-funnel key events": "config",
     "Landing page + query string": "partial",
-    "Hour and day-of-week": "partial",
     "Session campaign name": "todo",
     "Cohort / retention report": "config",
     "Scroll depth on offer page": "todo",
@@ -177,7 +175,7 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     // worth building
     "Outbound & tel: clicks": "partial",
     "Lead-value on submit": "dormant",
-    "Offer/booking as conversions": "partial",
+    "Offer/booking as conversions": "config",
     "User-scoped lead status": "todo",
     "Condition/damage parameter": "partial",
     "Google Ads / signal linking": "config",
@@ -205,12 +203,12 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Identify leads by ID": "live",
     "Custom tag: traffic source": "live",
     "Consent-gated recording": "live",
+    "Unmask non-sensitive fields": "live",
     // worth building
     "GA4 Clarity Playback URL": "config",
     "Custom tag: lead status": "todo",
     "Smart event: offer viewed": "todo",
     "Booking-page funnel event": "todo",
-    "Unmask non-sensitive fields": "config",
   },
   email: {
     // usage at a glance
@@ -219,11 +217,11 @@ export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
     "Open/click count per lead": "live",
     "Bounce reason surfacing": "live",
     "Reply-detected auto-warm": "live",
+    "Delivery-delayed events": "live",
+    "Tag emails by stage": "live",
+    "Idempotency keys": "live",
     // worth building
-    "Delivery-delayed events": "partial",
-    "Tag emails by stage": "todo",
     "Tag offer price band": "todo",
-    "Idempotency keys": "todo",
   },
   sms: {
     // worth building — everything ships dormant until Twilio/A2P is configured

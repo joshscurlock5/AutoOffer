@@ -110,8 +110,15 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
       { dateRanges, ...df, dimensions: [{ name: "city" }], metrics: [{ name: "totalUsers" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
       { dateRanges, ...df, dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }] },
       { dateRanges, ...df, dimensions: [{ name: "landingPage" }], metrics: [{ name: "totalUsers" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }], limit: 12 },
+      // GA4's own leads-per-source view — key events (conversions) crossed with
+      // session source/medium, ordered by key events first so the top rows are
+      // the sources that actually convert, not just the busiest.
+      { dateRanges, ...df, dimensions: [{ name: "sessionSourceMedium" }], metrics: [{ name: "keyEvents" }, { name: "sessions" }], orderBys: [{ metric: { metricName: "keyEvents" }, desc: true }, { metric: { metricName: "sessions" }, desc: true }], limit: 12 },
+      // Day-of-week × hour sessions grid — when visitors browse, the traffic-side
+      // twin of the first-party lead-arrival heatmap.
+      { dateRanges, ...df, dimensions: [{ name: "dayOfWeek" }, { name: "hour" }], metrics: [{ name: "sessions" }] },
     ];
-    // GA4's batchRunReports caps at 5 report requests per call — we ask for 9, so
+    // GA4's batchRunReports caps at 5 report requests per call — we ask for 11, so
     // chunk into batches of 5, preserving order so the index mapping below holds.
     const CHUNK = 5;
     const reports: GaReport[] = [];
@@ -149,6 +156,12 @@ export async function getGa4Traffic(days = 30, country?: string): Promise<Ga4Tra
       byCity: (reports[6]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value) })),
       byChannel: (reports[7]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
       byLanding: (reports[8]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", users: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
+      leadsBySource: (reports[9]?.rows || []).map((row) => ({ label: row.dimensionValues?.[0]?.value || "(unknown)", keyEvents: num(row.metricValues?.[0]?.value), sessions: num(row.metricValues?.[1]?.value) })),
+      // dayOfWeek/hour come back as numeric strings ("0".."6" / "00".."23") — parse
+      // and drop any row that doesn't come back as a real number.
+      visitHeat: (reports[10]?.rows || [])
+        .map((row) => ({ dow: Number(row.dimensionValues?.[0]?.value), hour: Number(row.dimensionValues?.[1]?.value), sessions: num(row.metricValues?.[0]?.value) }))
+        .filter((r) => Number.isFinite(r.dow) && Number.isFinite(r.hour)),
     };
     dataCache.set(key, { at: Date.now(), data });
     lastGa4Error = null;

@@ -65,6 +65,12 @@ export async function emitOfferSent(lead: Lead): Promise<void> {
         actionSource: "system_generated",
         user: stageUser(lead),
       }),
+      sendGa4Event({
+        name: "offer_sent",
+        clientId: lead.gaClientId,
+        sessionId: lead.gaSessionId,
+        params: lead.offer ? { value: Math.round((lead.offer.low + lead.offer.high) / 2) } : {},
+      }),
       addEvents([fpEvent(lead, "offer_sent")]),
     ]);
   } catch {

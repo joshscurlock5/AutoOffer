@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addChatMessage, getConversation } from "@/lib/store";
+import { addChatMessage, getConversation, updateConversation } from "@/lib/store";
 import { notifyNewChatMessage } from "@/lib/notify";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
 import { parseAttribution } from "@/lib/attribution";
@@ -52,6 +52,16 @@ export async function POST(req: NextRequest) {
     });
     if (!conv) {
       return NextResponse.json({ error: "Could not send." }, { status: 500 });
+    }
+    // Track the visitor's current page on every message (unlike startedOnPath,
+    // which addChatMessage only sets once via if_not_exists). Best-effort — a
+    // failure here must never block the chat send.
+    if (startedOnPath) {
+      try {
+        await updateConversation(conv.id, { lastPath: startedOnPath });
+      } catch (e) {
+        console.error("[chat] lastPath update failed", e);
+      }
     }
     // Telegram alert on every visitor message (best-effort; must be awaited so the
     // Lambda doesn't freeze first). Use the conversation's stored contact/name so

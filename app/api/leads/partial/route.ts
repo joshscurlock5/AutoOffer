@@ -30,6 +30,30 @@ function str(v: unknown): string {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits = (s: string) => s.replace(/\D/g, "");
 
+/** Parse the damage/condition the client sent (mirrors app/api/leads/route.ts's
+ * parseCondition — same whitelist/clamps: tags are string-only, length- and
+ * count-capped; the note is trimmed and clamped). This endpoint's body is JSON
+ * (not FormData), so the value arrives already-parsed rather than as a string.
+ * Never throws; drops silently so a malformed beacon never fails the request. */
+function parseCondition(raw: unknown): { tags: string[]; note?: string } | undefined {
+  try {
+    const o = raw as { tags?: unknown; note?: unknown } | null | undefined;
+    if (!o || typeof o !== "object") return undefined;
+    const tags: string[] = Array.isArray(o.tags)
+      ? o.tags
+          .filter((t: unknown): t is string => typeof t === "string")
+          .map((t: string) => t.trim().slice(0, 60))
+          .filter(Boolean)
+          .slice(0, 10)
+      : [];
+    const note = typeof o.note === "string" ? o.note.trim().slice(0, 500) : "";
+    if (!tags.length && !note) return undefined;
+    return note ? { tags, note } : { tags };
+  } catch {
+    return undefined;
+  }
+}
+
 // This route has no Turnstile (it fires on every field blur, pre-submit), so
 // form-filling bots/crawlers would otherwise become "Abandoned" partial leads
 // that get real recovery emails and enter the Meta audience CSVs. A missing or
@@ -74,8 +98,11 @@ export async function POST(req: NextRequest) {
       | "call"
       | "text"
       | "email";
+    const condition = parseCondition(body.condition);
     const vehicle: VehicleInfo | undefined =
-      year || make || model ? { year, make, model, trim: trim || undefined, mileageKm } : undefined;
+      year || make || model
+        ? { year, make, model, trim: trim || undefined, mileageKm, ...(condition ? { condition } : {}) }
+        : undefined;
 
     // Per-person profile enrichment (mirrors the full lead route).
     const attribution = parseAttribution(body.attribution);

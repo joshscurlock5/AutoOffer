@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
+import type { AdInsightAdRanked, RegionInsightRow, PlacementInsightRow } from "@/lib/metaAds";
 import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import { tagsFor, TAG_META, EFFORT_META, TAG_ORDER, type EffortTag } from "@/lib/dataSourceTags";
 import { useStatusFor, USE_STATUS_META } from "@/lib/dataSourceStatus";
@@ -265,12 +266,22 @@ function MiniBars({ title, rows, tip }: { title: string; rows: { day: string; va
   );
 }
 
-function Heatmap({ grid, tip }: { grid: number[][]; tip?: string }) {
+function Heatmap({
+  grid,
+  tip,
+  title = "When leads arrive (day × hour, Mountain time)",
+  unit = "lead",
+}: {
+  grid: number[][];
+  tip?: string;
+  title?: string;
+  unit?: string;
+}) {
   const max = Math.max(1, ...grid.flat());
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return (
     <div className="card overflow-x-auto p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">When leads arrive (day × hour, Mountain time){tip && <InfoDot tip={tip} />}</h3>
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       <div className="min-w-[560px] space-y-0.5">
         {grid.map((row, d) => (
           <div key={d} className="flex items-center gap-0.5">
@@ -280,7 +291,7 @@ function Heatmap({ grid, tip }: { grid: number[][]; tip?: string }) {
                 key={h}
                 className="h-4 flex-1 rounded-sm"
                 style={{ backgroundColor: c ? `rgba(37,99,235,${0.18 + 0.82 * (c / max)})` : "#f1f5f9" }}
-                title={`${days[d]} ${h}:00 — ${c} lead${c === 1 ? "" : "s"}`}
+                title={`${days[d]} ${h}:00 — ${c} ${unit}${c === 1 ? "" : "s"}`}
               />
             ))}
           </div>
@@ -508,6 +519,39 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                     </span>
                   </div>
                 )}
+                {p.enrichment.foreignNumber && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Foreign network</span>
+                    <span
+                      className="min-w-0 text-amber-700"
+                      title="A cheap offshore-submission tell computed from the IP's geo — not an auto-reject."
+                    >
+                      ⚠ The IP&apos;s calling code isn&apos;t +1
+                    </span>
+                  </div>
+                )}
+                {p.enrichment.tzMismatch && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Timezone check</span>
+                    <span
+                      className="min-w-0 text-amber-700"
+                      title="Could be travel, a VPN, or an out-of-province lead — a soft signal, not a reject."
+                    >
+                      ⚠ The IP&apos;s timezone is outside Canada
+                    </span>
+                  </div>
+                )}
+                {(p.enrichment.sameNetworkLeads ?? 0) >= 2 && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Shared network</span>
+                    <span
+                      className="min-w-0 text-amber-700"
+                      title="2+ leads from one unusual network suggests a single actor spamming the form — a soft signal, not a reject."
+                    >
+                      ⚠ {p.enrichment.sameNetworkLeads} other lead{p.enrichment.sameNetworkLeads === 1 ? "" : "s"} came from this same network
+                    </span>
+                  </div>
+                )}
                 {p.enrichment.conditionFlags && p.enrichment.conditionFlags.length > 0 && (
                   <div className="flex gap-2">
                     <span className="w-28 shrink-0 text-muted">Condition flags</span>
@@ -557,6 +601,14 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                   <div className="flex gap-2">
                     <span className="w-28 shrink-0 text-muted">Bounce reason</span>
                     <span className="min-w-0 truncate text-red-600" title={p.emailEngagement.lastBounceReason}>{p.emailEngagement.lastBounceReason}</span>
+                  </div>
+                )}
+                {p.emailEngagement?.lastDelayedAt && (
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 text-muted">Delivery delayed</span>
+                    <span className="min-w-0 text-amber-700" title="A soft/greylist delay (delivery_delayed) — a stuck-in-retry signal, not a bounce.">
+                      {timeAgo(p.emailEngagement.lastDelayedAt)}
+                    </span>
                   </div>
                 )}
                 {p.smsEngagement && (
@@ -1097,8 +1149,26 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
   );
 }
 
+// Meta's per-ad diagnostic rankings, relative to other advertisers competing
+// for the same audience — green/slate/red pills, hidden when Meta hasn't
+// scored the ad yet ("unknown" or absent).
+const RANKING_STYLE: Record<string, string> = {
+  above_average: "bg-emerald-100 text-emerald-700",
+  average: "bg-slate-100 text-slate-600",
+  below_average: "bg-red-100 text-red-700",
+};
+function RankingPill({ label, value }: { label: string; value?: string }) {
+  if (!value || value === "unknown") return null;
+  const style = RANKING_STYLE[value.toLowerCase()] || "bg-red-100 text-red-700";
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style}`} title={`${label} ranking: ${value.replace(/_/g, " ")}`}>
+      {label}
+    </span>
+  );
+}
+
 /** Creative-level table from level=ad rows: link CTR + hook/hold + Meta leads. */
-function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
+function CreativeTable({ ads }: { ads: AdInsightAdRanked[] }) {
   const rows = useMemo(() => [...ads].sort((a, b) => b.spend - a.spend), [ads]);
   return (
     <div className="card overflow-x-auto p-4">
@@ -1118,12 +1188,13 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
             <th className="px-2 text-right" title="3-second video plays ÷ impressions.">Hook %</th>
             <th className="px-2 text-right" title="ThruPlays ÷ 3-second video plays.">Hold %</th>
             <th className="px-2 text-right" title="Meta Pixel leads attributed to this ad.">Leads</th>
-            <th className="pl-2 text-right" title="Meta spend ÷ Meta leads.">CPL</th>
+            <th className="px-2 text-right" title="Meta spend ÷ Meta leads.">CPL</th>
+            <th className="pl-2" title="Meta's per-ad diagnostic rankings vs other advertisers competing for the same audience.">Rankings</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={10} className="py-3 text-muted">No ads in range.</td></tr>
+            <tr><td colSpan={11} className="py-3 text-muted">No ads in range.</td></tr>
           ) : (
             rows.map((r) => (
               <tr key={r.adId || r.ad} className="border-b border-slate-100">
@@ -1142,7 +1213,57 @@ function CreativeTable({ ads }: { ads: AdInsightAd[] }) {
                 <td className="px-2 text-right">{r.hookRate != null ? `${r.hookRate.toFixed(1)}%` : "—"}</td>
                 <td className="px-2 text-right">{r.holdRate != null ? `${r.holdRate.toFixed(1)}%` : "—"}</td>
                 <td className="px-2 text-right">{r.leads ?? "—"}</td>
-                <td className="pl-2 text-right font-semibold">{money2(r.costPerLead ?? (r.leads ? r.spend / r.leads : null))}</td>
+                <td className="px-2 text-right font-semibold">{money2(r.costPerLead ?? (r.leads ? r.spend / r.leads : null))}</td>
+                <td className="pl-2">
+                  <div className="flex flex-wrap gap-1">
+                    <RankingPill label="Qual" value={r.qualityRanking} />
+                    <RankingPill label="Eng" value={r.engagementRateRanking} />
+                    <RankingPill label="Conv" value={r.conversionRateRanking} />
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Compact spend/leads/cost-per-lead breakdown — shared by the region and
+ * placement views below the creative table. */
+function BreakdownTable({
+  title,
+  tip,
+  rows,
+}: {
+  title: string;
+  tip?: string;
+  rows: { label: string; spend: number; leads?: number }[];
+}) {
+  const sorted = useMemo(() => [...rows].sort((a, b) => b.spend - a.spend), [rows]);
+  return (
+    <div className="card overflow-x-auto p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+      <table className="w-full min-w-[320px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
+            <th className="py-2 pr-2"></th>
+            <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
+            <th className="px-2 text-right" title="Meta Pixel leads attributed here.">Leads</th>
+            <th className="pl-2 text-right" title="Spend ÷ leads.">Cost/lead</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr><td colSpan={4} className="py-3 text-muted">No data.</td></tr>
+          ) : (
+            sorted.map((r) => (
+              <tr key={r.label} className="border-b border-slate-100">
+                <td className="py-2 pr-2 font-semibold text-navy">{r.label}</td>
+                <td className="px-2 text-right">{money(r.spend)}</td>
+                <td className="px-2 text-right">{r.leads ?? "—"}</td>
+                <td className="pl-2 text-right font-semibold">{money2(r.leads ? r.spend / r.leads : null)}</td>
               </tr>
             ))
           )}
@@ -1262,6 +1383,15 @@ function MetaExport({ profiles }: { profiles: Profile[] }) {
   );
 }
 
+// GA4's dayOfWeek×hour rows -> the same 7×24 grid shape Heatmap expects.
+function ga4HeatGrid(rows: { dow: number; hour: number; sessions: number }[]): number[][] {
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const r of rows) {
+    if (r.dow >= 0 && r.dow < 7 && r.hour >= 0 && r.hour < 24) grid[r.dow][r.hour] = r.sessions;
+  }
+  return grid;
+}
+
 function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
   const [data, setData] = useState<{ configured: boolean; traffic: Ga4Traffic | null } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1352,7 +1482,29 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
         {t.byLanding && t.byLanding.length > 0 && (
           <HBars title="Top landing pages" rows={t.byLanding.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — the pages visitors entered the site on." />
         )}
+        {t.leadsBySource && (
+          t.leadsBySource.some((s) => s.keyEvents > 0) ? (
+            <HBars
+              title="Leads by source (GA4)"
+              rows={t.leadsBySource.map((s) => ({ label: s.label, count: s.keyEvents }))}
+              tip="Google Analytics 4 — key events (conversions) crossed with session source/medium, GA4's own leads-per-source view."
+            />
+          ) : (
+            <div className="card p-4">
+              <h3 className="mb-3 text-sm font-bold text-navy">Leads by source (GA4)</h3>
+              <p className="text-sm text-muted">No key events yet — mark generate_lead as a Key event in GA4 Admin → Events.</p>
+            </div>
+          )
+        )}
       </div>
+      {t.visitHeat && t.visitHeat.length > 0 && (
+        <Heatmap
+          grid={ga4HeatGrid(t.visitHeat)}
+          title="When visitors browse (day × hour, GA4 property time)"
+          unit="session"
+          tip="Google Analytics 4 — session volume by day of week × hour, in the GA4 property's configured timezone (dow 0 = Sunday)."
+        />
+      )}
     </div>
   );
 }
@@ -1925,7 +2077,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const meta = metaRange(range);
   const ga4 = ga4Days(range);
   const [ads, setAds] = useState<{ configured: boolean; insights: AdInsight[] } | null>(null);
-  const [adLevel, setAdLevel] = useState<{ configured: boolean; ads: AdInsightAd[] } | null>(null);
+  const [adLevel, setAdLevel] = useState<{ configured: boolean; ads: AdInsightAdRanked[]; regions: RegionInsightRow[]; placements: PlacementInsightRow[] } | null>(null);
   // Data-sources health hub (passive last-seen) — fetched once, range-independent.
   const [sources, setSources] = useState<SourceHealth[] | null>(null);
   // Just the GA4 configured flag, for the Overview data-health connector chip
@@ -1941,7 +2093,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     fetch(`/api/admin/ads?range=${meta.range}&level=ad`)
       .then((r) => r.json())
       .then((d) => { if (!cancelled) setAdLevel(d); })
-      .catch(() => { if (!cancelled) setAdLevel({ configured: false, ads: [] }); });
+      .catch(() => { if (!cancelled) setAdLevel({ configured: false, ads: [], regions: [], placements: [] }); });
     return () => { cancelled = true; };
   }, [meta.range]);
 
@@ -2167,7 +2319,23 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             ) : !adLevel.configured ? (
               <div className="card p-4 text-sm text-muted">Meta ads not connected — creative metrics appear once the Marketing API is configured.</div>
             ) : (
-              <CreativeTable ads={adLevel.ads} />
+              <>
+                <CreativeTable ads={adLevel.ads} />
+                {(adLevel.regions.length > 0 || adLevel.placements.length > 0) && (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <BreakdownTable
+                      title="By region"
+                      tip="Meta Ads API — campaign spend/leads broken down by region."
+                      rows={adLevel.regions.map((r) => ({ label: r.region, spend: r.spend, leads: r.leads }))}
+                    />
+                    <BreakdownTable
+                      title="By placement"
+                      tip="Meta Ads API — campaign spend/leads broken down by publisher platform + placement position."
+                      rows={adLevel.placements.map((p) => ({ label: `${p.platform} · ${p.position}`, spend: p.spend, leads: p.leads }))}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </Section>
 

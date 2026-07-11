@@ -137,9 +137,12 @@ export default function ChatWidget() {
           conversationId: convId,
           text,
           contact: contact.trim() || undefined,
-          // First message only: context that stitches this chat to the person's
-          // profile (source, on-site activity, device). Stored once, server-side.
-          ...(convId ? {} : { visitorId: b.visitorId, sessionId: b.sessionId, path: pathname || undefined, attribution: getAttribution() }),
+          // Path rides on every message so the server can track the visitor's
+          // current page (lastPath). The rest below is first-message-only
+          // context that stitches this chat to the person's profile (source,
+          // on-site activity, device). Stored once, server-side.
+          path: pathname || undefined,
+          ...(convId ? {} : { visitorId: b.visitorId, sessionId: b.sessionId, attribution: getAttribution() }),
         }),
       });
       const d = await r.json();

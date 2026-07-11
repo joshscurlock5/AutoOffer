@@ -1424,6 +1424,9 @@ function ChatsPanel({
                 ) : (
                   <span className="mt-1 block text-xs text-muted">No contact info provided.</span>
                 )}
+                {(active.lastPath || active.startedOnPath) && (
+                  <span className="mt-1 block text-xs text-muted">On: {active.lastPath ?? active.startedOnPath}</span>
+                )}
               </div>
               {active.archived ? (
                 <button onClick={() => onRestore(active.id)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-100"><Check className="h-4 w-4" /> Restore</button>

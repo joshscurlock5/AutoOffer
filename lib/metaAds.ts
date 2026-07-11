@@ -37,7 +37,7 @@ function pickAction(arr: MetaAction[] | undefined, types: string[]): number | un
 }
 
 let cache: { at: number; range: string; data: AdInsight[] } | null = null;
-let adCache: { at: number; range: string; data: AdInsightAd[] } | null = null;
+let adCache: { at: number; range: string; data: AdInsightAdRanked[] } | null = null;
 
 // Last outcome of the campaign-insights fetch — surfaced to the Sources health
 // hub so a blocked/expired token shows up instead of looking like "no spend".
@@ -105,7 +105,8 @@ export async function getAdInsights(range = "last_30d"): Promise<AdInsight[]> {
 
 const AD_LEVEL_FIELDS =
   "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,frequency," +
-  "inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,video_thruplay_watched_actions";
+  "inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,video_thruplay_watched_actions," +
+  "quality_ranking,engagement_rate_ranking,conversion_rate_ranking";
 const AD_LEVEL_PAGE_CAP = 8;
 
 interface RawAdInsight {
@@ -116,12 +117,23 @@ interface RawAdInsight {
   inline_link_clicks?: string; inline_link_click_ctr?: string;
   actions?: MetaAction[]; cost_per_action_type?: MetaAction[];
   video_thruplay_watched_actions?: MetaAction[];
+  quality_ranking?: string; engagement_rate_ranking?: string; conversion_rate_ranking?: string;
+}
+
+/** getAdLevelInsights() rows — AdInsightAd plus Meta's per-ad diagnostic rankings
+ * ("above_average" / "average" / "below_average" / "unknown", relative to other
+ * advertisers competing for the same audience). Added here rather than on the
+ * shared AdInsightAd type (lib/types.ts) since they're specific to this fetch. */
+export interface AdInsightAdRanked extends AdInsightAd {
+  qualityRanking?: string;
+  engagementRateRanking?: string;
+  conversionRateRanking?: string;
 }
 
 /** Per-ad insights for a date preset — creative-level spend/CTR/leads plus the
  * video hook/hold metrics (3-second plays vs thruplays) used to spot weak
  * creative before it burns budget. */
-export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightAd[]> {
+export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightAdRanked[]> {
   if (!metaAdsConfigured()) return [];
   if (adCache && adCache.range === range && Date.now() - adCache.at < TTL_MS) return adCache.data;
   try {
@@ -145,7 +157,7 @@ export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightA
     if (url && page >= AD_LEVEL_PAGE_CAP) {
       console.warn("[meta-ads] ad-level paging hit the", AD_LEVEL_PAGE_CAP, "page cap; results may be truncated");
     }
-    const data: AdInsightAd[] = rows.map((d) => {
+    const data: AdInsightAdRanked[] = rows.map((d) => {
       const spend = Number(d.spend) || 0;
       const impressions = Number(d.impressions) || 0;
       const linkClicks = Number(d.inline_link_clicks) || 0;
@@ -174,6 +186,9 @@ export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightA
         thruplay,
         hookRate: impressions && video3s !== undefined ? (video3s / impressions) * 100 : undefined,
         holdRate: video3s && thruplay !== undefined ? (thruplay / video3s) * 100 : undefined,
+        qualityRanking: d.quality_ranking,
+        engagementRateRanking: d.engagement_rate_ranking,
+        conversionRateRanking: d.conversion_rate_ranking,
       };
     });
     data.sort((a, b) => b.spend - a.spend);
@@ -182,6 +197,107 @@ export async function getAdLevelInsights(range = "last_30d"): Promise<AdInsightA
   } catch (e) {
     console.error("[meta-ads] ad-level fetch failed", e);
     return adCache?.data || [];
+  }
+}
+
+export interface RegionInsightRow {
+  region: string;
+  spend: number;
+  impressions: number;
+  linkClicks: number;
+  leads?: number;
+}
+
+interface RawRegionInsight {
+  region?: string; spend?: string; impressions?: string;
+  inline_link_clicks?: string; actions?: MetaAction[];
+}
+
+let regionCache: { at: number; range: string; data: RegionInsightRow[] } | null = null;
+
+/** Campaign-level insights broken down by region (breakdowns=region) — where
+ * paid demand is geographically concentrated. Same auth/date-range/caching
+ * idiom as getAdLevelInsights. */
+export async function getRegionInsights(range = "last_30d"): Promise<RegionInsightRow[]> {
+  if (!metaAdsConfigured()) return [];
+  if (regionCache && regionCache.range === range && Date.now() - regionCache.at < TTL_MS) return regionCache.data;
+  try {
+    const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
+    const url =
+      `${API}/${acct}/insights?level=campaign&date_preset=${encodeURIComponent(range)}` +
+      `&breakdowns=region&fields=spend,impressions,inline_link_clicks,actions` +
+      `&limit=500&access_token=${encodeURIComponent(TOKEN!)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      console.error("[meta-ads] region non-OK", r.status, (await r.text().catch(() => "")).slice(0, 300));
+      return regionCache?.data || [];
+    }
+    const j = (await r.json()) as { data?: RawRegionInsight[] };
+    const data: RegionInsightRow[] = (j.data || []).map((d) => ({
+      region: d.region || "(unknown)",
+      spend: Number(d.spend) || 0,
+      impressions: Number(d.impressions) || 0,
+      linkClicks: Number(d.inline_link_clicks) || 0,
+      leads: pickAction(d.actions, LEAD_ACTION_TYPES),
+    }));
+    data.sort((a, b) => b.spend - a.spend);
+    regionCache = { at: Date.now(), range, data };
+    return data;
+  } catch (e) {
+    console.error("[meta-ads] region fetch failed", e);
+    return regionCache?.data || [];
+  }
+}
+
+export interface PlacementInsightRow {
+  platform: string;
+  position: string;
+  spend: number;
+  impressions: number;
+  linkClicks: number;
+  leads?: number;
+}
+
+interface RawPlacementInsight {
+  publisher_platform?: string; platform_position?: string;
+  spend?: string; impressions?: string;
+  inline_link_clicks?: string; actions?: MetaAction[];
+}
+
+let placementCache: { at: number; range: string; data: PlacementInsightRow[] } | null = null;
+
+/** Campaign-level insights broken down by placement (breakdowns=
+ * publisher_platform,platform_position) — spend/leads per surface (Facebook
+ * Feed, Instagram Reels, Audience Network, …). Same idiom as getAdLevelInsights. */
+export async function getPlacementInsights(range = "last_30d"): Promise<PlacementInsightRow[]> {
+  if (!metaAdsConfigured()) return [];
+  if (placementCache && placementCache.range === range && Date.now() - placementCache.at < TTL_MS) return placementCache.data;
+  try {
+    const acct = ACCOUNT!.startsWith("act_") ? ACCOUNT! : `act_${ACCOUNT}`;
+    const url =
+      `${API}/${acct}/insights?level=campaign&date_preset=${encodeURIComponent(range)}` +
+      `&breakdowns=publisher_platform,platform_position&fields=spend,impressions,inline_link_clicks,actions` +
+      `&limit=500&access_token=${encodeURIComponent(TOKEN!)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      console.error("[meta-ads] placement non-OK", r.status, (await r.text().catch(() => "")).slice(0, 300));
+      return placementCache?.data || [];
+    }
+    const j = (await r.json()) as { data?: RawPlacementInsight[] };
+    const data: PlacementInsightRow[] = (j.data || []).map((d) => ({
+      platform: d.publisher_platform || "(unknown)",
+      position: d.platform_position || "(unknown)",
+      spend: Number(d.spend) || 0,
+      impressions: Number(d.impressions) || 0,
+      linkClicks: Number(d.inline_link_clicks) || 0,
+      leads: pickAction(d.actions, LEAD_ACTION_TYPES),
+    }));
+    data.sort((a, b) => b.spend - a.spend);
+    placementCache = { at: Date.now(), range, data };
+    return data;
+  } catch (e) {
+    console.error("[meta-ads] placement fetch failed", e);
+    return placementCache?.data || [];
   }
 }
 

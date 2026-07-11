@@ -168,6 +168,7 @@ const BASE_SOURCES: DataSourceDef[] = [
     collects: [
       "Partial contact (name / email / phone as typed)",
       "Partial vehicle info",
+      "Condition on the partial beacon",
       "Attribution + behavior",
       "Device and input type",
       "Focus/blur tab-switching",
@@ -193,6 +194,7 @@ const BASE_SOURCES: DataSourceDef[] = [
       "Scroll depth on offer page",
       "Copy-to-clipboard & phone tap",
       "Field autofill vs typed",
+      "Condition-chip engagement",
       "Session + visitor ids",
     ],
     storage: "AutoOfferEvents (DynamoDB, ~12-month TTL)",

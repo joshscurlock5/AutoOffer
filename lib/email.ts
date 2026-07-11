@@ -499,12 +499,49 @@ function messageEmail(lead: Lead, message: string): Email {
 
 // ---- Resend transport -----------------------------------------------------
 
-/** POST one email (optionally scheduled). Returns its id, or "" on any failure. */
-async function postEmail(to: string, email: Email, scheduledAt?: string): Promise<string> {
+/** Resend tag values only allow ASCII letters, numbers, underscores, and dashes. */
+function sanitizeTag(s: string): string {
+  return (s || "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 256);
+}
+/** The two standard tags every send gets, for stage-level analytics in Resend
+ * (kind = which template, plus the id it's about — "lead" for lead-keyed sends,
+ * overridable via idName for sends keyed on something else, e.g. a referral). */
+function emailTags(kind: string, id: string, idName = "lead"): { name: string; value: string }[] {
+  return [
+    { name: "kind", value: sanitizeTag(kind) },
+    { name: idName, value: sanitizeTag(id) },
+  ];
+}
+/** Small deterministic hash (FNV-1a) for turning free-text content (the /moreinfo
+ * questions, a typed /message) into a short idempotency-key discriminator — not
+ * security-sensitive, just stable so identical content dedupes and different
+ * content still sends. */
+function contentKey(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/** POST one email (optionally scheduled). Returns its id, or "" on any failure.
+ * `opts.idempotencyKey` rides Resend's `Idempotency-Key` header (24h dedupe
+ * window) so a cron retry or webhook double-fire can't double-send; `opts.tags`
+ * are attached for stage-level analytics in the Resend dashboard. Both optional
+ * and additive — a caller with nothing safe to key on just omits them. */
+async function postEmail(
+  to: string,
+  email: Email,
+  scheduledAt?: string,
+  opts?: { idempotencyKey?: string; tags?: { name: string; value: string }[] },
+): Promise<string> {
   try {
+    const headers: Record<string, string> = { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" };
+    if (opts?.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
     const res = await fetch(API, {
       method: "POST",
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         from: EMAIL_FROM,
         to: [to],
@@ -512,6 +549,7 @@ async function postEmail(to: string, email: Email, scheduledAt?: string): Promis
         subject: email.subject,
         html: email.html,
         ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
+        ...(opts?.tags?.length ? { tags: opts.tags } : {}),
       }),
     });
     if (!res.ok) {
@@ -531,7 +569,10 @@ export async function sendLeadConfirmation(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, confirmationEmail(lead));
+  await postEmail(to, confirmationEmail(lead), undefined, {
+    idempotencyKey: `confirmation:${lead.id}`,
+    tags: emailTags("confirmation", lead.id),
+  });
 }
 
 /** Thank-you confirmation to the referrer. Best-effort; no-op without a config/email. */
@@ -539,7 +580,10 @@ export async function sendReferralConfirmation(ref: Referral): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = (ref.referrer.email || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return;
-  await postEmail(to, referralConfirmationEmail(ref));
+  await postEmail(to, referralConfirmationEmail(ref), undefined, {
+    idempotencyKey: `referral_confirmation:${ref.id}`,
+    tags: emailTags("referral_confirmation", ref.id, "ref"),
+  });
 }
 
 /**
@@ -555,7 +599,12 @@ export async function sendOfferEmail(
   if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
   const to = validEmail(lead);
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
-  const id = await postEmail(to, offerEmail(lead, low, high));
+  const id = await postEmail(to, offerEmail(lead, low, high), undefined, {
+    // Discriminator includes the amount so a NEW price still sends even if a
+    // prior offer at a different number already went out inside the 24h window.
+    idempotencyKey: `offer:${lead.id}:${low}-${high}`,
+    tags: emailTags("offer", lead.id),
+  });
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -568,7 +617,11 @@ export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<v
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, postOfferFollowupEmail(lead, step));
+  const kind = `post_offer_followup_${step}`;
+  await postEmail(to, postOfferFollowupEmail(lead, step), undefined, {
+    idempotencyKey: `${kind}:${lead.id}`,
+    tags: emailTags(kind, lead.id),
+  });
 }
 
 /** Day-10 extended nurture for a lead still in "new". */
@@ -576,7 +629,10 @@ export async function sendExtendedNurture(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, extendedNurtureEmail(lead));
+  await postEmail(to, extendedNurtureEmail(lead), undefined, {
+    idempotencyKey: `extended_nurture:${lead.id}`,
+    tags: emailTags("extended_nurture", lead.id),
+  });
 }
 
 /** Day-21 win-back for a lead marked "lost". */
@@ -584,7 +640,10 @@ export async function sendWinback(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, winbackEmail(lead));
+  await postEmail(to, winbackEmail(lead), undefined, {
+    idempotencyKey: `winback:${lead.id}`,
+    tags: emailTags("winback", lead.id),
+  });
 }
 
 /** Reminder to the customer before a booked inspection. */
@@ -592,7 +651,11 @@ export async function sendAppointmentReminder(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, appointmentReminderEmail(lead));
+  await postEmail(to, appointmentReminderEmail(lead), undefined, {
+    // Discriminator is the appointment time so a reschedule still sends a fresh reminder.
+    idempotencyKey: `appointment_reminder:${lead.id}:${lead.appointmentAt || ""}`,
+    tags: emailTags("appointment_reminder", lead.id),
+  });
 }
 
 /** One-time abandoned-cart recovery to a "partial" lead that left an email. */
@@ -600,7 +663,10 @@ export async function sendPartialRecovery(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, partialRecoveryEmail(lead));
+  await postEmail(to, partialRecoveryEmail(lead), undefined, {
+    idempotencyKey: `partial_recovery:${lead.id}`,
+    tags: emailTags("partial_recovery", lead.id),
+  });
 }
 
 /** Reminder while awaiting the customer's info (cron, after /moreinfo or /ask). */
@@ -608,7 +674,10 @@ export async function sendAwaitingInfoReminder(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, awaitingInfoReminderEmail(lead));
+  await postEmail(to, awaitingInfoReminderEmail(lead), undefined, {
+    idempotencyKey: `awaiting_info_reminder:${lead.id}`,
+    tags: emailTags("awaiting_info_reminder", lead.id),
+  });
 }
 
 /** /moreinfo — email the customer the questions we need answered before quoting.
@@ -617,7 +686,12 @@ export async function sendMoreInfo(lead: Lead, questions: string[]): Promise<{ o
   if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
   const to = validEmail(lead);
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
-  const id = await postEmail(to, moreInfoEmail(lead, questions));
+  const id = await postEmail(to, moreInfoEmail(lead, questions), undefined, {
+    // Discriminator is a hash of the questions — a webhook double-fire with the
+    // SAME question set dedupes, but a genuinely different ask still sends.
+    idempotencyKey: `more_info:${lead.id}:${contentKey(questions.join("|"))}`,
+    tags: emailTags("more_info", lead.id),
+  });
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -629,7 +703,12 @@ export async function sendMessageEmail(lead: Lead, message: string): Promise<{ o
   if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
   const to = validEmail(lead);
   if (!to) return { ok: false, reason: "this lead has no valid email address" };
-  const id = await postEmail(to, messageEmail(lead, message));
+  const id = await postEmail(to, messageEmail(lead, message), undefined, {
+    // Discriminator is a hash of the message text — a double-fire of the exact
+    // same message dedupes, a genuinely different message still sends.
+    idempotencyKey: `message:${lead.id}:${contentKey(message)}`,
+    tags: emailTags("message", lead.id),
+  });
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -638,7 +717,11 @@ export async function sendBookingConfirmation(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, bookingConfirmationEmail(lead));
+  await postEmail(to, bookingConfirmationEmail(lead), undefined, {
+    // Discriminator is the appointment time so a re-booking sends a fresh confirmation.
+    idempotencyKey: `booking_confirmation:${lead.id}:${lead.appointmentAt || ""}`,
+    tags: emailTags("booking_confirmation", lead.id),
+  });
 }
 
 /** Morning-of inspection reminder with a confirm button (cron-driven). */
@@ -646,7 +729,10 @@ export async function sendBookingDayOf(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, bookingDayOfEmail(lead));
+  await postEmail(to, bookingDayOfEmail(lead), undefined, {
+    idempotencyKey: `booking_day_of:${lead.id}:${lead.appointmentAt || ""}`,
+    tags: emailTags("booking_day_of", lead.id),
+  });
 }
 
 /**
@@ -660,8 +746,8 @@ export async function scheduleLeadDrip(lead: Lead): Promise<string[]> {
   const at1 = new Date(Date.now() + 2 * DAY).toISOString();
   const at2 = new Date(Date.now() + 5 * DAY).toISOString();
   const results = await Promise.allSettled([
-    postEmail(to, drip1Email(lead), at1),
-    postEmail(to, drip2Email(lead), at2),
+    postEmail(to, drip1Email(lead), at1, { idempotencyKey: `drip1:${lead.id}`, tags: emailTags("drip1", lead.id) }),
+    postEmail(to, drip2Email(lead), at2, { idempotencyKey: `drip2:${lead.id}`, tags: emailTags("drip2", lead.id) }),
   ]);
   return results.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
 }

@@ -16,7 +16,17 @@ import type {
   Enrichment,
   ScoreFactor,
 } from "./types";
-import { emailType, phoneRegion, vehicleTier, geoPhoneMismatch, conditionFlags, mileageVsMarket, referrerQuality } from "./enrich";
+import {
+  emailType,
+  phoneRegion,
+  vehicleTier,
+  geoPhoneMismatch,
+  foreignCallingCode,
+  timezoneOutsideCanada,
+  conditionFlags,
+  mileageVsMarket,
+  referrerQuality,
+} from "./enrich";
 
 // ===========================================================================
 //  Identity stitching — one Profile per PERSON.
@@ -148,9 +158,17 @@ export function buildProfiles(
     }
   }
 
+  // ASN -> total lead count across ALL leads, built once so per-profile
+  // same-network detection below is O(n) total, not a scan per profile.
+  const asnCounts = new Map<number, number>();
+  for (const lead of leads) {
+    const asn = lead.geo?.asn;
+    if (asn !== undefined) asnCounts.set(asn, (asnCounts.get(asn) || 0) + 1);
+  }
+
   const profiles: Profile[] = [];
   for (const [root, group] of groups)
-    profiles.push(buildOne(root, group, eventsBySession, eventsByVisitorId, eventsByLeadId));
+    profiles.push(buildOne(root, group, eventsBySession, eventsByVisitorId, eventsByLeadId, asnCounts));
   profiles.sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""));
   return profiles;
 }
@@ -410,6 +428,7 @@ function buildOne(
   eventsBySession: Map<string, SiteEvent[]> = new Map(),
   eventsByVisitorId: Map<string, SiteEvent[]> = new Map(),
   eventsByLeadId: Map<string, SiteEvent[]> = new Map(),
+  asnCounts: Map<number, number> = new Map(),
 ): Profile {
   const leads = group.filter((r): r is Extract<Rec, { kind: "lead" }> => r.kind === "lead").map((r) => r.lead);
   const referrals = group
@@ -527,7 +546,9 @@ function buildOne(
                 ? "Email bounced"
                 : ev.type === "complained"
                   ? "Marked email as spam"
-                  : ""
+                  : ev.type === "delivery_delayed"
+                    ? "Email delivery delayed"
+                    : ""
           : ev.type === "delivered"
             ? "Text delivered"
             : "Text failed to deliver";
@@ -611,19 +632,31 @@ function buildOne(
   const vt = vehicleTier(recentVehicle?.make, recentVehicle?.year, offerMid);
   // IP-derived province vs the phone's area-code province (soft quality flag).
   const mismatch = geoPhoneMismatch(geo?.region, geo?.countryCode, [...phones][0]) === true;
+  const foreignNumber = foreignCallingCode(geo?.callingCode);
+  const tzMismatch = timezoneOutsideCanada(geo?.timezone);
   const cf = conditionFlags(recentVehicle?.condition);
   const mvm = mileageVsMarket(recentVehicle?.year, recentVehicle?.mileageKm);
   const rq = referrerQuality(attribution?.referrer);
+  // Repeat-network detection: how many OTHER leads (any other profile) share
+  // this profile's network (geo.asn) — asnCounts is the global per-asn total
+  // (built once in buildProfiles), so subtracting this profile's own leads on
+  // that asn is O(1) here, not a rescan.
+  const asn = geo?.asn;
+  const sameNetworkLeads =
+    asn !== undefined ? (asnCounts.get(asn) || 0) - leads.filter((l) => l.geo?.asn === asn).length : undefined;
   const enrichment: Enrichment | undefined =
-    et || pr || vt || mismatch || cf.length || mvm || rq
+    et || pr || vt || mismatch || foreignNumber || tzMismatch || cf.length || mvm || rq || (sameNetworkLeads !== undefined && sameNetworkLeads >= 2)
       ? {
           ...(et ? { emailType: et } : {}),
           ...(pr ? { phoneRegion: pr } : {}),
           ...(vt ? { vehicleTier: vt.tier, ...(vt.age !== undefined ? { vehicleAge: vt.age } : {}) } : {}),
           ...(mismatch ? { regionMismatch: true } : {}),
+          ...(foreignNumber ? { foreignNumber: true } : {}),
+          ...(tzMismatch ? { tzMismatch: true } : {}),
           ...(cf.length ? { conditionFlags: cf } : {}),
           ...(mvm ? { mileageVsMarket: mvm } : {}),
           ...(rq ? { referrerQuality: rq } : {}),
+          ...(sameNetworkLeads !== undefined && sameNetworkLeads >= 2 ? { sameNetworkLeads } : {}),
         }
       : undefined;
   // Referral-derived person signals.
