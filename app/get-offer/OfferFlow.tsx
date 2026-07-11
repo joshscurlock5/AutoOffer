@@ -680,6 +680,8 @@ export default function OfferFlow() {
       fd.append("model", model);
       fd.append("trim", trim === TRIM_UNSURE ? "" : trim);
       fd.append("mileageKm", kmv);
+      // Keep the raw VIN if they used the VIN-lookup path — they already typed it.
+      if (VIN_RE.test(vin.trim())) fd.append("vin", vin.trim().toUpperCase());
       fd.append("name", name);
       fd.append("email", email);
       fd.append("phone", phone);

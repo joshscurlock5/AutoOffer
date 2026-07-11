@@ -151,9 +151,19 @@ export async function POST(req: NextRequest) {
       const model = str(form.get("model"));
       const trim = str(form.get("trim"));
       const mileageKm = Number(str(form.get("mileageKm"))) || 0;
+      // Capture the VIN too when the seller used the VIN-lookup path (already typed).
+      const vin = str(form.get("vin")).toUpperCase();
       const condition = parseCondition(str(form.get("condition")));
 
-      vehicle = { year, make, model, trim: trim || undefined, mileageKm, ...(condition ? { condition } : {}) };
+      vehicle = {
+        year,
+        make,
+        model,
+        trim: trim || undefined,
+        mileageKm,
+        ...(/^[A-HJ-NPR-Z0-9]{17}$/.test(vin) ? { vin } : {}),
+        ...(condition ? { condition } : {}),
+      };
       if (COMPUTE_ESTIMATE) {
         // Re-derive the estimate server-side. Normally a warm-cache hit (the user
         // just viewed it), so usually no extra MarketCheck call; on a cold/expired

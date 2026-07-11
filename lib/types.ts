@@ -36,6 +36,8 @@ export interface VehicleInfo {
   model: string;
   trim?: string;
   mileageKm: number;
+  /** 17-char VIN — captured when the seller uses the VIN-lookup path (optional). */
+  vin?: string;
   /** Damage / condition the seller flagged: quick-pick tags + an optional note. */
   condition?: { tags: string[]; note?: string };
 }

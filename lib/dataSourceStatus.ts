@@ -22,16 +22,13 @@ export const USE_STATUS_META: Record<UseStatus, { label: string; cls: string; de
 export const ITEM_STATUS: Record<string, Record<string, UseStatus>> = {
   leads: {
     "Best-time-to-call windows": "live",
-    "Condition note free-text": "live",
     "Return-visitor count": "live",
-    "UTM-to-vehicle patterns": "todo",
+    // Cross-tab of campaign → vehicle mix is live on the dashboard (CampaignVehicleCard).
+    "UTM-to-vehicle patterns": "live",
     "fbc/fbp offline value": "live",
     "Time-on-site as intent": "live",
-    // "Could collect" items that have since been built.
-    "Field-level timing & hesitation": "live",
-    "Abandoned-form partial capture": "live",
-    "Input method detection": "live",
-    "IP geolocation to city": "live",
+    // (Field timing, input method, abandoned capture, IP-to-city moved up to
+    //  "collecting now" — they're actively collected, not just "could collect".)
   },
   partials: {
     "Last field before exit": "live",
