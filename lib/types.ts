@@ -371,6 +371,10 @@ export interface Lead {
   referrerUrl?: string;
   /** Coarse geolocation resolved from the client IP (country/province/city). */
   geo?: Geo;
+  /** Meta Lead Ads leadgen_id — set only on leads that arrived via the Instant-Form
+   * webhook (app/api/webhooks/meta-leads); used to dedupe Meta's at-least-once
+   * webhook redelivery so a lead is created exactly once. */
+  metaLeadgenId?: string;
   /** Inbound-reply signals folded onto the profile by the SMS/email/chat handlers. */
   lastReplyAt?: string;
   repliesCount?: number;
