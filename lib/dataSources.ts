@@ -407,14 +407,14 @@ const BASE_SOURCES: DataSourceDef[] = [
       "Visitor id for stitching sessions",
       "Never records typed form data (masked by default)",
     ],
-    storage: "Sent to Microsoft — no server-side signal",
-    envVars: ["NEXT_PUBLIC_CLARITY_ID"],
+    storage: "Recordings stay at Microsoft; aggregate stats pulled back via the Data Export API",
+    envVars: ["NEXT_PUBLIC_CLARITY_ID", "CLARITY_API_TOKEN"],
     vendorUrl: "https://clarity.microsoft.com/",
     healthKind: "external",
     freshHrs: 0,
     quietDays: 0,
     fixHint:
-      "Fires client-side for every consented visitor; there's no server signal, so confirm live recordings in the Clarity dashboard.",
+      "Recordings fire client-side for every consented visitor (no server signal). Live numbers here come from the Data Export API — set CLARITY_API_TOKEN (Clarity → Settings → Data export) to show them; recordings + heatmaps always live in the Clarity dashboard.",
   },
   // ----- STEP 4: messaging & delivery (inbound + outbound receipts on leads) -----
   {

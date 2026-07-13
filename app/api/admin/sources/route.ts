@@ -5,6 +5,7 @@ import { DATA_SOURCES, statusFor, type SourceHealth, type SourceStatus, type Con
 import type { Attribution } from "@/lib/types";
 import { getMetaAdsHealth } from "@/lib/metaAds";
 import { getGa4Health } from "@/lib/ga4Data";
+import { getClarityData } from "@/lib/clarityData";
 import { marketCheckEnabled } from "@/lib/marketcheck";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [leads, referrals, chats, lookups, events, metaH, ga4H] = await Promise.all([
+  const [leads, referrals, chats, lookups, events, metaH, ga4H, clarityRes] = await Promise.all([
     getLeads(),
     getReferrals(),
     getConversations(),
@@ -42,6 +43,7 @@ export async function GET() {
     getAllEvents(),
     getMetaAdsHealth(),
     getGa4Health(),
+    getClarityData(),
   ]);
 
   const now = Date.now();
@@ -139,19 +141,32 @@ export async function GET() {
       return connectors[def.id] ?? fromConnector(def.id, { configured: false, ok: false, hasData: false });
     }
     if (def.healthKind === "external") {
-      // Fires in the browser; we can't measure it server-side. Report only
-      // whether it's installed (env set) + point to the vendor dashboard.
+      // The recorder fires in the browser (no server signal), so status reflects
+      // whether the client tag is installed (env set). For Clarity we ALSO pull
+      // aggregate stats via the Data Export API when CLARITY_API_TOKEN is set —
+      // surface the session count (or the API error) here; the full numbers ride
+      // in `clarity` on the response below.
       const configured = def.id === "clarity" ? Boolean(clarityId) : false;
+      let note = configured
+        ? "Fires client-side for consented visitors — confirm live recordings in the Clarity dashboard."
+        : "NEXT_PUBLIC_CLARITY_ID not set.";
+      let lastAt: string | null = null;
+      if (def.id === "clarity" && clarityRes.configured) {
+        if (clarityRes.insights) {
+          note = `Recording live · ${clarityRes.insights.sessions.toLocaleString("en-CA")} sessions (last ${clarityRes.insights.days} days).`;
+          lastAt = clarityRes.insights.fetchedAt;
+        } else if (clarityRes.error) {
+          note = clarityRes.error;
+        }
+      }
       return {
         id: def.id,
         configured,
-        lastAt: null,
+        lastAt,
         count24h: 0,
         count7d: 0,
         status: configured ? "external" : "unconfigured",
-        note: configured
-          ? "Fires client-side for consented visitors — confirm live recordings in the Clarity dashboard."
-          : "NEXT_PUBLIC_CLARITY_ID not set.",
+        note,
       };
     }
     const feed = feeds[def.id] || { times: [] };
@@ -179,5 +194,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ sources });
+  return NextResponse.json({ sources, clarity: clarityRes.insights });
 }

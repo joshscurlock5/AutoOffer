@@ -601,6 +601,34 @@ export interface Ga4Traffic {
   visitHeat?: { dow: number; hour: number; sessions: number }[];
 }
 
+/** One Clarity "smart insight" behaviour (rage clicks, dead clicks, etc.). */
+export interface ClarityBehavior {
+  key: string;
+  label: string;
+  /** Sessions that exhibited the behaviour in the window. */
+  sessions: number;
+  /** Share of sessions (0–100), when Clarity provides it. */
+  pct?: number;
+}
+
+/** Aggregate numbers pulled back from Microsoft Clarity's Data Export API.
+ * Clarity caps this at the last 1–3 days of data and 10 pulls/day, so it's
+ * fetched behind a multi-hour shared cache (see lib/clarityData.ts). */
+export interface ClarityInsights {
+  days: number;
+  sessions: number;
+  bots: number;
+  distinctUsers: number;
+  pagesPerSession: number;
+  /** Average scroll depth, percent. */
+  avgScrollDepth: number;
+  /** Active engagement time in seconds, when Clarity provides it. */
+  avgEngagementSec?: number;
+  behaviors: ClarityBehavior[];
+  /** ISO time we last pulled from the API (drives the "refreshed X ago" line). */
+  fetchedAt: string;
+}
+
 export interface Referral {
   id: string;
   createdAt: string;

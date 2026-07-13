@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
-import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch } from "@/lib/types";
+import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch, ClarityInsights } from "@/lib/types";
 import type { AdInsightAdRanked, RegionInsightRow, PlacementInsightRow } from "@/lib/metaAds";
 import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import { tagsFor, TAG_META, EFFORT_META, TAG_ORDER, type EffortTag } from "@/lib/dataSourceTags";
@@ -1835,7 +1835,17 @@ const GROUP_HEADING: Record<SourceCategory, string> = {
   comms: "Messaging & delivery",
 };
 
-function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
+function ClarityTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="text-lg font-bold text-navy">{value}</div>
+      <div className="text-[11px] font-medium text-muted">{label}</div>
+      {sub && <div className="text-[10px] text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+
+function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; clarity: ClarityInsights | null }) {
   const [selected, setSelected] = useState<string | null>(null);
   if (sources === null) {
     return <div className="card p-4 text-sm text-muted">Loading data sources…</div>;
@@ -2005,6 +2015,39 @@ function SourcesPanel({ sources }: { sources: SourceHealth[] | null }) {
               )}
             </div>
           </div>
+          {def.id === "clarity" && clarity && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                Live numbers — last {clarity.days} days
+                <InfoDot tip="Pulled from Microsoft Clarity's Data Export API. Clarity caps this at 3 days of history and 10 pulls/day, so it refreshes every few hours." />
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <ClarityTile label="Sessions" value={clarity.sessions.toLocaleString("en-CA")} sub={clarity.bots ? `${clarity.bots.toLocaleString("en-CA")} bots excluded` : undefined} />
+                <ClarityTile label="Distinct users" value={clarity.distinctUsers.toLocaleString("en-CA")} />
+                <ClarityTile label="Pages / session" value={clarity.pagesPerSession ? clarity.pagesPerSession.toFixed(1) : "—"} />
+                <ClarityTile label="Avg scroll depth" value={clarity.avgScrollDepth ? `${Math.round(clarity.avgScrollDepth)}%` : "—"} />
+              </div>
+              {clarity.behaviors.length > 0 && (
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  {clarity.behaviors.map((b) => (
+                    <ClarityTile
+                      key={b.key}
+                      label={b.label}
+                      value={b.sessions.toLocaleString("en-CA")}
+                      sub={b.pct != null ? `${b.pct.toFixed(1)}% of sessions` : "sessions"}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 text-[11px] text-muted">
+                Refreshed {timeAgo(clarity.fetchedAt)} · recordings + heatmaps live in the{" "}
+                <a href="https://clarity.microsoft.com/" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 hover:underline">
+                  Clarity dashboard
+                </a>
+                .
+              </div>
+            </div>
+          )}
           {def.underutilized && def.underutilized.length > 0 && (
             <div className="mt-5 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
@@ -2084,6 +2127,8 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const [adLevel, setAdLevel] = useState<{ configured: boolean; ads: AdInsightAdRanked[]; regions: RegionInsightRow[]; placements: PlacementInsightRow[] } | null>(null);
   // Data-sources health hub (passive last-seen) — fetched once, range-independent.
   const [sources, setSources] = useState<SourceHealth[] | null>(null);
+  // Clarity's aggregate stats (Data Export API) ride on the same fetch.
+  const [clarityInsights, setClarityInsights] = useState<ClarityInsights | null>(null);
   // Just the GA4 configured flag, for the Overview data-health connector chip
   // (the full traffic report is fetched lazily inside TrafficGa4 on Acquisition).
   const [ga4Ok, setGa4Ok] = useState<boolean | null>(null);
@@ -2115,7 +2160,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     let cancelled = false;
     fetch(`/api/admin/sources`)
       .then((r) => r.json())
-      .then((d) => { if (!cancelled) setSources(d.sources || []); })
+      .then((d) => { if (!cancelled) { setSources(d.sources || []); setClarityInsights(d.clarity ?? null); } })
       .catch(() => { if (!cancelled) setSources([]); });
     return () => { cancelled = true; };
   }, []);
@@ -2251,7 +2296,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       </div>
 
       {/* ---- TAB: SOURCES ---- */}
-      {tab === "sources" && <SourcesPanel sources={sources} />}
+      {tab === "sources" && <SourcesPanel sources={sources} clarity={clarityInsights} />}
 
       {/* ---- TAB 1: OVERVIEW ---- */}
       {tab === "overview" && (
