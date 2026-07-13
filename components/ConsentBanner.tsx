@@ -15,9 +15,11 @@ import { consentChoice, setConsent } from "@/lib/consent";
  * the page, then rides up to sit ABOVE the sticky CTA pill the moment it appears
  * — anchored to the pill's TOP edge via --cta-pill-top (published + kept live by
  * StickyCTA). Anchoring to the top (not the center) is what keeps it clear when
- * a resize wraps the pill's label and makes it taller. On mobile it keeps its
- * spot above the sticky bar, with right-side clearance so it never covers the
- * chat bubble.
+ * a resize wraps the pill's label and makes it taller. On mobile it tracks the
+ * chat bubble's own bottom anchor (--mobile-cta-bar) so the two stay level —
+ * rising above the sticky CTA bar when it appears and dropping back to the
+ * corner at the top of the page — with right-side clearance so it never covers
+ * the bubble.
  */
 export default function ConsentBanner() {
   const [show, setShow] = useState(false);
@@ -30,7 +32,7 @@ export default function ConsentBanner() {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-20 left-3 right-20 z-[70] transition-[bottom] duration-300 sm:right-auto sm:max-w-sm lg:bottom-[var(--cta-pill-top,1rem)] lg:left-1/2 lg:right-auto lg:max-w-xl lg:-translate-x-1/2">
+    <div className="fixed bottom-[calc(1.25rem_+_var(--mobile-cta-bar,env(safe-area-inset-bottom)))] left-3 right-20 z-[70] transition-[bottom] duration-300 sm:right-auto sm:max-w-sm lg:bottom-[var(--cta-pill-top,1rem)] lg:left-1/2 lg:right-auto lg:max-w-xl lg:-translate-x-1/2">
       <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 pl-4 shadow-lift">
         <p className="flex-1 text-[13px] leading-snug text-muted">
           We use cookies to improve your experience, analyze traffic, and personalize ads.{" "}
