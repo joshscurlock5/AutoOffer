@@ -116,8 +116,17 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
   return lines.join("\n");
 }
 
-async function sendText(text: string, chatId: string, replyMarkup?: unknown): Promise<number | undefined> {
-  const r = await fetch(api("sendMessage"), {
+// A basic group becomes a SUPERGROUP (e.g. when Topics is turned on) — which
+// PERMANENTLY changes its chat id. Telegram then rejects sends to the old id with
+// a 400 carrying `migrate_to_chat_id`. We follow that once and remember it, so a
+// stale configured id can never again silently drop alerts (which is exactly how
+// new-lead alerts went missing after the Leads group was upgraded). Per-instance
+// cache. NOTE: the configured env id should still be corrected so INBOUND button
+// taps (allow-listed in the webhook) also target the new id.
+const migratedChat = new Map<string, string>();
+
+function postMessage(chatId: string, text: string, replyMarkup?: unknown) {
+  return fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -127,9 +136,28 @@ async function sendText(text: string, chatId: string, replyMarkup?: unknown): Pr
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     }),
   });
+}
+
+/** Send a message, transparently following a basic-group→supergroup migration if
+ * the id changed. Returns the message id AND the chat id it actually landed in
+ * (so callers store the live id for later in-place edits). */
+async function sendText(
+  text: string,
+  chatId: string,
+  replyMarkup?: unknown,
+): Promise<{ messageId?: number; chatId: string }> {
+  let target = migratedChat.get(chatId) || chatId;
+  let r = await postMessage(target, text, replyMarkup);
+  let j = await r.json().catch(() => null);
+  if (!r.ok && j?.parameters?.migrate_to_chat_id) {
+    const newId = String(j.parameters.migrate_to_chat_id);
+    migratedChat.set(chatId, newId);
+    target = newId;
+    r = await postMessage(newId, text, replyMarkup);
+    j = await r.json().catch(() => null);
+  }
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
-  const j = await r.json().catch(() => null);
-  return j?.result?.message_id;
+  return { messageId: j?.result?.message_id, chatId: target };
 }
 
 /** Inline buttons on a lead alert. Top rows LOG the negotiation (their ask / our
@@ -161,14 +189,14 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
   const text = buildText(lead);
   const sid = lead.id.split("-")[0];
   try {
-    const mid = await sendText(text, chat, negKeyboard(lead));
+    const sent = await sendText(text, chat, negKeyboard(lead));
     // Second message: the bare short ID only — no emoji, no label, nothing else —
     // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
     // only (the /offer, /confirm, /cancel command replies never send it).
-    await sendText(sid, chat);
+    await sendText(sid, sent.chatId);
     // Remember this alert's message so the negotiation trail can later be edited
     // straight into it (folded in), instead of posting a separate scoreboard.
-    if (mid != null) await updateLead(lead.id, { negMsgId: mid, negChatId: chat });
+    if (sent.messageId != null) await updateLead(lead.id, { negMsgId: sent.messageId, negChatId: sent.chatId });
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
@@ -186,9 +214,9 @@ export async function notifyPartialLead(lead: Lead): Promise<void> {
   const sid = lead.id.split("-")[0];
   const text = buildText(lead, PARTIAL_LEAD_HEADER);
   try {
-    const mid = await sendText(text, chat, negKeyboard(lead));
-    await sendText(sid, chat);
-    if (mid != null) await updateLead(lead.id, { negMsgId: mid, negChatId: chat });
+    const sent = await sendText(text, chat, negKeyboard(lead));
+    await sendText(sid, sent.chatId);
+    if (sent.messageId != null) await updateLead(lead.id, { negMsgId: sent.messageId, negChatId: sent.chatId });
   } catch (e) {
     console.error("[notify] partial Telegram alert failed:", e);
   }
