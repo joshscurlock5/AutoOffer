@@ -52,6 +52,14 @@ export default function PrivacyPage() {
       ],
     },
     {
+      h: "Text messaging (SMS)",
+      p: [
+        "If you give us your mobile number, you consent to receive text messages from DriveOffer related to your request — for example offer updates, any questions we need to finalize your offer, appointment reminders, and booking confirmations. Message frequency varies. Message and data rates may apply.",
+        "You can opt out at any time by replying STOP to any text, and reply HELP for help. Providing your mobile number is optional — it is not required to receive an offer and is not a condition of any purchase.",
+        "Your mobile opt-in and SMS consent information is not shared with any third parties or affiliates for marketing or promotional purposes.",
+      ],
+    },
+    {
       h: "Email & text message receipts",
       p: [
         "When we email or text you — for example your offer or a booking confirmation — our email provider (Resend) and text-message provider (Twilio) send us delivery receipts: whether the message arrived or bounced, and whether a link in an email was clicked (and, where enabled, whether the email was opened). We use this only to make sure offers actually reach you and to stop contacting addresses that no longer work.",
@@ -61,7 +69,7 @@ export default function PrivacyPage() {
     {
       h: "How we share your information",
       p: [
-        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics and session-recording providers described in “Analytics & cookies” and “Session recordings & heatmaps”, the advertising provider described in “Advertising”, and the email and text-message providers described in “Email & text message receipts” above) and only as needed to deliver our service or measure our advertising, or where required by law.",
+        "We do not sell your personal information. We share it only with service providers who help us operate (for example, payment processing, the analytics and session-recording providers described in “Analytics & cookies” and “Session recordings & heatmaps”, the advertising provider described in “Advertising”, and the email and text-message providers described in “Email & text message receipts” above) and only as needed to deliver our service or measure our advertising, or where required by law. Your mobile opt-in and SMS consent for text messaging are never shared with third parties or affiliates for marketing or promotional purposes.",
       ],
     },
     {
@@ -90,7 +98,7 @@ export default function PrivacyPage() {
       <section className="bg-gradient-to-b from-brand-50 to-white">
         <div className="container-x py-14 sm:py-16">
           <h1 className="font-display text-4xl font-extrabold text-navy sm:text-5xl">Privacy Policy</h1>
-          <p className="mt-3 text-muted">Last updated: July 5, 2026</p>
+          <p className="mt-3 text-muted">Last updated: July 14, 2026</p>
         </div>
       </section>
 
