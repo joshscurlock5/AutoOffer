@@ -952,17 +952,17 @@ function LeadCard({
         {/* photos */}
         <div className="border-t border-slate-100 bg-slate-50 p-5 md:border-l md:border-t-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-navy">
-            <Camera className="h-4 w-4" /> Photos ({lead.photos.length})
+            <Camera className="h-4 w-4" /> Photos ({(lead.photos ?? []).length})
           </div>
-          {lead.photos.length > 0 ? (
+          {(lead.photos ?? []).length > 0 ? (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              {lead.photos.map((p, i) => (
+              {(lead.photos ?? []).map((p, i) => (
                 <button
                   key={p.file}
                   type="button"
                   onClick={() => onOpenPhoto(lead, i)}
                   className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200"
-                  aria-label={`View photo ${i + 1} of ${lead.photos.length}`}
+                  aria-label={`View photo ${i + 1} of ${(lead.photos ?? []).length}`}
                 >
                   <span className="skeleton absolute inset-0" aria-hidden />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
