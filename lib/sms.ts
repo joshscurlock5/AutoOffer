@@ -79,7 +79,7 @@ async function send(to: string, body: string): Promise<boolean> {
 }
 
 const CALL = site.phoneDisplay; // the line customers already know
-const STOP = "Reply STOP to opt out.";
+const STOP = "Reply STOP to cancel updates.";
 
 function car(lead: Lead): string {
   const v = lead.vehicle;
@@ -94,7 +94,7 @@ export async function smsLeadConfirmation(lead: Lead): Promise<void> {
   if (!to) return;
   await send(
     to,
-    `DriveOffer: Thanks! We've got your ${car(lead)} details and we're on it — we'll be in touch shortly with your offer. Questions? Call or text ${CALL}. ${STOP}`,
+    `DriveOffer: Thanks for submitting your ${car(lead)}! We're preparing your offer and will be in touch shortly. Questions? Just reply here or give us a call. ${STOP}`,
   );
 }
 
