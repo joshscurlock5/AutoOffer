@@ -106,7 +106,7 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
   // Short ID for reference. The tap-to-act buttons under the alert (📧 Email offer /
   // ❓ Ask for info / ✉️ Message) replace the old typed command hints.
   const sid = lead.id.split("-")[0];
-  if (lead.calledAt) lines.push("", "📞 Called — contacted by phone");
+  if (lead.contactedAt) lines.push("", "✅ Contacted");
   lines.push("", `🆔 ${sid}`);
 
   // Fold the negotiation trail right into the lead — no separate scoreboard message.
@@ -149,7 +149,7 @@ function negKeyboard(lead: Lead) {
         { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
         { text: "✉️ Message", callback_data: `act|msg|${sid}` },
       ],
-      [{ text: "📞 Called", callback_data: `act|called|${sid}` }],
+      [{ text: "✅ Contacted", callback_data: `act|called|${sid}` }],
     ],
   };
 }

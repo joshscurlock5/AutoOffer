@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
-import { getLeadByShortId, updateLead, claimPendingOffer } from "@/lib/store";
-import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails } from "@/lib/email";
+import { getLeadByShortId, updateLead, claimPendingOffer, claimPending } from "@/lib/store";
+import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails, offerPreview, moreInfoPreview, messagePreview } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
 import { telegramChatIds, notifyLog, notifyNewLead, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
@@ -144,7 +144,7 @@ function negKeyboardFor(sid: string) {
         { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
         { text: "✉️ Message", callback_data: `act|msg|${sid}` },
       ],
-      [{ text: "📞 Called", callback_data: `act|called|${sid}` }],
+      [{ text: "✅ Contacted", callback_data: `act|called|${sid}` }],
     ],
   };
 }
@@ -253,39 +253,54 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Action buttons (email offer / ask for info / message) → open a reply box.
+      // Action buttons (email offer / ask for info / message) → show a BLANK email
+      // preview (a mock of the email with a ______ where his input goes) with the
+      // reply box open, so the owner sees exactly what he's filling in.
       const actM = data.match(/^act\|(offer|info|msg)\|(\S+)$/);
       if (actM) {
         const kind = actM[1];
         const code = actM[2];
-        const { lead } = await getLeadByShortId(code);
+        const { lead, multiple } = await getLeadByShortId(code);
+        if (multiple) {
+          await reply(cbChat, `More than one lead matches "${code}". Tap the button on the right lead.`);
+          return NextResponse.json({ ok: true });
+        }
         if (!lead) {
           await reply(cbChat, `No lead found for "${code}".`);
           return NextResponse.json({ ok: true });
         }
-        const spec =
+        if (!lead.contact.email) {
+          await reply(cbChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
+          return NextResponse.json({ ok: true });
+        }
+        const preview =
+          kind === "offer" ? offerPreview(lead) : kind === "info" ? moreInfoPreview(lead) : messagePreview(lead);
+        const hint =
           kind === "offer"
-            ? { title: "📧 EMAIL OFFER", hint: "Reply with the price (e.g. 8500 or 8500-9000).", ph: "e.g. 8500" }
+            ? "↳ Reply with the price (e.g. 8500 or 8500-9000) to fill it in."
             : kind === "info"
-              ? { title: "❓ ASK FOR INFO", hint: "Reply with your questions — one per line.", ph: "one question per line" }
-              : { title: "✉️ MESSAGE", hint: "Reply with your message to the customer.", ph: "type your message" };
-        await sendPrompt(cbChat, `${spec.title} · ${carText(lead)}\n${spec.hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, spec.ph);
+              ? "↳ Reply with your questions — one per line — to fill them in."
+              : "↳ Reply with your message to fill it in.";
+        const ph = kind === "offer" ? "e.g. 8500" : kind === "info" ? "one question per line" : "type your message";
+        await sendPrompt(cbChat, `${preview}\n\n${hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, ph);
         return NextResponse.json({ ok: true });
       }
 
-      // Offer preview → send or cancel the drafted email.
-      const sendM = data.match(/^act\|(offersend|offercancel)\|(\S+)$/);
+      // Filled preview → ✅ Send or ✋ Cancel the drafted email (offer / info / message).
+      const sendM = data.match(/^act\|(offer|info|msg)(send|cancel)\|(\S+)$/);
       if (sendM) {
-        const action = sendM[1];
-        const code = sendM[2];
+        const kind = sendM[1];
+        const action = sendM[2];
+        const code = sendM[3];
         const { lead, multiple } = await getLeadByShortId(code);
         const previewMsgId = cb.message?.message_id;
         const clearPreview = async () => {
           if (typeof previewMsgId === "number") await deleteMessage(cbChat, previewMsgId);
         };
+        const kindLabel = kind === "offer" ? "offer" : kind === "info" ? "info request" : "message";
         // Ambiguous short id — never mutate/email a guessed lead (matches every other path).
         if (multiple) {
-          await reply(cbChat, `More than one lead matches "${code}". Use the full ID with /confirm or /cancel.`);
+          await reply(cbChat, `More than one lead matches "${code}". Tap the button on the right lead.`);
           return NextResponse.json({ ok: true });
         }
         if (!lead) {
@@ -293,67 +308,151 @@ export async function POST(req: NextRequest) {
           await reply(cbChat, `No lead found for "${code}".`);
           return NextResponse.json({ ok: true });
         }
-        if (action === "offercancel") {
-          if (lead.pendingOffer) await updateLead(lead.id, { pendingOffer: undefined });
+
+        // ✋ Cancel — discard the matching draft and remove the preview.
+        if (action === "cancel") {
+          const patch: Partial<Lead> =
+            kind === "offer"
+              ? { pendingOffer: undefined }
+              : kind === "info"
+                ? { pendingInfo: undefined }
+                : { pendingMessage: undefined };
+          await updateLead(lead.id, patch);
           await clearPreview();
-          await notifyLog(`🚫 ${who} cancelled a draft offer — ${carText(lead)} (${code})`);
+          await notifyLog(`🚫 ${who} cancelled a draft ${kindLabel} — ${carText(lead)} (${code})`);
           return NextResponse.json({ ok: true });
         }
-        // offersend
-        if (!lead.pendingOffer) {
-          await clearPreview();
-          await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
-          return NextResponse.json({ ok: true });
-        }
+
+        // ✅ Send — previews are only ever shown for a lead with an email, but re-check.
         if (!lead.contact.email) {
           await reply(cbChat, `${lead.contact.name || "That lead"} is phone-only. Reach them at ${lead.contact.phone || "their number"}.`);
           return NextResponse.json({ ok: true });
         }
-        const { low, high } = lead.pendingOffer;
-        // Atomically claim the send so a double-tap / Telegram redelivery can't email
-        // the offer twice — only the winner proceeds (mirrors claimPurchaseSync).
-        const claimed = await claimPendingOffer(lead.id);
-        if (!claimed) {
+
+        if (kind === "offer") {
+          if (!lead.pendingOffer) {
+            await clearPreview();
+            await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+            return NextResponse.json({ ok: true });
+          }
+          const { low, high } = lead.pendingOffer;
+          // Atomically claim the send so a double-tap / Telegram redelivery can't email
+          // the offer twice — only the winner proceeds (mirrors claimPurchaseSync).
+          const claimed = await claimPendingOffer(lead.id);
+          if (!claimed) {
+            await clearPreview();
+            await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+            return NextResponse.json({ ok: true });
+          }
+          const bookingToken = lead.bookingToken || crypto.randomUUID().replace(/-/g, "");
+          lead.bookingToken = bookingToken;
+          const res = await sendOfferEmail(lead, low, high);
+          if (!res.ok) {
+            // Send failed after we claimed — restore the draft so it can be retried.
+            await updateLead(lead.id, { pendingOffer: { low, high, at: new Date().toISOString() } });
+            await reply(cbChat, `Couldn't send — ${res.reason}. The draft is saved; tap 📧 Email offer to try again.`);
+            return NextResponse.json({ ok: true });
+          }
+          if (lead.dripEmailIds?.length) await cancelScheduledEmails(lead.dripEmailIds);
+          const nowISO = new Date().toISOString();
+          const wasNewlyContacted = !lead.contactedAt;
+          const negotiation = [
+            ...(lead.negotiation || []),
+            { at: nowISO, kind: "offer" as const, amount: Math.round((low + high) / 2) },
+          ].slice(-100);
+          const updatedLead = await updateLead(lead.id, {
+            offer: { low, high, sentAt: nowISO },
+            negotiation,
+            bookingToken,
+            nurtureStage: "offer_sent",
+            offerSentAt: nowISO,
+            moreInfoSentAt: undefined,
+            lastNurtureAt: undefined,
+            firstTouchAt: lead.firstTouchAt || nowISO,
+            contactedAt: lead.contactedAt || nowISO,
+            pendingOffer: undefined,
+            dripEmailIds: [],
+            status: lead.status === "new" ? "contacted" : lead.status,
+          });
+          // Fold the emailed offer into the lead's own alert message (no scoreboard).
+          await refreshLeadAlert(updatedLead || { ...lead, negotiation });
+          await smsOfferReady(lead, low, high);
+          await emitOfferSent(updatedLead || lead);
+          if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+          await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
+          await clearPreview();
+          return NextResponse.json({ ok: true });
+        }
+
+        if (kind === "info") {
+          const questions = lead.pendingInfo;
+          if (!questions || !questions.length) {
+            await clearPreview();
+            await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+            return NextResponse.json({ ok: true });
+          }
+          const claimed = await claimPending(lead.id, "pendingInfo");
+          if (!claimed) {
+            await clearPreview();
+            await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
+            return NextResponse.json({ ok: true });
+          }
+          const res = await sendMoreInfo(lead, questions);
+          if (!res.ok) {
+            await updateLead(lead.id, { pendingInfo: questions });
+            await reply(cbChat, `Couldn't send — ${res.reason}. The draft is saved; tap ❓ Ask for info to try again.`);
+            return NextResponse.json({ ok: true });
+          }
+          const nowISO = new Date().toISOString();
+          const wasNewlyContacted = !lead.contactedAt;
+          const updatedLead = await updateLead(lead.id, {
+            nurtureStage: "awaiting_info",
+            moreInfoSentAt: nowISO,
+            infoQuestions: questions,
+            lastNurtureAt: undefined,
+            firstTouchAt: lead.firstTouchAt || nowISO,
+            contactedAt: lead.contactedAt || nowISO,
+            pendingInfo: undefined,
+            status: lead.status === "new" ? "contacted" : lead.status,
+          });
+          await refreshLeadAlert(updatedLead || lead);
+          await smsMoreInfo(lead);
+          if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+          await notifyLog(`❓ ${who} asked ${questions.length} question${questions.length > 1 ? "s" : ""} — ${carText(lead)} (${code}):\n• ${questions.join("\n• ")}`);
+          await clearPreview();
+          return NextResponse.json({ ok: true });
+        }
+
+        // kind === "msg"
+        const message = lead.pendingMessage;
+        if (!message) {
           await clearPreview();
           await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
           return NextResponse.json({ ok: true });
         }
-        const bookingToken = lead.bookingToken || crypto.randomUUID().replace(/-/g, "");
-        lead.bookingToken = bookingToken;
-        const res = await sendOfferEmail(lead, low, high);
-        if (!res.ok) {
-          // Send failed after we claimed — restore the draft so it can be retried.
-          await updateLead(lead.id, { pendingOffer: { low, high, at: new Date().toISOString() } });
-          await reply(cbChat, `Couldn't send — ${res.reason}. The draft is saved; tap 📧 Email offer to try again.`);
+        const claimedMsg = await claimPending(lead.id, "pendingMessage");
+        if (!claimedMsg) {
+          await clearPreview();
+          await reply(cbChat, `That draft was already sent or cancelled (${code}).`);
           return NextResponse.json({ ok: true });
         }
-        if (lead.dripEmailIds?.length) await cancelScheduledEmails(lead.dripEmailIds);
-        const nowISO = new Date().toISOString();
-        const wasNewlyContacted = !lead.contactedAt;
-        const negotiation = [
-          ...(lead.negotiation || []),
-          { at: nowISO, kind: "offer" as const, amount: Math.round((low + high) / 2) },
-        ].slice(-100);
-        const updatedLead = await updateLead(lead.id, {
-          offer: { low, high, sentAt: nowISO },
-          negotiation,
-          bookingToken,
-          nurtureStage: "offer_sent",
-          offerSentAt: nowISO,
-          moreInfoSentAt: undefined,
-          lastNurtureAt: undefined,
-          firstTouchAt: lead.firstTouchAt || nowISO,
-          contactedAt: lead.contactedAt || nowISO,
-          pendingOffer: undefined,
-          dripEmailIds: [],
+        const resMsg = await sendMessageEmail(lead, message);
+        if (!resMsg.ok) {
+          await updateLead(lead.id, { pendingMessage: message });
+          await reply(cbChat, `Couldn't send — ${resMsg.reason}. The draft is saved; tap ✉️ Message to try again.`);
+          return NextResponse.json({ ok: true });
+        }
+        const nowISOMsg = new Date().toISOString();
+        const wasNewlyContactedMsg = !lead.contactedAt;
+        const updatedLeadMsg = await updateLead(lead.id, {
+          firstTouchAt: lead.firstTouchAt || nowISOMsg,
+          contactedAt: lead.contactedAt || nowISOMsg,
+          pendingMessage: undefined,
           status: lead.status === "new" ? "contacted" : lead.status,
         });
-        // Fold the emailed offer into the lead's own alert message (no scoreboard).
-        await refreshLeadAlert(updatedLead || { ...lead, negotiation });
-        await smsOfferReady(lead, low, high);
-        await emitOfferSent(updatedLead || lead);
-        if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-        await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
+        await refreshLeadAlert(updatedLeadMsg || lead);
+        if (wasNewlyContactedMsg) await emitLeadContacted(updatedLeadMsg || lead);
+        await notifyLog(`✉️ ${who} messaged — ${carText(lead)} (${code}): "${message.slice(0, 200)}"`);
         await clearPreview();
         return NextResponse.json({ ok: true });
       }
@@ -474,7 +573,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Action replies — email offer (Send/Cancel check), ask for info, or message.
+    // Action replies — the owner typed his input; save it as a draft and show a
+    // FILLED email preview with ✅ Send / ✋ Cancel. Nothing is emailed until Send.
     const actRef = replyToText.match(/⟨act\|(offer|info|msg)\|(\S+?)⟩/);
     if (actRef) {
       const kind = actRef[1];
@@ -488,6 +588,17 @@ export async function POST(req: NextRequest) {
         await reply(fromChat, `No lead found for "${code}".`);
         return NextResponse.json({ ok: true });
       }
+      if (!lead.contact.email) {
+        await reply(fromChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
+        return NextResponse.json({ ok: true });
+      }
+      // Send/Cancel buttons for a drafted email of the given kind.
+      const confirmKb = (k: string) => ({
+        inline_keyboard: [[
+          { text: "✅ Send", callback_data: `act|${k}send|${code}` },
+          { text: "✋ Cancel", callback_data: `act|${k}cancel|${code}` },
+        ]],
+      });
 
       if (kind === "offer") {
         const price = parsePrice(text);
@@ -495,21 +606,9 @@ export async function POST(req: NextRequest) {
           await reply(fromChat, "Please reply with just a number, e.g. 8500 or 8500-9000.");
           return NextResponse.json({ ok: true });
         }
-        if (!lead.contact.email) {
-          await reply(fromChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
-          return NextResponse.json({ ok: true });
-        }
         await updateLead(lead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
         await clearPromptAndInput();
-        // Quick Send/Cancel check before the offer email actually goes out.
-        const previewText = `📧 Email offer — ${carText(lead)} → ${fmtRange(price.low, price.high)} to ${lead.contact.name || lead.contact.email}. Send?`;
-        const kb = {
-          inline_keyboard: [[
-            { text: "✅ Send", callback_data: `act|offersend|${code}` },
-            { text: "✋ Cancel", callback_data: `act|offercancel|${code}` },
-          ]],
-        };
-        await sendReturningId(fromChat, previewText, kb);
+        await sendReturningId(fromChat, offerPreview(lead, price.low, price.high), confirmKb("offer"));
         return NextResponse.json({ ok: true });
       }
 
@@ -519,26 +618,9 @@ export async function POST(req: NextRequest) {
           await reply(fromChat, "Type at least one question, one per line.");
           return NextResponse.json({ ok: true });
         }
-        const res = await sendMoreInfo(lead, questions);
-        if (!res.ok) {
-          await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
-          return NextResponse.json({ ok: true });
-        }
-        const nowISO = new Date().toISOString();
-        const wasNewlyContacted = !lead.contactedAt;
-        const updatedLead = await updateLead(lead.id, {
-          nurtureStage: "awaiting_info",
-          moreInfoSentAt: nowISO,
-          infoQuestions: questions,
-          lastNurtureAt: undefined,
-          firstTouchAt: lead.firstTouchAt || nowISO,
-          contactedAt: lead.contactedAt || nowISO,
-          status: lead.status === "new" ? "contacted" : lead.status,
-        });
-        await smsMoreInfo(lead);
-        if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-        await notifyLog(`❓ ${who} asked ${questions.length} question${questions.length > 1 ? "s" : ""} — ${carText(lead)} (${code}):\n• ${questions.join("\n• ")}`);
+        await updateLead(lead.id, { pendingInfo: questions });
         await clearPromptAndInput();
+        await sendReturningId(fromChat, moreInfoPreview(lead, questions), confirmKb("info"));
         return NextResponse.json({ ok: true });
       }
 
@@ -548,25 +630,9 @@ export async function POST(req: NextRequest) {
         await reply(fromChat, "Type your message to the customer.");
         return NextResponse.json({ ok: true });
       }
-      if (!lead.contact.email) {
-        await reply(fromChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
-        return NextResponse.json({ ok: true });
-      }
-      const res = await sendMessageEmail(lead, message);
-      if (!res.ok) {
-        await reply(fromChat, `Couldn't send — ${res.reason}. If they're phone-only, reach them at ${lead.contact.phone || "their number"}.`);
-        return NextResponse.json({ ok: true });
-      }
-      const nowISO = new Date().toISOString();
-      const wasNewlyContacted = !lead.contactedAt;
-      const updatedLead = await updateLead(lead.id, {
-        firstTouchAt: lead.firstTouchAt || nowISO,
-        contactedAt: lead.contactedAt || nowISO,
-        status: lead.status === "new" ? "contacted" : lead.status,
-      });
-      if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-      await notifyLog(`✉️ ${who} messaged — ${carText(lead)} (${code}): "${message.slice(0, 200)}"`);
+      await updateLead(lead.id, { pendingMessage: message });
       await clearPromptAndInput();
+      await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"));
       return NextResponse.json({ ok: true });
     }
 

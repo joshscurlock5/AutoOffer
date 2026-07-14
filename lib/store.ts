@@ -232,6 +232,28 @@ export async function claimPendingOffer(id: string): Promise<boolean> {
   }
 }
 
+/** Atomically claim a drafted info/message send (mirrors claimPendingOffer) so a
+ * double-tapped ✅ Send can't email the customer twice. Returns true only for the
+ * winner; the loser's condition fails. On send failure the caller restores the field. */
+export async function claimPending(
+  id: string,
+  field: "pendingInfo" | "pendingMessage",
+): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: `REMOVE ${field}`,
+        ConditionExpression: `attribute_exists(id) AND attribute_exists(${field})`,
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Find a lead by the short ID shown in the Telegram alert (the first block of
  * its UUID, e.g. "a1b2c3d4") — or by the full id if pasted. Lead volume is

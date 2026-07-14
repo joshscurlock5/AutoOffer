@@ -497,6 +497,93 @@ function messageEmail(lead: Lead, message: string): Email {
   };
 }
 
+// ---- Condensed text previews for the Telegram confirm-before-send flow ----
+// Plain-text renderings of the three owner-sent emails (offer / more-info /
+// message), faithful to the real copy but skimmable on a phone. Shown in Telegram
+// BEFORE the email goes out: first with a blank where the owner's input goes, then
+// again with it filled in behind a ✅ Send / ✋ Cancel confirm. Kept next to the HTML
+// templates above so the wording stays in sync.
+
+const PREVIEW_DIVIDER = "──────────────";
+
+/** Plain (un-escaped) "year make model trim" for the previews, or a fallback. */
+function previewCar(lead: Lead): string {
+  return carPlain(lead) || "your vehicle";
+}
+function previewTo(lead: Lead): string {
+  return `To: ${lead.contact.name || "(no name)"} <${lead.contact.email || "(no email)"}>`;
+}
+
+/** The offer email as text. Pass low/high to fill the price; omit both for the blank draft. */
+export function offerPreview(lead: Lead, low?: number, high?: number): string {
+  const car = previewCar(lead);
+  const priceText =
+    low == null || high == null
+      ? "______  (you'll fill this in)"
+      : low === high
+        ? money(low)
+        : `${money(low)}–${money(high)}`;
+  return [
+    "📧 EMAIL PREVIEW · Offer",
+    previewTo(lead),
+    `Subject: Your offer for your ${car} — ${site.name}`,
+    PREVIEW_DIVIDER,
+    "Your offer is ready",
+    "",
+    `We looked at similar vehicles — here's your offer for your ${car}:`,
+    "",
+    `   💰 Your offer:  ${priceText}`,
+    "",
+    "No pressure — once you see it, it's your call. If it's a yes, we come to you and pay on the spot.",
+    "",
+    "Talk soon,",
+    `The ${site.name} Team`,
+    `${site.phoneDisplay} · ${site.email}`,
+  ].join("\n");
+}
+
+/** The more-info email as text. Pass questions to fill them; omit for the blank draft. */
+export function moreInfoPreview(lead: Lead, questions?: string[]): string {
+  const car = previewCar(lead);
+  const qBlock =
+    questions && questions.length
+      ? questions.map((q) => `   •  ${q}`).join("\n")
+      : "   (your questions go here — one per line)";
+  return [
+    "📧 EMAIL PREVIEW · Ask for info",
+    previewTo(lead),
+    `Subject: A couple quick questions about your ${car}`,
+    PREVIEW_DIVIDER,
+    "Just need a couple details",
+    "",
+    `To get you an accurate offer on your ${car}, we just need a couple details. Fastest is a quick call or text; prefer email? Just reply with the answers.`,
+    "",
+    "What we still need:",
+    qBlock,
+    "",
+    `📞 Call or text ${site.phoneDisplay}`,
+  ].join("\n");
+}
+
+/** The free-text message email as text. Pass message to fill it; omit for the blank draft. */
+export function messagePreview(lead: Lead, message?: string): string {
+  const first = (lead.contact.name || "there").trim().split(" ")[0] || "there";
+  const body = message && message.trim() ? message.trim() : "(your message goes here)";
+  return [
+    "📧 EMAIL PREVIEW · Message",
+    previewTo(lead),
+    `Subject: A message from ${site.name}`,
+    PREVIEW_DIVIDER,
+    `Hi ${first},`,
+    "",
+    `You have a new message from your ${site.name} representative:`,
+    "",
+    body,
+    "",
+    "Fastest response: just reply to this email, or call or text us anytime.",
+  ].join("\n");
+}
+
 // ---- Resend transport -----------------------------------------------------
 
 /** Resend tag values only allow ASCII letters, numbers, underscores, and dashes. */

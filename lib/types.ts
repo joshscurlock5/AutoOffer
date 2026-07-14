@@ -289,6 +289,12 @@ export interface Lead {
   offer?: { low: number; high: number; sentAt: string };
   /** A drafted offer awaiting /confirm in Telegram; cleared on confirm or cancel. */
   pendingOffer?: { low: number; high: number; at: string };
+  /** A drafted "ask for info" awaiting ✅ Send in Telegram — the questions the owner
+   * typed, shown in an email preview first. Cleared on send or cancel. Mirrors pendingOffer. */
+  pendingInfo?: string[];
+  /** A drafted free-text message awaiting ✅ Send in Telegram, shown in an email
+   * preview first. Cleared on send or cancel. Mirrors pendingOffer. */
+  pendingMessage?: string;
   /** Owner-logged negotiation trail from Telegram: the customer's asks + our
    * offers over time (+ a final "bought"), for ask-vs-offer / realistic-seller
    * analysis. Decoupled from the email-offer flow so phone-only leads log too. */
