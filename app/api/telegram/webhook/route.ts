@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
-import { getLeadByShortId, updateLead, claimPendingOffer, claimPending } from "@/lib/store";
+import { getLeadByShortId, updateLead, claimPendingOffer, claimPending, getLeadByReplyThreadId, claimRelayMessage } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails, offerPreview, moreInfoPreview, messagePreview } from "@/lib/email";
-import { smsOfferReady, smsMoreInfo } from "@/lib/sms";
-import { telegramChatIds, notifyLog, notifyNewLead, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
+import { smsOfferReady, smsMoreInfo, smsSend, smsTo } from "@/lib/sms";
+import { telegramChatIds, notifyLog, notifyNewLead, postLeadTopic, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead, NegotiationEntry } from "@/lib/types";
@@ -69,13 +69,18 @@ const EMOJI_USAGE = String.fromCodePoint(0x1f4ca); // 📊 bar chart
 
 // (/moreinfo takes free-text questions, one per line — no preset codes.)
 
-async function reply(chatId: number | string, text: string): Promise<void> {
+async function reply(chatId: number | string, text: string, threadId?: number): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+        ...(threadId != null ? { message_thread_id: threadId } : {}),
+      }),
     });
   } catch {
     /* best-effort */
@@ -100,7 +105,7 @@ async function answerCallback(id: string, text?: string): Promise<void> {
 /** Send a message that pops a reply box (force_reply), threaded under the lead
  * alert. The text carries a ⟨neg|kind|id⟩ or ⟨act|kind|id⟩ marker the reply
  * handler parses back. `placeholder` hints what to type in the reply box. */
-async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: number, placeholder = "e.g. 8500"): Promise<void> {
+async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: number, placeholder = "e.g. 8500", threadId?: number): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -112,6 +117,7 @@ async function sendPrompt(chatId: number | string, text: string, replyToMsgId?: 
         disable_web_page_preview: true,
         reply_markup: { force_reply: true, input_field_placeholder: placeholder },
         ...(replyToMsgId ? { reply_to_message_id: replyToMsgId } : {}),
+        ...(threadId != null ? { message_thread_id: threadId } : {}),
       }),
     });
   } catch {
@@ -150,13 +156,13 @@ function negKeyboardFor(sid: string) {
 }
 
 /** sendMessage that returns the new message_id (so we can edit it in place later). */
-async function sendReturningId(chatId: number | string, text: string, replyMarkup?: unknown): Promise<number | undefined> {
+async function sendReturningId(chatId: number | string, text: string, replyMarkup?: unknown, threadId?: number): Promise<number | undefined> {
   if (!BOT_TOKEN) return undefined;
   try {
     const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}), ...(threadId != null ? { message_thread_id: threadId } : {}) }),
     });
     const j = await r.json();
     return typeof j?.result?.message_id === "number" ? j.result.message_id : undefined;
@@ -221,6 +227,9 @@ export async function POST(req: NextRequest) {
     const cb = update?.callback_query;
     if (cb) {
       const cbChat = cb.message?.chat?.id;
+      // If the tap came from inside a forum topic (a customer's Replies-group topic),
+      // keep every prompt/preview we send in reply INSIDE that same topic.
+      const cbThread: number | undefined = cb.message?.message_thread_id;
       const allowed = telegramChatIds();
       if (allowed.length && !allowed.includes(String(cbChat))) {
         await answerCallback(cb.id);
@@ -249,6 +258,8 @@ export async function POST(req: NextRequest) {
           cbChat,
           `${label} · ${carText(lead)}\nReply to this message with just the number (e.g. 8500).\n⟨neg|${kind}|${code}⟩`,
           cb.message?.message_id,
+          "e.g. 8500",
+          cbThread,
         );
         return NextResponse.json({ ok: true });
       }
@@ -282,7 +293,7 @@ export async function POST(req: NextRequest) {
               ? "↳ Reply with your questions — one per line — to fill them in."
               : "↳ Reply with your message to fill it in.";
         const ph = kind === "offer" ? "e.g. 8500" : kind === "info" ? "one question per line" : "type your message";
-        await sendPrompt(cbChat, `${preview}\n\n${hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, ph);
+        await sendPrompt(cbChat, `${preview}\n\n${hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, ph, cbThread);
         return NextResponse.json({ ok: true });
       }
 
@@ -380,6 +391,7 @@ export async function POST(req: NextRequest) {
           await emitOfferSent(updatedLead || lead);
           if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
           await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
+          await postLeadTopic(updatedLead || lead, `📤 Offer sent — ${fmtRange(low, high)}`);
           await clearPreview();
           return NextResponse.json({ ok: true });
         }
@@ -419,6 +431,7 @@ export async function POST(req: NextRequest) {
           await smsMoreInfo(lead);
           if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
           await notifyLog(`❓ ${who} asked ${questions.length} question${questions.length > 1 ? "s" : ""} — ${carText(lead)} (${code}):\n• ${questions.join("\n• ")}`);
+          await postLeadTopic(updatedLead || lead, `📤 Asked for info:\n• ${questions.join("\n• ")}`);
           await clearPreview();
           return NextResponse.json({ ok: true });
         }
@@ -453,6 +466,7 @@ export async function POST(req: NextRequest) {
         await refreshLeadAlert(updatedLeadMsg || lead);
         if (wasNewlyContactedMsg) await emitLeadContacted(updatedLeadMsg || lead);
         await notifyLog(`✉️ ${who} messaged — ${carText(lead)} (${code}): "${message.slice(0, 200)}"`);
+        await postLeadTopic(updatedLeadMsg || lead, `📤 You: ${message}`);
         await clearPreview();
         return NextResponse.json({ ok: true });
       }
@@ -525,6 +539,10 @@ export async function POST(req: NextRequest) {
     // typed message/questions that happen to start with "/".
     const who = msg?.from?.first_name || msg?.from?.username || "owner";
     const replyToText = String(msg?.reply_to_message?.text || "");
+    // Which forum topic (if any) this message is in — so previews we send stay in it,
+    // and so a plain message typed in a customer's topic can be relayed to them.
+    const msgThread: number | undefined = msg?.message_thread_id;
+    const inTopic = Boolean(msg?.is_topic_message) && typeof msgThread === "number";
     if (text.startsWith("/") && !/⟨(?:neg|act)\|/.test(replyToText)) await notifyLog(`📝 ${who}: ${text.slice(0, 300)}`);
 
     // 2b) A reply to a tapped button. The prompt carries a marker off which we route:
@@ -608,7 +626,7 @@ export async function POST(req: NextRequest) {
         }
         await updateLead(lead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
         await clearPromptAndInput();
-        await sendReturningId(fromChat, offerPreview(lead, price.low, price.high), confirmKb("offer"));
+        await sendReturningId(fromChat, offerPreview(lead, price.low, price.high), confirmKb("offer"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
@@ -620,7 +638,7 @@ export async function POST(req: NextRequest) {
         }
         await updateLead(lead.id, { pendingInfo: questions });
         await clearPromptAndInput();
-        await sendReturningId(fromChat, moreInfoPreview(lead, questions), confirmKb("info"));
+        await sendReturningId(fromChat, moreInfoPreview(lead, questions), confirmKb("info"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
@@ -632,8 +650,66 @@ export async function POST(req: NextRequest) {
       }
       await updateLead(lead.id, { pendingMessage: message });
       await clearPromptAndInput();
-      await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"));
+      await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"), msgThread);
       return NextResponse.json({ ok: true });
+    }
+
+    // 2c) In-topic reply relay — the owner typed a PLAIN message inside a customer's
+    //     Replies-group topic. Send it straight to that customer (SMS if they last
+    //     texted us and we can text; otherwise email). Tightly gated: only a real
+    //     forum-topic message that resolves to a lead whose topic lives in THIS chat,
+    //     never a slash command or a reply to a bot prompt (handled + returned above).
+    if (inTopic && text && !text.startsWith("/") && !/⟨(?:neg|act)\|/.test(replyToText)) {
+      const relayLead = await getLeadByReplyThreadId(msgThread as number);
+      if (relayLead && String(fromChat) === String(relayLead.replyTopicChatId)) {
+        // Dedupe a Telegram redelivery so the customer is never messaged twice.
+        const fresh =
+          typeof msg?.message_id === "number" ? await claimRelayMessage(relayLead.id, msg.message_id) : true;
+        if (!fresh) return NextResponse.json({ ok: true });
+
+        const sid = relayLead.id.split("-")[0];
+        const canText = Boolean(smsTo(relayLead));
+        const preferSms = relayLead.lastInboundChannel === "sms" && canText;
+        let ok = false;
+        let via = "";
+        if (preferSms) {
+          ok = await smsSend(relayLead, text);
+          via = "text";
+        } else if (relayLead.contact.email) {
+          const res = await sendMessageEmail(relayLead, text);
+          ok = res.ok;
+          via = "email";
+          // Email failed but we can text — fall through to SMS so the reply still lands.
+          if (!ok && canText) {
+            ok = await smsSend(relayLead, text);
+            if (ok) via = "text";
+          }
+        } else if (canText) {
+          ok = await smsSend(relayLead, text);
+          via = "text";
+        }
+
+        if (ok) {
+          const nowISO = new Date().toISOString();
+          const wasNewlyContacted = !relayLead.contactedAt;
+          const updated = await updateLead(relayLead.id, {
+            firstTouchAt: relayLead.firstTouchAt || nowISO,
+            contactedAt: relayLead.contactedAt || nowISO,
+            status: relayLead.status === "new" ? "contacted" : relayLead.status,
+          });
+          if (wasNewlyContacted) await emitLeadContacted(updated || relayLead);
+          await notifyLog(`↪️ ${who} replied by ${via} — ${carText(relayLead)} (${sid}): "${text.slice(0, 200)}"`);
+          await reply(fromChat, `✓ Sent by ${via}`, msgThread);
+        } else {
+          const reason = via === "" ? "no email or textable phone on file" : "the send failed — try again";
+          await reply(
+            fromChat,
+            `⚠️ Not delivered — ${reason}. Reach them at ${relayLead.contact.phone || relayLead.contact.email || "their contact info"}.`,
+            msgThread,
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // 3) /usage (also matches "/usage@YourBot")
@@ -747,6 +823,7 @@ export async function POST(req: NextRequest) {
       await smsOfferReady(lead, low, high);
       await emitOfferSent(updatedLead || lead);
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+      await postLeadTopic(updatedLead || lead, `📤 Offer sent — ${fmtRange(low, high)}`);
       await reply(fromChat, `✅ Offer sent — ${fmtRange(low, high)} to ${lead.contact.name || lead.contact.email} for their ${carText(lead)}.`);
       return NextResponse.json({ ok: true });
     }
@@ -818,6 +895,7 @@ export async function POST(req: NextRequest) {
       // Text the customer the "we need a detail" nudge too (best-effort).
       await smsMoreInfo(lead);
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+      await postLeadTopic(updatedLead || lead, `📤 Asked for info:\n• ${questions.join("\n• ")}`);
       const who = lead.contact.name || lead.contact.email;
       await reply(
         fromChat,
@@ -866,6 +944,7 @@ export async function POST(req: NextRequest) {
         status: lead.status === "new" ? "contacted" : lead.status,
       });
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
+      await postLeadTopic(updatedLead || lead, `📤 You: ${message}`);
       await reply(fromChat, `📨 Message sent to ${lead.contact.name || lead.contact.email}.`);
       return NextResponse.json({ ok: true });
     }

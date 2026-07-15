@@ -345,6 +345,29 @@ export async function releaseReplyTopic(id: string): Promise<void> {
   }
 }
 
+/** Claim an in-topic owner message for relay-to-customer, deduping a Telegram
+ * redelivery. Telegram message_ids are per-chat monotonic, so we advance a
+ * high-water mark and only proceed for a genuinely newer id — a redelivered
+ * (or out-of-order) message with id ≤ the mark fails the condition and is
+ * skipped, so the customer can never be texted/emailed the same reply twice. */
+export async function claimRelayMessage(id: string, msgId: number): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "SET lastRelayMsgId = :m",
+        ConditionExpression:
+          "attribute_exists(id) AND (attribute_not_exists(lastRelayMsgId) OR lastRelayMsgId < :m)",
+        ExpressionAttributeValues: { ":m": msgId },
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function deleteLead(id: string): Promise<void> {
   await ddb.send(new DeleteCommand({ TableName: LEADS_TABLE, Key: { id } }));
   // Best-effort cleanup of the lead's photos.

@@ -66,17 +66,24 @@ function checkEmailAndNotify() {
         var rm = (msgs[k].getPlainBody() || '').match(/Ref:\s*([a-z0-9]{6,12})\b/i);
         if (rm) { ref = rm[1]; break; }
       }
-      if (ref) logReplyToProfile(ref); // stamp the reply on the customer's analytics profile
-      var offerLine = ref
-        ? '\n\nSend an offer → /offer ' + ref + ' <price>'
-        : '\n\nSend an offer → /offer <id> <price>  (id is in the Leads alert)';
-      var text = '✉️ New email reply\n' +
-                 'From: ' + msg.getFrom() + '\n' +
-                 'Subject: ' + subject + '\n\n' +
-                 '"' + snippet + '"\n\n' +
-                 'Open in Gmail: ' + link +
-                 offerLine;
-      sendTelegram(text);
+      // Longer body for the topic (the flat fallback keeps the short snippet).
+      var body = (msg.getPlainBody() || '').replace(/\s+/g, ' ').slice(0, 600);
+      // Send to the site: it stamps the customer's profile AND drops the reply into
+      // their Replies-group topic. If the topic took it, skip the flat alert below
+      // so there's no double-notify.
+      var handled = ref ? postReplyToServer(ref, subject, body) : false;
+      if (!handled) {
+        var offerLine = ref
+          ? '\n\nSend an offer → /offer ' + ref + ' <price>'
+          : '\n\nSend an offer → /offer <id> <price>  (id is in the Leads alert)';
+        var text = '✉️ New email reply\n' +
+                   'From: ' + msg.getFrom() + '\n' +
+                   'Subject: ' + subject + '\n\n' +
+                   '"' + snippet + '"\n\n' +
+                   'Open in Gmail: ' + link +
+                   offerLine;
+        sendTelegram(text);
+      }
     }
     thread.addLabel(label); // mark handled so it never double-alerts
   }
@@ -94,17 +101,21 @@ function sendTelegram(text) {
   });
 }
 
-// Tell the site a customer replied by email, so it shows on their analytics
-// profile (lastReplyAt / repliesCount). Best-effort — never breaks the alert.
-function logReplyToProfile(ref) {
-  if (!ref || !CRON_SECRET || CRON_SECRET.indexOf('PASTE') === 0) return;
+// Send the customer's reply to the site: it records the reply on their analytics
+// profile (lastReplyAt / repliesCount) AND posts the message into their Replies-
+// group topic. Returns true when the topic took it (so the caller skips the flat
+// alert — no double-notify). Best-effort — never breaks the alert.
+function postReplyToServer(ref, subject, body) {
+  if (!ref || !CRON_SECRET || CRON_SECRET.indexOf('PASTE') === 0) return false;
   try {
-    UrlFetchApp.fetch(SITE_URL + '/api/leads/reply', {
+    var resp = UrlFetchApp.fetch(SITE_URL + '/api/leads/reply', {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + CRON_SECRET },
-      payload: JSON.stringify({ ref: ref, channel: 'email' }),
+      payload: JSON.stringify({ ref: ref, channel: 'email', subject: subject, text: body }),
       muteHttpExceptions: true
     });
-  } catch (e) { /* best-effort */ }
+    var data = JSON.parse(resp.getContentText() || '{}');
+    return data && data.topicPosted === true;
+  } catch (e) { return false; }
 }

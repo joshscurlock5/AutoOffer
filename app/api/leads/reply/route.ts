@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLeadByShortId, atomicLeadEngagement } from "@/lib/store";
+import { postLeadTopic } from "@/lib/notify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,12 +10,16 @@ export const dynamic = "force-dynamic";
 const SECRET = process.env.CRON_SECRET || "";
 
 // ---------------------------------------------------------------------------
-//  POST /api/leads/reply  { ref: "<short-id>", channel?: "email"|"sms"|"chat" }
+//  POST /api/leads/reply
+//    { ref, channel?, text?, subject? }
 //  Called by the Gmail Apps Script (scripts/gmail-reply-to-telegram.gs) when a
-//  customer replies to one of our emails — the "Ref: <short-id>" it already
-//  parses from the thread is passed here so the reply is recorded on the lead's
-//  profile (lastReplyAt / repliesCount / lastInboundChannel). SMS replies are
-//  stamped directly by app/api/sms; this covers the email channel.
+//  customer replies to one of our emails — the "Ref: <short-id>" it parses from
+//  the thread is passed here so the reply is recorded on the lead's profile
+//  (lastReplyAt / repliesCount / lastInboundChannel). SMS replies are stamped
+//  directly by app/api/sms; this covers the email channel.
+//  When `text` (the reply body) is included, we ALSO post it into the customer's
+//  Replies-group topic and return { topicPosted: true } so the script knows the
+//  topic handled it and can skip its own flat alert (no double-notify).
 //  Auth: Authorization: Bearer <CRON_SECRET>. No-op 401 until configured.
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
@@ -25,6 +30,8 @@ export async function POST(req: NextRequest) {
   const ref = typeof body.ref === "string" ? body.ref.trim() : "";
   const chRaw = typeof body.channel === "string" ? body.channel : "email";
   const channel = (["sms", "email", "chat"].includes(chRaw) ? chRaw : "email") as "sms" | "email" | "chat";
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  const subject = typeof body.subject === "string" ? body.subject.trim() : "";
   if (!ref) return NextResponse.json({ ok: false, error: "missing ref" }, { status: 400 });
 
   const { lead } = await getLeadByShortId(ref);
@@ -42,5 +49,18 @@ export async function POST(req: NextRequest) {
     },
     increment: { repliesCount: 1 },
   });
-  return NextResponse.json({ ok: true });
+
+  // Post the reply body into the customer's topic (when we have it). topicPosted
+  // tells the caller whether the topic took it, so it can skip its flat alert.
+  let topicPosted = false;
+  if (text) {
+    const inbound = [
+      `📩 ${lead.contact.name || "Customer"} (email)`,
+      ...(subject ? [`Subject: ${subject}`] : []),
+      "",
+      `"${text.slice(0, 900)}"`,
+    ].join("\n");
+    topicPosted = await postLeadTopic(lead, inbound);
+  }
+  return NextResponse.json({ ok: true, topicPosted });
 }

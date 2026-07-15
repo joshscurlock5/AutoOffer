@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getLeads, updateLead } from "@/lib/store";
-import { notifyOwner, leadLine } from "@/lib/notify";
+import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
 import { toE164 } from "@/lib/sms";
 import { site } from "@/lib/site-config";
 import type { Lead } from "@/lib/types";
@@ -123,17 +123,23 @@ export async function POST(req: NextRequest) {
         ...(smsOrigin ? { smsOrigin } : {}),
       });
     }
-    await notifyOwner(
-      [
-        "\u{1F4AC} Text reply from a customer",
-        lead ? leadLine(lead) : `From: ${from}`,
-        "",
-        `"${bodyRaw.slice(0, 600)}"`,
-        "",
-        `Call or text back: ${from}`,
-      ].join("\n"),
-      "replies",
-    );
+    // Land the reply in the customer's own topic; fall back to the flat Replies
+    // alert only when there's no lead / topics aren't available.
+    const inbound = `📩 ${lead?.contact.name || "Customer"} (text):\n"${bodyRaw.slice(0, 900)}"`;
+    const posted = lead ? await postLeadTopic(lead, inbound) : false;
+    if (!posted) {
+      await notifyOwner(
+        [
+          "\u{1F4AC} Text reply from a customer",
+          lead ? leadLine(lead) : `From: ${from}`,
+          "",
+          `"${bodyRaw.slice(0, 600)}"`,
+          "",
+          `Call or text back: ${from}`,
+        ].join("\n"),
+        "replies",
+      );
+    }
     return twiml();
   } catch (e) {
     console.error("[sms inbound] error:", e);

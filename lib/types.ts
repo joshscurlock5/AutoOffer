@@ -311,6 +311,10 @@ export interface Lead {
   replyTopicId?: number;
   replyTopicChatId?: number | string;
   replyTopicPending?: boolean;
+  /** Highest Telegram message_id we've already relayed FROM this lead's topic to the
+   * customer. Monotonic guard: a redelivered/duplicate in-topic message (id ≤ this)
+   * is skipped so the owner's reply can never be sent to the customer twice. */
+  lastRelayMsgId?: number;
   /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
    * button is a toggle on the contacted state (new↔contacted): pressing it when the
    * lead is already contacted — even from an auto email-contact — moves it back to

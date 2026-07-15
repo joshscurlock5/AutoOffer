@@ -252,6 +252,77 @@ export async function notifyTopic(lead: Lead, text: string, replyMarkup?: unknow
   }
 }
 
+/** Control buttons under a topic's messages: negotiation logging + Contacted are
+ * always shown; the email-action row (offer / info / message) appears ONLY when the
+ * lead has an email, so a text-only chat never shows dead email buttons. Same
+ * callback_data as the Leads-alert keyboard, so the webhook handlers resolve them
+ * identically regardless of which group the tap came from. */
+export function topicKeyboard(lead: Lead) {
+  const sid = lead.id.split("-")[0];
+  const rows: { text: string; callback_data: string }[][] = [
+    [
+      { text: "💬 Their ask", callback_data: `neg|ask|${sid}` },
+      { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
+    ],
+    [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
+  ];
+  if (lead.contact.email) {
+    rows.push([
+      { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
+      { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
+      { text: "✉️ Message", callback_data: `act|msg|${sid}` },
+    ]);
+  }
+  rows.push([{ text: "✅ Contacted", callback_data: `act|called|${sid}` }]);
+  return { inline_keyboard: rows };
+}
+
+/** Create (once) this lead's Replies-group topic and post the opening card into it
+ * — the customer's details, how we can reach them, and the action buttons. Called
+ * on every new full lead ("one topic per car submission"). Skips a lead that
+ * already has a topic (so re-posting a lead doesn't double-seed). Best-effort:
+ * a no-op when the Replies forum isn't configured, and never throws. */
+export async function seedReplyTopic(lead: Lead): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_REPLIES || lead.replyTopicId != null) return;
+  try {
+    const threadId = await getOrCreateReplyTopic(lead);
+    if (threadId == null) return;
+    const c = lead.contact;
+    const channel = c.email && c.phone ? "Email + Text" : c.email ? "Email" : c.phone ? "Text" : "—";
+    const lines = [
+      `💬 ${c.name || "New lead"} · ${carLabel(lead)}`,
+      ...(c.phone ? [`📞 ${c.phone}`] : []),
+      ...(c.email ? [`✉️ ${c.email}`] : []),
+      `Channel: ${channel}`,
+      "",
+      "Type in this topic to message the customer — it goes straight to them (photos not yet supported). Their replies land here.",
+      `🆔 ${lead.id.split("-")[0]}`,
+    ];
+    await notifyTopic({ ...lead, replyTopicId: threadId }, lines.join("\n"), topicKeyboard(lead));
+  } catch (e) {
+    console.error("[notify] seedReplyTopic failed:", e);
+  }
+}
+
+/** Post a line into the lead's topic (creating the topic on demand), always with
+ * the action buttons so they sit under the newest message. Used for BOTH inbound
+ * customer replies AND mirroring our own outbound emails/texts, so the topic reads
+ * as a full back-and-forth record — even before the customer replies. Returns true
+ * if it landed in a topic; false means the caller should fall back to a flat post.
+ * Best-effort; never throws. */
+export async function postLeadTopic(lead: Lead, text: string): Promise<boolean> {
+  if (!BOT_TOKEN || !CHAT_REPLIES) return false;
+  try {
+    const threadId = await getOrCreateReplyTopic(lead);
+    if (threadId == null) return false;
+    const sent = await notifyTopic({ ...lead, replyTopicId: threadId }, text, topicKeyboard(lead));
+    return sent != null;
+  } catch (e) {
+    console.error("[notify] postLeadTopic failed:", e);
+    return false;
+  }
+}
+
 /** Inline buttons on a lead alert. Top rows LOG the negotiation (their ask / our
  * offer / bought); the bottom row ACTS — email an offer, ask for info, or message
  * the customer — each opening a reply box. callback_data is `neg|…` / `act|…`. */
@@ -293,6 +364,9 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
   }
+  // Open this lead's per-customer topic in the Replies group (best-effort; the
+  // Leads alert above is the source of truth, so a topic failure can't break it).
+  await seedReplyTopic(lead);
 }
 
 /** Alert the owner about an ABANDONED (partial) form that still left a phone or
