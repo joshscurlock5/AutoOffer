@@ -252,29 +252,48 @@ export async function notifyTopic(lead: Lead, text: string, replyMarkup?: unknow
   }
 }
 
-/** Control buttons under a topic's messages: negotiation logging + Contacted are
- * always shown; the email-action row (offer / info / message) appears ONLY when the
- * lead has an email, so a text-only chat never shows dead email buttons. Same
- * callback_data as the Leads-alert keyboard, so the webhook handlers resolve them
- * identically regardless of which group the tap came from. */
+/** ROOT action-bar menu for a Replies topic: just pick the channel — 📧 Email or
+ * 💬 Text — to keep the bar uncluttered. Email shows only when the lead has an email,
+ * Text only when it has a phone. Tapping one swaps the bar to that channel's sub-menu
+ * (topicEmailMenu / topicTextMenu). Deliberately has NO negotiation-logging or
+ * Contacted buttons — those live only on the Leads-alert keyboard. */
 export function topicKeyboard(lead: Lead) {
   const sid = lead.id.split("-")[0];
-  const rows: { text: string; callback_data: string }[][] = [
-    [
-      { text: "💬 Their ask", callback_data: `neg|ask|${sid}` },
-      { text: "💵 Our offer", callback_data: `neg|offer|${sid}` },
+  const row: { text: string; callback_data: string }[] = [];
+  if (lead.contact.email) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
+  if (lead.contact.phone) row.push({ text: "💬 Text", callback_data: `menu|text|${sid}` });
+  if (!row.length) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
+  return { inline_keyboard: [row] };
+}
+
+/** Email sub-menu: the three email actions + a Back to the root menu. Reuses the
+ * existing act|offer/info/msg callbacks (the topic flow drafts + sends by email). */
+export function topicEmailMenu(sid: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
+        { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
+        { text: "✉️ Message", callback_data: `act|msg|${sid}` },
+      ],
+      [{ text: "← Back", callback_data: `menu|root|${sid}` }],
     ],
-    [{ text: "✅ Bought (final price)", callback_data: `neg|bought|${sid}` }],
-  ];
-  if (lead.contact.email) {
-    rows.push([
-      { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
-      { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
-      { text: "✉️ Message", callback_data: `act|msg|${sid}` },
-    ]);
-  }
-  rows.push([{ text: "✅ Contacted", callback_data: `act|called|${sid}` }]);
-  return { inline_keyboard: rows };
+  };
+}
+
+/** Text sub-menu: the text equivalents + Back. tact|* callbacks send by SMS — dormant
+ * until Twilio is approved, at which point the webhook's tact handler wires the sends. */
+export function topicTextMenu(sid: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "💬 Text offer", callback_data: `tact|offer|${sid}` },
+        { text: "❓ Ask for info", callback_data: `tact|info|${sid}` },
+        { text: "📱 Message", callback_data: `tact|msg|${sid}` },
+      ],
+      [{ text: "← Back", callback_data: `menu|root|${sid}` }],
+    ],
+  };
 }
 
 /** Create (once) this lead's Replies-group topic and post the opening card into it
@@ -302,7 +321,7 @@ export async function seedReplyTopic(lead: Lead): Promise<void> {
 
 /** Label on the floating action-bar message (the buttons-only message kept at the
  * bottom of every topic). Telegram requires non-empty text alongside a keyboard. */
-const ACTION_BAR_LABEL = "⚡ Tap to offer, ask, or log — or just type to message the customer.";
+const ACTION_BAR_LABEL = "⚡ Type to message the customer — or tap a button below.";
 
 /** Delete a single message in a chat (best-effort). The bar is the bot's OWN
  * message, so this needs no special admin rights. */

@@ -4,7 +4,7 @@ import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead, claimPendingOffer, claimPending, getLeadByReplyThreadId, claimRelayMessage } from "@/lib/store";
 import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails, offerPreview, moreInfoPreview, messagePreview } from "@/lib/email";
 import { smsOfferReady, smsMoreInfo, smsSend, smsTo } from "@/lib/sms";
-import { telegramChatIds, notifyLog, notifyNewLead, postLeadTopic, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
+import { telegramChatIds, notifyLog, notifyNewLead, postLeadTopic, topicKeyboard, topicEmailMenu, topicTextMenu, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
 import type { Lead, NegotiationEntry } from "@/lib/types";
@@ -188,6 +188,21 @@ async function sendReturningId(chatId: number | string, text: string, replyMarku
   }
 }
 
+/** Swap only a message's inline keyboard in place (leaves the text). Used to switch
+ * a topic action bar between its root menu and the Email/Text sub-menus. */
+async function editMessageReplyMarkup(chatId: number | string, messageId: number, replyMarkup: unknown): Promise<void> {
+  if (!BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageReplyMarkup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Edit a message's text (+ optional buttons) in place. */
 async function editMessage(chatId: number | string, messageId: number, text: string, replyMarkup?: unknown): Promise<void> {
   if (!BOT_TOKEN) return;
@@ -258,6 +273,34 @@ export async function POST(req: NextRequest) {
       // answers with a confirmation toast instead (a callback can be answered once).
       const isCalledToggle = /^act\|called\|/.test(data);
       if (!isCalledToggle) await answerCallback(cb.id);
+
+      // Topic action-bar menu navigation — swap the bar between its root (📧 Email /
+      // 💬 Text) and the Email/Text sub-menus, in place. Replies topics only.
+      const menuM = data.match(/^menu\|(email|text|root)\|(\S+)$/);
+      if (menuM) {
+        const which = menuM[1];
+        const code = menuM[2];
+        const { lead } = await getLeadByShortId(code);
+        if (!lead) {
+          await reply(cbChat, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        const kb = which === "email" ? topicEmailMenu(code) : which === "text" ? topicTextMenu(code) : topicKeyboard(lead);
+        if (typeof cb.message?.message_id === "number") await editMessageReplyMarkup(cbChat, cb.message.message_id, kb);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Text sub-menu actions (tact|offer/info/msg) — send by SMS. DORMANT until the
+      // Twilio number is approved; for now, tell the owner clearly and do nothing.
+      const tactM = data.match(/^tact\|(offer|info|msg)\|(\S+)$/);
+      if (tactM) {
+        await reply(
+          cbChat,
+          "📱 Texting isn't live yet — it turns on once your Twilio number is approved. Use 📧 Email for now.",
+          cbThread,
+        );
+        return NextResponse.json({ ok: true });
+      }
 
       // Negotiation logging buttons → open a number reply box under the alert.
       const negM = data.match(/^neg\|(ask|offer|bought)\|(\S+)$/);
