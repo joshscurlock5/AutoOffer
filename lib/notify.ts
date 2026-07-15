@@ -320,12 +320,11 @@ export function topicTextMenu(sid: string) {
 export async function seedReplyTopic(lead: Lead): Promise<void> {
   if (!BOT_TOKEN || !CHAT_REPLIES || lead.replyTopicId != null) return;
   const c = lead.contact;
-  const channel = c.email && c.phone ? "Email + Text" : c.email ? "Email" : c.phone ? "Text" : "—";
+  // (Channel — Email/Text/both — now lives on the always-at-the-bottom action bar.)
   const lines = [
     `💬 ${c.name || "New lead"} · ${carLabel(lead)}`,
     ...(c.phone ? [`📞 ${c.phone}`] : []),
     ...(c.email ? [`✉️ ${c.email}`] : []),
-    `Channel: ${channel}`,
     "",
     "Type in this topic to message the customer — it goes straight to them (photos not yet supported). Their replies land here.",
     `🆔 ${lead.id.split("-")[0]}`,
@@ -335,15 +334,6 @@ export async function seedReplyTopic(lead: Lead): Promise<void> {
   await postLeadTopic(lead, lines.join("\n"));
 }
 
-/** Label on the floating action-bar message (the buttons-only message kept at the
- * bottom of every topic). Telegram requires non-empty text alongside a keyboard. */
-// Telegram sizes inline buttons to the width of their message, and requires non-empty
-// text. So we make the label WIDE but invisible: non-breaking spaces (they hold width)
-// bookended by invisible separators (so leading/trailing whitespace isn't trimmed and
-// the message is never "empty"). Result: a blank-looking bar whose buttons stretch
-// wide. bumpActionBar falls back to a visible glyph if Telegram ever rejects it.
-const ACTION_BAR_LABEL = "⁣" + " ".repeat(24) + "⁣";
-const ACTION_BAR_FALLBACK = "⚡";
 
 /** Delete a single message in a chat (best-effort). The bar is the bot's OWN
  * message, so this needs no special admin rights. */
@@ -368,9 +358,13 @@ async function bumpActionBar(lead: Lead, threadId: number): Promise<void> {
   const chat = String(lead.replyTopicChatId ?? CHAT_REPLIES ?? "");
   if (!chat) return;
   if (lead.topicActionBarMsgId != null) await deleteTopicMessage(chat, lead.topicActionBarMsgId);
-  // Try the (near-)blank label; if Telegram rejects it, fall back to a visible glyph
-  // so the bar always posts.
-  for (const label of [ACTION_BAR_LABEL, ACTION_BAR_FALLBACK]) {
+  // Label = the chat's CHANNEL (📧 Email / 💬 Text / both) — always visible at the
+  // bottom so you always know whether it's an email or text chat. Padded with invisible
+  // non-breaking spaces (closed by an invisible separator so they aren't trimmed) so
+  // Telegram keeps the buttons stretched wide; fall back to the plain channel if rejected.
+  const c = lead.contact;
+  const chan = c.email && c.phone ? "📧 Email + 💬 Text" : c.email ? "📧 Email" : c.phone ? "💬 Text" : "—";
+  for (const label of [chan + " ".repeat(16) + "⁣", chan]) {
     try {
       const sent = await sendText(label, chat, topicKeyboard(lead), threadId);
       await updateLead(lead.id, { topicActionBarMsgId: sent.messageId });
