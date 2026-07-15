@@ -1,6 +1,6 @@
 import "server-only";
 import type { Lead, Referral } from "./types";
-import { updateLead } from "./store";
+import { updateLead, claimReplyTopic, releaseReplyTopic } from "./store";
 
 /**
  * Owner alert on every new lead, via a Telegram bot.
@@ -125,7 +125,7 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
 // taps (allow-listed in the webhook) also target the new id.
 const migratedChat = new Map<string, string>();
 
-function postMessage(chatId: string, text: string, replyMarkup?: unknown) {
+function postMessage(chatId: string, text: string, replyMarkup?: unknown, messageThreadId?: number) {
   return fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -133,6 +133,7 @@ function postMessage(chatId: string, text: string, replyMarkup?: unknown) {
       chat_id: chatId,
       text,
       disable_web_page_preview: true,
+      ...(messageThreadId != null ? { message_thread_id: messageThreadId } : {}),
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     }),
   });
@@ -145,19 +146,110 @@ async function sendText(
   text: string,
   chatId: string,
   replyMarkup?: unknown,
+  messageThreadId?: number,
 ): Promise<{ messageId?: number; chatId: string }> {
   let target = migratedChat.get(chatId) || chatId;
-  let r = await postMessage(target, text, replyMarkup);
+  let r = await postMessage(target, text, replyMarkup, messageThreadId);
   let j = await r.json().catch(() => null);
   if (!r.ok && j?.parameters?.migrate_to_chat_id) {
     const newId = String(j.parameters.migrate_to_chat_id);
     migratedChat.set(chatId, newId);
     target = newId;
-    r = await postMessage(newId, text, replyMarkup);
+    r = await postMessage(newId, text, replyMarkup, messageThreadId);
     j = await r.json().catch(() => null);
   }
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
   return { messageId: j?.result?.message_id, chatId: target };
+}
+
+// --- Replies-group Topics inbox: one forum topic per lead's conversation --------
+// The Replies group is a forum (Topics enabled) with the bot as an admin holding
+// "Manage Topics". Each lead gets one topic; inbound customer texts/emails post
+// into it and the owner replies inside the topic. Additive — nothing calls these
+// helpers until the inbound routes + webhook are wired.
+
+/** Short vehicle label for a topic name. */
+function carLabel(lead: Lead): string {
+  const v = lead.vehicle;
+  return v ? `${v.year} ${v.make} ${v.model}` : lead.kind === "inquiry" ? "Inquiry" : "Vehicle";
+}
+
+/** Topic name: "Name · Year Make Model · <channel icon>", clamped to Telegram's 128 chars. */
+function topicNameFor(lead: Lead): string {
+  const c = lead.contact;
+  const icon = c.phone && c.email ? "📞✉️" : c.email ? "✉️" : c.phone ? "📞" : "";
+  const name = (c.name || "").trim() || `#${lead.id.split("-")[0]}`;
+  const base = `${name} · ${carLabel(lead)}${icon ? ` · ${icon}` : ""}`;
+  return base.length > 128 ? `${base.slice(0, 127)}…` : base;
+}
+
+/** Create THIS lead's forum topic in the Replies group. Returns its thread id +
+ * the (possibly migrated) chat id it lives in, or undefined on any failure (e.g.
+ * the group isn't a forum / the bot lacks Manage Topics — Telegram 400s). Guarded
+ * on CHAT_REPLIES being explicitly set so it never targets the fallback main chat. */
+async function createReplyTopic(lead: Lead): Promise<{ threadId: number; chatId: string } | undefined> {
+  if (!BOT_TOKEN || !CHAT_REPLIES) return undefined;
+  const chatId = migratedChat.get(CHAT_REPLIES) || CHAT_REPLIES;
+  try {
+    const r = await fetch(api("createForumTopic"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, name: topicNameFor(lead) }),
+    });
+    const j = await r.json().catch(() => null);
+    if (r.ok && j?.result?.message_thread_id != null) {
+      return { threadId: j.result.message_thread_id, chatId };
+    }
+    console.error("[notify] createForumTopic failed:", j?.description || r.status);
+    return undefined;
+  } catch (e) {
+    console.error("[notify] createForumTopic error:", e);
+    return undefined;
+  }
+}
+
+/** Get — or create exactly once — THIS lead's Replies-group topic id. Race-safe:
+ * a conditional claim guarantees a single creator, and on failure the claim is
+ * released so the lead is never permanently locked out of a topic. Returns
+ * undefined when topics aren't available (not configured / group not a forum) or
+ * on a lost create race — the caller should then fall back to a flat post. */
+export async function getOrCreateReplyTopic(lead: Lead): Promise<number | undefined> {
+  if (lead.replyTopicId != null) return lead.replyTopicId;
+  if (!BOT_TOKEN || !CHAT_REPLIES) return undefined;
+  const won = await claimReplyTopic(lead.id);
+  if (!won) return undefined; // a concurrent caller is creating it — this message falls back to a flat post
+  try {
+    const created = await createReplyTopic(lead);
+    if (!created) {
+      await releaseReplyTopic(lead.id);
+      return undefined;
+    }
+    await updateLead(lead.id, {
+      replyTopicId: created.threadId,
+      replyTopicChatId: created.chatId,
+      replyTopicPending: undefined,
+    });
+    return created.threadId;
+  } catch (e) {
+    await releaseReplyTopic(lead.id);
+    console.error("[notify] getOrCreateReplyTopic error:", e);
+    return undefined;
+  }
+}
+
+/** Post a message into a lead's Replies-group topic (best-effort). Returns the
+ * sent message id, or undefined if the lead has no topic yet / the send failed. */
+export async function notifyTopic(lead: Lead, text: string, replyMarkup?: unknown): Promise<number | undefined> {
+  if (!BOT_TOKEN || lead.replyTopicId == null) return undefined;
+  const chat = String(lead.replyTopicChatId ?? CHAT_REPLIES ?? "");
+  if (!chat) return undefined;
+  try {
+    const sent = await sendText(text, chat, replyMarkup, lead.replyTopicId);
+    return sent.messageId;
+  } catch (e) {
+    console.error("[notify] notifyTopic failed:", e);
+    return undefined;
+  }
 }
 
 /** Inline buttons on a lead alert. Top rows LOG the negotiation (their ask / our

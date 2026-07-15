@@ -304,6 +304,13 @@ export interface Lead {
    * negChatId may be a numeric id OR an @channelusername, hence number | string. */
   negMsgId?: number;
   negChatId?: number | string;
+  /** The Telegram forum topic (message_thread_id) for THIS lead's conversation in the
+   * Replies-group Topics inbox, plus the (post-migration) supergroup id the topic lives
+   * in. Distinct from negMsgId/negChatId (which point at the Leads-group ALERT message).
+   * replyTopicPending is a transient create-once lock, removed once replyTopicId is set. */
+  replyTopicId?: number;
+  replyTopicChatId?: number | string;
+  replyTopicPending?: boolean;
   /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
    * button is a toggle on the contacted state (new↔contacted): pressing it when the
    * lead is already contacted — even from an auto email-contact — moves it back to

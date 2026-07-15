@@ -78,6 +78,15 @@ async function send(to: string, body: string): Promise<boolean> {
   }
 }
 
+/** Send a free-text SMS to a lead (owner reply relay) — the SMS parity of
+ * sendMessageEmail. Honors smsTo (opt-out + valid phone) and stays a dormant
+ * no-op until Twilio env is set (via send()). Best-effort; never throws. */
+export async function smsSend(lead: Lead, body: string): Promise<boolean> {
+  const to = smsTo(lead);
+  if (!to) return false;
+  return send(to, body);
+}
+
 const CALL = site.phoneDisplay; // the line customers already know
 const STOP = "Reply STOP to cancel updates.";
 

@@ -15,6 +15,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
 import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent } from "./types";
+import { toE164 } from "./sms";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -277,6 +278,71 @@ export async function getLeadByBookingToken(token: string): Promise<Lead | null>
   if (!norm) return null;
   const leads = await getLeads();
   return leads.find((l) => l.bookingToken === norm) || null;
+}
+
+/** Find the most-recent lead with this E.164 phone (inbound SMS → topic routing).
+ * getLeads() is pre-sorted newest-first, so [0] is the latest. */
+export async function findLeadByPhone(e164: string): Promise<Lead | null> {
+  if (!e164) return null;
+  const leads = await getLeads();
+  return leads.filter((l) => toE164(l.contact.phone) === e164)[0] || null;
+}
+
+/** Find the most-recent lead with this email (inbound email → topic routing).
+ * Email is NOT unique (repeat sellers), so this returns the latest match; there's
+ * no {multiple} disambiguation like getLeadByShortId. */
+export async function findLeadByEmail(email: string): Promise<Lead | null> {
+  const norm = (email || "").trim().toLowerCase();
+  if (!norm) return null;
+  const leads = await getLeads();
+  return leads.filter((l) => (l.contact.email || "").trim().toLowerCase() === norm)[0] || null;
+}
+
+/** Find the lead that owns a given Replies-group forum topic (message_thread_id) —
+ * used to route an owner's in-topic reply back to the right customer. */
+export async function getLeadByReplyThreadId(threadId: number): Promise<Lead | null> {
+  if (!threadId) return null;
+  const leads = await getLeads();
+  return leads.find((l) => l.replyTopicId === threadId) || null;
+}
+
+/** Atomically claim the right to create THIS lead's Replies topic — a transient
+ * lock so a burst of near-simultaneous inbound messages creates ONE topic, not
+ * many. Returns true only for the winner, who MUST either persist replyTopicId
+ * (success) or call releaseReplyTopic (failure). Mirrors claimPurchaseSync. */
+export async function claimReplyTopic(id: string): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "SET replyTopicPending = :t",
+        ConditionExpression:
+          "attribute_exists(id) AND attribute_not_exists(replyTopicId) AND attribute_not_exists(replyTopicPending)",
+        ExpressionAttributeValues: { ":t": true },
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Release the transient replyTopicPending lock (call when topic creation fails,
+ * so a failed create can never permanently lock a lead out of ever getting one). */
+export async function releaseReplyTopic(id: string): Promise<void> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: LEADS_TABLE,
+        Key: { id },
+        UpdateExpression: "REMOVE replyTopicPending",
+        ConditionExpression: "attribute_exists(id)",
+      }),
+    );
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function deleteLead(id: string): Promise<void> {
