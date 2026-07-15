@@ -735,8 +735,6 @@ export async function POST(req: NextRequest) {
           await clearPromptAndInput();
         }
       };
-      const toWhom = lead.contact.name || lead.contact.email;
-
       if (kind === "offer") {
         const price = parsePrice(text);
         if (!price) {
@@ -745,12 +743,7 @@ export async function POST(req: NextRequest) {
         }
         await updateLead(lead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
         await clearAfterInput();
-        // Topic: a compact one-line confirm (no mockup). Leads channel: the full preview.
-        const body =
-          msgThread != null
-            ? `📧 Send offer ${fmtRange(price.low, price.high)} to ${toWhom} by email?`
-            : offerPreview(lead, price.low, price.high);
-        await sendReturningId(fromChat, body, confirmKb("offer"), msgThread);
+        await sendReturningId(fromChat, offerPreview(lead, price.low, price.high), confirmKb("offer"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
@@ -762,11 +755,7 @@ export async function POST(req: NextRequest) {
         }
         await updateLead(lead.id, { pendingInfo: questions });
         await clearAfterInput();
-        const body =
-          msgThread != null
-            ? `❓ Send ${questions.length} question${questions.length > 1 ? "s" : ""} to ${toWhom} by email?\n• ${questions.join("\n• ")}`
-            : moreInfoPreview(lead, questions);
-        await sendReturningId(fromChat, body, confirmKb("info"), msgThread);
+        await sendReturningId(fromChat, moreInfoPreview(lead, questions), confirmKb("info"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
@@ -778,11 +767,7 @@ export async function POST(req: NextRequest) {
       }
       await updateLead(lead.id, { pendingMessage: message });
       await clearAfterInput();
-      const body =
-        msgThread != null
-          ? `✉️ Send this to ${toWhom} by email?\n\n"${message}"`
-          : messagePreview(lead, message);
-      await sendReturningId(fromChat, body, confirmKb("msg"), msgThread);
+      await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"), msgThread);
       return NextResponse.json({ ok: true });
     }
 
@@ -805,7 +790,6 @@ export async function POST(req: NextRequest) {
         if (pend && Date.now() - new Date(pend.at).getTime() < 15 * 60 * 1000) {
           await updateLead(relayLead.id, { pendingTopicAction: undefined }); // consume it
           const psid = relayLead.id.split("-")[0];
-          const toWhom = relayLead.contact.name || relayLead.contact.email || "the customer";
           // ask / our offer / bought → log a negotiation number.
           if (pend.kind === "ask" || pend.kind === "offer" || pend.kind === "bought") {
             const price = parsePrice(text);
@@ -837,7 +821,9 @@ export async function POST(req: NextRequest) {
               return NextResponse.json({ ok: true });
             }
             await updateLead(relayLead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
-            await sendReturningId(fromChat, `📧 Send offer ${fmtRange(price.low, price.high)} to ${toWhom} by email?`, confirmSendKb("offer", psid), msgThread);
+            // Show the FULL email preview (offer filled in) so the owner sees the exact
+            // formatting before it goes out — then ✅ Send / ✋ Cancel.
+            await sendReturningId(fromChat, offerPreview(relayLead, price.low, price.high), confirmSendKb("offer", psid), msgThread);
             return NextResponse.json({ ok: true });
           }
           if (pend.kind === "einfo") {
@@ -847,12 +833,12 @@ export async function POST(req: NextRequest) {
               return NextResponse.json({ ok: true });
             }
             await updateLead(relayLead.id, { pendingInfo: questions });
-            await sendReturningId(fromChat, `❓ Send ${questions.length} question${questions.length > 1 ? "s" : ""} to ${toWhom} by email?\n• ${questions.join("\n• ")}`, confirmSendKb("info", psid), msgThread);
+            await sendReturningId(fromChat, moreInfoPreview(relayLead, questions), confirmSendKb("info", psid), msgThread);
             return NextResponse.json({ ok: true });
           }
           // pend.kind === "emsg"
           await updateLead(relayLead.id, { pendingMessage: text });
-          await sendReturningId(fromChat, `✉️ Send this to ${toWhom} by email?\n\n"${text}"`, confirmSendKb("msg", psid), msgThread);
+          await sendReturningId(fromChat, messagePreview(relayLead, text), confirmSendKb("msg", psid), msgThread);
           return NextResponse.json({ ok: true });
         }
         if (pend) await updateLead(relayLead.id, { pendingTopicAction: undefined }); // stale → drop, relay normally

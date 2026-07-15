@@ -257,21 +257,23 @@ export async function notifyTopic(lead: Lead, text: string, replyMarkup?: unknow
  * Contacted buttons — those live only on the Leads-alert keyboard. */
 export function topicKeyboard(lead: Lead) {
   const sid = lead.id.split("-")[0];
-  const row: { text: string; callback_data: string }[] = [];
-  if (lead.contact.email) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
-  if (lead.contact.phone) row.push({ text: "💬 Text", callback_data: `menu|text|${sid}` });
-  if (!row.length) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
-  return { inline_keyboard: [row] };
+  // Each on its OWN row → full-width, bigger tap targets (easier on a phone).
+  const rows: { text: string; callback_data: string }[][] = [];
+  if (lead.contact.email) rows.push([{ text: "📧 Email", callback_data: `menu|email|${sid}` }]);
+  if (lead.contact.phone) rows.push([{ text: "💬 Text", callback_data: `menu|text|${sid}` }]);
+  if (!rows.length) rows.push([{ text: "📧 Email", callback_data: `menu|email|${sid}` }]);
+  return { inline_keyboard: rows };
 }
 
-/** Email sub-menu: the three email actions + a Back to the root menu. Reuses the
- * existing act|offer/info/msg callbacks (the topic flow drafts + sends by email). */
+/** Email sub-menu: Offer / Info / Message + Back. Short labels (the channel is already
+ * implied by being under Email) so nothing gets cut off. Reuses act|offer/info/msg —
+ * the topic flow drafts + sends by email. */
 export function topicEmailMenu(sid: string) {
   return {
     inline_keyboard: [
       [
-        { text: "📧 Email offer", callback_data: `act|offer|${sid}` },
-        { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
+        { text: "💵 Offer", callback_data: `act|offer|${sid}` },
+        { text: "❓ Info", callback_data: `act|info|${sid}` },
         { text: "✉️ Message", callback_data: `act|msg|${sid}` },
       ],
       [{ text: "← Back", callback_data: `menu|root|${sid}` }],
@@ -279,15 +281,15 @@ export function topicEmailMenu(sid: string) {
   };
 }
 
-/** Text sub-menu: the text equivalents + Back. tact|* callbacks send by SMS — dormant
- * until Twilio is approved, at which point the webhook's tact handler wires the sends. */
+/** Text sub-menu: Offer / Info / Message + Back (channel implied by being under Text).
+ * tact|* callbacks send by SMS — dormant until Twilio is approved. */
 export function topicTextMenu(sid: string) {
   return {
     inline_keyboard: [
       [
-        { text: "💬 Text offer", callback_data: `tact|offer|${sid}` },
-        { text: "❓ Ask for info", callback_data: `tact|info|${sid}` },
-        { text: "📱 Message", callback_data: `tact|msg|${sid}` },
+        { text: "💵 Offer", callback_data: `tact|offer|${sid}` },
+        { text: "❓ Info", callback_data: `tact|info|${sid}` },
+        { text: "💬 Message", callback_data: `tact|msg|${sid}` },
       ],
       [{ text: "← Back", callback_data: `menu|root|${sid}` }],
     ],
