@@ -1,6 +1,6 @@
 import "server-only";
 import type { Lead, Referral } from "./types";
-import { updateLead, claimReplyTopic, releaseReplyTopic } from "./store";
+import { updateLead, claimReplyTopic, releaseReplyTopic, findCustomerTopic } from "./store";
 
 /**
  * Owner alert on every new lead, via a Telegram bot.
@@ -214,6 +214,21 @@ async function createReplyTopic(lead: Lead): Promise<{ threadId: number; chatId:
 export async function getOrCreateReplyTopic(lead: Lead): Promise<number | undefined> {
   if (lead.replyTopicId != null) return lead.replyTopicId;
   if (!BOT_TOKEN || !CHAT_REPLIES) return undefined;
+  // ONE THREAD PER CUSTOMER: if this person (same email) already has a thread on an
+  // earlier lead, reuse it — a repeat form / any email from this address joins that
+  // same thread rather than opening a second one.
+  const email = (lead.contact.email || "").trim().toLowerCase();
+  if (email) {
+    const existing = await findCustomerTopic(email);
+    if (existing) {
+      await updateLead(lead.id, {
+        replyTopicId: existing.threadId,
+        replyTopicChatId: existing.chatId,
+        replyTopicPending: undefined,
+      });
+      return existing.threadId;
+    }
+  }
   const won = await claimReplyTopic(lead.id);
   if (!won) return undefined; // a concurrent caller is creating it — this message falls back to a flat post
   try {

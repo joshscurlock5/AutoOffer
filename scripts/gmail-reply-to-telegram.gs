@@ -70,10 +70,10 @@ function checkEmailAndNotify() {
       }
       // Longer body for the topic (the flat fallback keeps the short snippet).
       var body = (msg.getPlainBody() || '').replace(/\s+/g, ' ').slice(0, 600);
-      // Send to the site: it stamps the customer's profile AND drops the reply into
-      // their Replies-group topic. If the topic took it, skip the flat alert below
-      // so there's no double-notify.
-      var handled = ref ? postReplyToServer(ref, subject, body) : false;
+      // Send to the site: it routes the reply to the customer's thread (by the
+      // sender's email, falling back to the Ref) and drops the body in. If the topic
+      // took it, skip the flat alert below so there's no double-notify.
+      var handled = postReplyToServer(ref, msg.getFrom(), subject, body);
       if (!handled) {
         var offerLine = ref
           ? '\n\nSend an offer → /offer ' + ref + ' <price>'
@@ -103,18 +103,19 @@ function sendTelegram(text) {
   });
 }
 
-// Send the customer's reply to the site: it records the reply on their analytics
-// profile (lastReplyAt / repliesCount) AND posts the message into their Replies-
-// group topic. Returns true when the topic took it (so the caller skips the flat
-// alert — no double-notify). Best-effort — never breaks the alert.
-function postReplyToServer(ref, subject, body) {
-  if (!ref || !CRON_SECRET || CRON_SECRET.indexOf('PASTE') === 0) return false;
+// Send the customer's reply to the site: it routes to the customer's thread (by the
+// sender's email `from`, falling back to `ref`), records the reply on their profile
+// (lastReplyAt / repliesCount), AND posts the body into their Replies-group topic.
+// Returns true when the topic took it (so the caller skips the flat alert — no
+// double-notify). Best-effort — never breaks the alert.
+function postReplyToServer(ref, from, subject, body) {
+  if ((!ref && !from) || !CRON_SECRET || CRON_SECRET.indexOf('PASTE') === 0) return false;
   try {
     var resp = UrlFetchApp.fetch(SITE_URL + '/api/leads/reply', {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + CRON_SECRET },
-      payload: JSON.stringify({ ref: ref, channel: 'email', subject: subject, text: body }),
+      payload: JSON.stringify({ ref: ref, from: from, channel: 'email', subject: subject, text: body }),
       muteHttpExceptions: true
     });
     var data = JSON.parse(resp.getContentText() || '{}');

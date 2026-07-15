@@ -306,6 +306,24 @@ export async function getLeadByReplyThreadId(threadId: number): Promise<Lead | n
   return leads.find((l) => l.replyTopicId === threadId) || null;
 }
 
+/** The forum topic for a CUSTOMER, keyed by email: the reply-topic already on ANY
+ * lead that shares this email. Drives "one thread per customer" — a repeat form or
+ * any email from this address reuses the same thread instead of opening a new one.
+ * getLeads() is newest-first, so the newest topic'd lead's thread wins. */
+export async function findCustomerTopic(
+  email: string,
+): Promise<{ threadId: number; chatId: string } | null> {
+  const norm = (email || "").trim().toLowerCase();
+  if (!norm) return null;
+  const leads = await getLeads();
+  for (const l of leads) {
+    if (l.replyTopicId != null && (l.contact.email || "").trim().toLowerCase() === norm) {
+      return { threadId: l.replyTopicId, chatId: String(l.replyTopicChatId ?? "") };
+    }
+  }
+  return null;
+}
+
 /** Atomically claim the right to create THIS lead's Replies topic — a transient
  * lock so a burst of near-simultaneous inbound messages creates ONE topic, not
  * many. Returns true only for the winner, who MUST either persist replyTopicId

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeadByShortId, atomicLeadEngagement } from "@/lib/store";
+import { getLeadByShortId, findLeadByEmail, atomicLeadEngagement } from "@/lib/store";
 import { postLeadTopic } from "@/lib/notify";
+import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,17 +10,23 @@ export const dynamic = "force-dynamic";
 // needed — both webhooks live behind the same owner-controlled trust boundary.
 const SECRET = process.env.CRON_SECRET || "";
 
+/** Pull the bare email out of a "Name <email@x>" (or plain) From header, lowercased. */
+function extractEmail(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  const raw = (m ? m[1] : from).trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
+}
+
 // ---------------------------------------------------------------------------
 //  POST /api/leads/reply
-//    { ref, channel?, text?, subject? }
+//    { ref, from?, channel?, text?, subject? }
 //  Called by the Gmail Apps Script (scripts/gmail-reply-to-telegram.gs) when a
-//  customer replies to one of our emails — the "Ref: <short-id>" it parses from
-//  the thread is passed here so the reply is recorded on the lead's profile
-//  (lastReplyAt / repliesCount / lastInboundChannel). SMS replies are stamped
-//  directly by app/api/sms; this covers the email channel.
-//  When `text` (the reply body) is included, we ALSO post it into the customer's
-//  Replies-group topic and return { topicPosted: true } so the script knows the
-//  topic handled it and can skip its own flat alert (no double-notify).
+//  customer replies to one of our emails. We resolve the CUSTOMER by the sender's
+//  email (`from`) first — so ALL mail from that address lands in their one thread —
+//  and fall back to the "Ref: <short-id>" tag. The reply is recorded on the lead's
+//  profile (lastReplyAt / repliesCount / lastInboundChannel), and when `text` (the
+//  reply body) is included we ALSO post it into that customer's Replies-group topic
+//  and return { topicPosted: true } so the script skips its flat alert (no dupes).
 //  Auth: Authorization: Bearer <CRON_SECRET>. No-op 401 until configured.
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
@@ -32,9 +39,13 @@ export async function POST(req: NextRequest) {
   const channel = (["sms", "email", "chat"].includes(chRaw) ? chRaw : "email") as "sms" | "email" | "chat";
   const text = typeof body.text === "string" ? body.text.trim() : "";
   const subject = typeof body.subject === "string" ? body.subject.trim() : "";
-  if (!ref) return NextResponse.json({ ok: false, error: "missing ref" }, { status: 400 });
+  const fromEmail = extractEmail(typeof body.from === "string" ? body.from : "");
+  if (!ref && !fromEmail) return NextResponse.json({ ok: false, error: "missing ref/from" }, { status: 400 });
 
-  const { lead } = await getLeadByShortId(ref);
+  // Resolve the customer: the sender's email routes ALL their mail to one thread;
+  // fall back to the Ref'd lead (e.g. sender differs from the address on file).
+  let lead: Lead | null = fromEmail ? await findLeadByEmail(fromEmail) : null;
+  if (!lead && ref) lead = (await getLeadByShortId(ref)).lead;
   if (!lead) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
 
   // Atomic write — see lib/store.ts atomicLeadEngagement (concurrent replies /
