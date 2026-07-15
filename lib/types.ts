@@ -323,8 +323,9 @@ export interface Lead {
    * input (with a timestamp for expiry). His next plain message in that topic is then
    * treated as the input for THIS action — not relayed to the customer — sidestepping
    * flaky force-reply on mobile/in topics. kind ∈ ask|offer|bought (log a number) or
-   * eoffer|einfo|emsg (draft an email). Cleared once consumed, cancelled, or expired. */
-  pendingTopicAction?: { kind: string; at: string };
+   * eoffer|einfo|emsg (draft an email). promptMsgId is the "type your …" prompt message
+   * so it can be auto-deleted once the input arrives. Cleared once consumed/cancelled/expired. */
+  pendingTopicAction?: { kind: string; at: string; promptMsgId?: number };
   /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
    * button is a toggle on the contacted state (new↔contacted): pressing it when the
    * lead is already contacted — even from an auto email-contact — moves it back to

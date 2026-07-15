@@ -317,13 +317,15 @@ export async function POST(req: NextRequest) {
         // Topic: stash the action; the owner's NEXT message here is the amount (no
         // fragile "reply to this"). Leads channel: the reliable force-reply prompt.
         if (cbThread != null) {
-          await updateLead(lead.id, { pendingTopicAction: { kind, at: new Date().toISOString() } });
-          await sendReturningId(
+          const at = new Date().toISOString();
+          await updateLead(lead.id, { pendingTopicAction: { kind, at } });
+          const pmid = await sendReturningId(
             cbChat,
             `${label} · ${carText(lead)}\nType the amount (e.g. 8500) — your next message here logs it.`,
             cancelActionKb(code),
             cbThread,
           );
+          if (typeof pmid === "number") await updateLead(lead.id, { pendingTopicAction: { kind, at, promptMsgId: pmid } });
           return NextResponse.json({ ok: true });
         }
         await sendPrompt(
@@ -362,14 +364,17 @@ export async function POST(req: NextRequest) {
         // blank-email preview + force-reply the owner already knows.
         if (cbThread != null) {
           const pk = kind === "offer" ? "eoffer" : kind === "info" ? "einfo" : "emsg";
-          await updateLead(lead.id, { pendingTopicAction: { kind: pk, at: new Date().toISOString() } });
+          const at = new Date().toISOString();
+          await updateLead(lead.id, { pendingTopicAction: { kind: pk, at } });
           const prompt =
             kind === "offer"
               ? `💵 Type your offer for the ${carText(lead)} — e.g. 8500 or 8500-9000.`
               : kind === "info"
                 ? `❓ Type your questions for the ${carText(lead)}, one per line.`
                 : `✉️ Type your message to ${lead.contact.name || "the customer"}.`;
-          await sendReturningId(cbChat, `${prompt}\nYour next message here fills it in.`, cancelActionKb(code), cbThread);
+          // Remember the prompt id so it's auto-removed once the owner's input arrives.
+          const pmid = await sendReturningId(cbChat, `${prompt}\nYour next message here fills it in.`, cancelActionKb(code), cbThread);
+          if (typeof pmid === "number") await updateLead(lead.id, { pendingTopicAction: { kind: pk, at, promptMsgId: pmid } });
           return NextResponse.json({ ok: true });
         }
         const preview =
@@ -789,6 +794,8 @@ export async function POST(req: NextRequest) {
         const pend = relayLead.pendingTopicAction;
         if (pend && Date.now() - new Date(pend.at).getTime() < 15 * 60 * 1000) {
           await updateLead(relayLead.id, { pendingTopicAction: undefined }); // consume it
+          // Auto-remove the "type your …" prompt now that the input has arrived.
+          if (typeof pend.promptMsgId === "number") await deleteMessage(fromChat, pend.promptMsgId);
           const psid = relayLead.id.split("-")[0];
           // ask / our offer / bought → log a negotiation number.
           if (pend.kind === "ask" || pend.kind === "offer" || pend.kind === "bought") {

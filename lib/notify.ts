@@ -272,12 +272,13 @@ export async function notifyTopic(lead: Lead, text: string, replyMarkup?: unknow
  * Contacted buttons — those live only on the Leads-alert keyboard. */
 export function topicKeyboard(lead: Lead) {
   const sid = lead.id.split("-")[0];
-  // Each on its OWN row → full-width, bigger tap targets (easier on a phone).
-  const rows: { text: string; callback_data: string }[][] = [];
-  if (lead.contact.email) rows.push([{ text: "📧 Email", callback_data: `menu|email|${sid}` }]);
-  if (lead.contact.phone) rows.push([{ text: "💬 Text", callback_data: `menu|text|${sid}` }]);
-  if (!rows.length) rows.push([{ text: "📧 Email", callback_data: `menu|email|${sid}` }]);
-  return { inline_keyboard: rows };
+  // Email + Text SIDE BY SIDE on one row; the wide invisible label above stretches
+  // them big across the message.
+  const row: { text: string; callback_data: string }[] = [];
+  if (lead.contact.email) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
+  if (lead.contact.phone) row.push({ text: "💬 Text", callback_data: `menu|text|${sid}` });
+  if (!row.length) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
+  return { inline_keyboard: [row] };
 }
 
 /** Email sub-menu: Offer / Info / Message + Back. Short labels (the channel is already
@@ -336,10 +337,12 @@ export async function seedReplyTopic(lead: Lead): Promise<void> {
 
 /** Label on the floating action-bar message (the buttons-only message kept at the
  * bottom of every topic). Telegram requires non-empty text alongside a keyboard. */
-// Telegram requires non-empty text alongside a keyboard, so the bar can't be truly
-// blank. An invisible separator renders as (near) nothing; bumpActionBar falls back
-// to a visible glyph if Telegram ever rejects it, so the bar can't silently vanish.
-const ACTION_BAR_LABEL = "⁣";
+// Telegram sizes inline buttons to the width of their message, and requires non-empty
+// text. So we make the label WIDE but invisible: non-breaking spaces (they hold width)
+// bookended by invisible separators (so leading/trailing whitespace isn't trimmed and
+// the message is never "empty"). Result: a blank-looking bar whose buttons stretch
+// wide. bumpActionBar falls back to a visible glyph if Telegram ever rejects it.
+const ACTION_BAR_LABEL = "⁣" + " ".repeat(24) + "⁣";
 const ACTION_BAR_FALLBACK = "⚡";
 
 /** Delete a single message in a chat (best-effort). The bar is the bot's OWN
