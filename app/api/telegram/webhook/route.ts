@@ -135,6 +135,23 @@ function negTrail(entries: NegotiationEntry[] | undefined): string {
   return entries.map((e) => `${negIcon(e.kind)} ${negMoney(e.amount)}`).join("  →  ");
 }
 
+/** ✅ Send / ✋ Cancel bar for a drafted email (offer/info/msg) — same callback_data
+ * the send/cancel handler already parses. Module-level so the topic pending-action
+ * handler and the Leads-channel reply handler both use one shape. */
+function confirmSendKb(kind: string, code: string) {
+  return {
+    inline_keyboard: [[
+      { text: "✅ Send", callback_data: `act|${kind}send|${code}` },
+      { text: "✋ Cancel", callback_data: `act|${kind}cancel|${code}` },
+    ]],
+  };
+}
+
+/** A lone ✋ Cancel button for a topic action prompt (clears the pending action). */
+function cancelActionKb(code: string) {
+  return { inline_keyboard: [[{ text: "✋ Cancel", callback_data: `tcancel|${code}` }]] };
+}
+
 /** The lead-action buttons for a short id (put on the alert + the in-place summary):
  * negotiation logging (ask/offer/bought) + the tap-to-act row (email/info/message). */
 function negKeyboardFor(sid: string) {
@@ -254,6 +271,18 @@ export async function POST(req: NextRequest) {
         }
         const label =
           kind === "ask" ? "💬 THEIR ASK" : kind === "offer" ? "💵 OUR OFFER" : "✅ BOUGHT — final price paid";
+        // Topic: stash the action; the owner's NEXT message here is the amount (no
+        // fragile "reply to this"). Leads channel: the reliable force-reply prompt.
+        if (cbThread != null) {
+          await updateLead(lead.id, { pendingTopicAction: { kind, at: new Date().toISOString() } });
+          await sendReturningId(
+            cbChat,
+            `${label} · ${carText(lead)}\nType the amount (e.g. 8500) — your next message here logs it.`,
+            cancelActionKb(code),
+            cbThread,
+          );
+          return NextResponse.json({ ok: true });
+        }
         await sendPrompt(
           cbChat,
           `${label} · ${carText(lead)}\nReply to this message with just the number (e.g. 8500).\n⟨neg|${kind}|${code}⟩`,
@@ -284,6 +313,22 @@ export async function POST(req: NextRequest) {
           await reply(cbChat, `${lead.contact.name || "That lead"} is phone-only (no email). Reach them at ${lead.contact.phone || "their number"}.`);
           return NextResponse.json({ ok: true });
         }
+        const ph = kind === "offer" ? "e.g. 8500" : kind === "info" ? "one question per line" : "type your message";
+        // In a topic: stash the action and take the owner's NEXT message as the input
+        // (no email mockup, no fragile "reply to this"). Leads channel: the full
+        // blank-email preview + force-reply the owner already knows.
+        if (cbThread != null) {
+          const pk = kind === "offer" ? "eoffer" : kind === "info" ? "einfo" : "emsg";
+          await updateLead(lead.id, { pendingTopicAction: { kind: pk, at: new Date().toISOString() } });
+          const prompt =
+            kind === "offer"
+              ? `💵 Type your offer for the ${carText(lead)} — e.g. 8500 or 8500-9000.`
+              : kind === "info"
+                ? `❓ Type your questions for the ${carText(lead)}, one per line.`
+                : `✉️ Type your message to ${lead.contact.name || "the customer"}.`;
+          await sendReturningId(cbChat, `${prompt}\nYour next message here fills it in.`, cancelActionKb(code), cbThread);
+          return NextResponse.json({ ok: true });
+        }
         const preview =
           kind === "offer" ? offerPreview(lead) : kind === "info" ? moreInfoPreview(lead) : messagePreview(lead);
         const hint =
@@ -292,7 +337,6 @@ export async function POST(req: NextRequest) {
             : kind === "info"
               ? "↳ Reply with your questions — one per line — to fill them in."
               : "↳ Reply with your message to fill it in.";
-        const ph = kind === "offer" ? "e.g. 8500" : kind === "info" ? "one question per line" : "type your message";
         await sendPrompt(cbChat, `${preview}\n\n${hint}\n⟨act|${kind}|${code}⟩`, cb.message?.message_id, ph, cbThread);
         return NextResponse.json({ ok: true });
       }
@@ -391,7 +435,7 @@ export async function POST(req: NextRequest) {
           await emitOfferSent(updatedLead || lead);
           if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
           await notifyLog(`📧 ${who} emailed offer ${fmtRange(low, high)} — ${carText(lead)} (${code})`);
-          await postLeadTopic(updatedLead || lead, `📤 Offer sent — ${fmtRange(low, high)}`);
+          await postLeadTopic(updatedLead || lead, `📧 Email offer sent — ${fmtRange(low, high)} (emailed)`);
           await clearPreview();
           return NextResponse.json({ ok: true });
         }
@@ -431,7 +475,7 @@ export async function POST(req: NextRequest) {
           await smsMoreInfo(lead);
           if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
           await notifyLog(`❓ ${who} asked ${questions.length} question${questions.length > 1 ? "s" : ""} — ${carText(lead)} (${code}):\n• ${questions.join("\n• ")}`);
-          await postLeadTopic(updatedLead || lead, `📤 Asked for info:\n• ${questions.join("\n• ")}`);
+          await postLeadTopic(updatedLead || lead, `❓ Asked for info (emailed):\n• ${questions.join("\n• ")}`);
           await clearPreview();
           return NextResponse.json({ ok: true });
         }
@@ -466,7 +510,7 @@ export async function POST(req: NextRequest) {
         await refreshLeadAlert(updatedLeadMsg || lead);
         if (wasNewlyContactedMsg) await emitLeadContacted(updatedLeadMsg || lead);
         await notifyLog(`✉️ ${who} messaged — ${carText(lead)} (${code}): "${message.slice(0, 200)}"`);
-        await postLeadTopic(updatedLeadMsg || lead, `📤 You: ${message}`);
+        await postLeadTopic(updatedLeadMsg || lead, `📤 Messaged (emailed): ${message}`);
         await clearPreview();
         return NextResponse.json({ ok: true });
       }
@@ -507,8 +551,22 @@ export async function POST(req: NextRequest) {
           const updated = await updateLead(lead.id, patch);
           await refreshLeadAlert(updated || { ...lead, ...patch });
           await notifyLog(`📞 ${who} marked ${patch.status === "contacted" ? "CONTACTED" : "NOT contacted"} — ${carText(lead)} (${code})`);
+          // Tapped inside a topic → leave a clean log line there too (and re-anchor the bar).
+          if (cbThread != null) {
+            await postLeadTopic(updated || { ...lead, ...patch }, patch.status === "contacted" ? "✅ Marked contacted" : "↩️ Marked not contacted");
+          }
         }
         await answerCallback(cb.id, toast);
+        return NextResponse.json({ ok: true });
+      }
+
+      // ✋ Cancel on a topic action prompt — clear the pending action and remove the prompt.
+      const tcancelM = data.match(/^tcancel\|(\S+)$/);
+      if (tcancelM) {
+        const code = tcancelM[1];
+        const { lead } = await getLeadByShortId(code);
+        if (lead) await updateLead(lead.id, { pendingTopicAction: undefined });
+        if (typeof cb.message?.message_id === "number") await deleteMessage(cbChat, cb.message.message_id);
         return NextResponse.json({ ok: true });
       }
 
@@ -583,11 +641,19 @@ export async function POST(req: NextRequest) {
         patch.closedAt = lead.closedAt || entry.at;
       }
       // Save it, then fold the trail into the lead's OWN alert message (no separate
-      // scoreboard), and delete the prompt + the typed number.
+      // scoreboard).
       const updated = await updateLead(lead.id, patch);
       await refreshLeadAlert(updated || { ...lead, ...patch });
       await notifyLog(`📝 ${who} logged ${kind} ${negMoney(amount)} — ${carText(lead)} (${code})\n${negTrail(negotiation)}`);
-      await clearPromptAndInput();
+      // Topic: keep the typed number, drop only our prompt, and leave a clean log line
+      // (bumping the action bar). Leads channel: clear both — the trail lives on the alert.
+      if (msgThread != null) {
+        if (typeof promptId === "number") await deleteMessage(fromChat, promptId);
+        const label = kind === "ask" ? "💬 Their ask" : kind === "offer" ? "💵 Our offer" : "✅ Bought";
+        await postLeadTopic(updated || { ...lead, ...patch }, `${label}: ${negMoney(amount)}`);
+      } else {
+        await clearPromptAndInput();
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -617,40 +683,63 @@ export async function POST(req: NextRequest) {
           { text: "✋ Cancel", callback_data: `act|${k}cancel|${code}` },
         ]],
       });
+      // In a topic, keep what the owner typed (their words are the record) and drop
+      // only our prompt; in the Leads channel, clear both for a tidy alert.
+      const clearAfterInput = async () => {
+        if (msgThread != null) {
+          if (typeof promptId === "number") await deleteMessage(fromChat, promptId);
+        } else {
+          await clearPromptAndInput();
+        }
+      };
+      const toWhom = lead.contact.name || lead.contact.email;
 
       if (kind === "offer") {
         const price = parsePrice(text);
         if (!price) {
-          await reply(fromChat, "Please reply with just a number, e.g. 8500 or 8500-9000.");
+          await reply(fromChat, "Please reply with just a number, e.g. 8500 or 8500-9000.", msgThread);
           return NextResponse.json({ ok: true });
         }
         await updateLead(lead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
-        await clearPromptAndInput();
-        await sendReturningId(fromChat, offerPreview(lead, price.low, price.high), confirmKb("offer"), msgThread);
+        await clearAfterInput();
+        // Topic: a compact one-line confirm (no mockup). Leads channel: the full preview.
+        const body =
+          msgThread != null
+            ? `📧 Send offer ${fmtRange(price.low, price.high)} to ${toWhom} by email?`
+            : offerPreview(lead, price.low, price.high);
+        await sendReturningId(fromChat, body, confirmKb("offer"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
       if (kind === "info") {
         const questions = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         if (!questions.length) {
-          await reply(fromChat, "Type at least one question, one per line.");
+          await reply(fromChat, "Type at least one question, one per line.", msgThread);
           return NextResponse.json({ ok: true });
         }
         await updateLead(lead.id, { pendingInfo: questions });
-        await clearPromptAndInput();
-        await sendReturningId(fromChat, moreInfoPreview(lead, questions), confirmKb("info"), msgThread);
+        await clearAfterInput();
+        const body =
+          msgThread != null
+            ? `❓ Send ${questions.length} question${questions.length > 1 ? "s" : ""} to ${toWhom} by email?\n• ${questions.join("\n• ")}`
+            : moreInfoPreview(lead, questions);
+        await sendReturningId(fromChat, body, confirmKb("info"), msgThread);
         return NextResponse.json({ ok: true });
       }
 
       // kind === "msg"
       const message = text.trim();
       if (!message) {
-        await reply(fromChat, "Type your message to the customer.");
+        await reply(fromChat, "Type your message to the customer.", msgThread);
         return NextResponse.json({ ok: true });
       }
       await updateLead(lead.id, { pendingMessage: message });
-      await clearPromptAndInput();
-      await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"), msgThread);
+      await clearAfterInput();
+      const body =
+        msgThread != null
+          ? `✉️ Send this to ${toWhom} by email?\n\n"${message}"`
+          : messagePreview(lead, message);
+      await sendReturningId(fromChat, body, confirmKb("msg"), msgThread);
       return NextResponse.json({ ok: true });
     }
 
@@ -666,6 +755,64 @@ export async function POST(req: NextRequest) {
         const fresh =
           typeof msg?.message_id === "number" ? await claimRelayMessage(relayLead.id, msg.message_id) : true;
         if (!fresh) return NextResponse.json({ ok: true });
+
+        // If the owner just tapped a topic action button, THIS message is that action's
+        // input (log a number / draft an email) — not a message to the customer.
+        const pend = relayLead.pendingTopicAction;
+        if (pend && Date.now() - new Date(pend.at).getTime() < 15 * 60 * 1000) {
+          await updateLead(relayLead.id, { pendingTopicAction: undefined }); // consume it
+          const psid = relayLead.id.split("-")[0];
+          const toWhom = relayLead.contact.name || relayLead.contact.email || "the customer";
+          // ask / our offer / bought → log a negotiation number.
+          if (pend.kind === "ask" || pend.kind === "offer" || pend.kind === "bought") {
+            const price = parsePrice(text);
+            if (!price) {
+              await postLeadTopic(relayLead, "⚠️ That wasn't a number. Tap the button again and type just the amount (e.g. 8500).");
+              return NextResponse.json({ ok: true });
+            }
+            const amount = price.low === price.high ? price.low : Math.round((price.low + price.high) / 2);
+            const entry: NegotiationEntry = { at: new Date().toISOString(), kind: pend.kind as NegotiationEntry["kind"], amount };
+            const negotiation = [...(relayLead.negotiation || []), entry].slice(-100);
+            const patch: Partial<Lead> = { negotiation };
+            if (pend.kind === "bought") {
+              patch.purchasePrice = amount;
+              patch.status = "closed";
+              patch.closedAt = relayLead.closedAt || entry.at;
+            }
+            const updated = await updateLead(relayLead.id, patch);
+            await refreshLeadAlert(updated || { ...relayLead, ...patch });
+            await notifyLog(`📝 ${who} logged ${pend.kind} ${negMoney(amount)} — ${carText(relayLead)} (${psid})`);
+            const label = pend.kind === "ask" ? "💬 Their ask" : pend.kind === "offer" ? "💵 Our offer" : "✅ Bought";
+            await postLeadTopic(updated || { ...relayLead, ...patch }, `${label}: ${negMoney(amount)}`);
+            return NextResponse.json({ ok: true });
+          }
+          // eoffer / einfo / emsg → stash the draft and show a compact Send / Cancel confirm.
+          if (pend.kind === "eoffer") {
+            const price = parsePrice(text);
+            if (!price) {
+              await postLeadTopic(relayLead, "⚠️ That wasn't a number. Tap 📧 Email offer again and type the price (e.g. 8500 or 8500-9000).");
+              return NextResponse.json({ ok: true });
+            }
+            await updateLead(relayLead.id, { pendingOffer: { low: price.low, high: price.high, at: new Date().toISOString() } });
+            await sendReturningId(fromChat, `📧 Send offer ${fmtRange(price.low, price.high)} to ${toWhom} by email?`, confirmSendKb("offer", psid), msgThread);
+            return NextResponse.json({ ok: true });
+          }
+          if (pend.kind === "einfo") {
+            const questions = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            if (!questions.length) {
+              await postLeadTopic(relayLead, "⚠️ Type at least one question, one per line.");
+              return NextResponse.json({ ok: true });
+            }
+            await updateLead(relayLead.id, { pendingInfo: questions });
+            await sendReturningId(fromChat, `❓ Send ${questions.length} question${questions.length > 1 ? "s" : ""} to ${toWhom} by email?\n• ${questions.join("\n• ")}`, confirmSendKb("info", psid), msgThread);
+            return NextResponse.json({ ok: true });
+          }
+          // pend.kind === "emsg"
+          await updateLead(relayLead.id, { pendingMessage: text });
+          await sendReturningId(fromChat, `✉️ Send this to ${toWhom} by email?\n\n"${text}"`, confirmSendKb("msg", psid), msgThread);
+          return NextResponse.json({ ok: true });
+        }
+        if (pend) await updateLead(relayLead.id, { pendingTopicAction: undefined }); // stale → drop, relay normally
 
         const sid = relayLead.id.split("-")[0];
         const canText = Boolean(smsTo(relayLead));
@@ -699,13 +846,13 @@ export async function POST(req: NextRequest) {
           });
           if (wasNewlyContacted) await emitLeadContacted(updated || relayLead);
           await notifyLog(`↪️ ${who} replied by ${via} — ${carText(relayLead)} (${sid}): "${text.slice(0, 200)}"`);
-          await reply(fromChat, `✓ Sent by ${via}`, msgThread);
+          // Confirm + re-anchor the action bar beneath the owner's message.
+          await postLeadTopic(updated || relayLead, `✓ Sent by ${via}`);
         } else {
           const reason = via === "" ? "no email or textable phone on file" : "the send failed — try again";
-          await reply(
-            fromChat,
+          await postLeadTopic(
+            relayLead,
             `⚠️ Not delivered — ${reason}. Reach them at ${relayLead.contact.phone || relayLead.contact.email || "their contact info"}.`,
-            msgThread,
           );
         }
         return NextResponse.json({ ok: true });
@@ -823,7 +970,7 @@ export async function POST(req: NextRequest) {
       await smsOfferReady(lead, low, high);
       await emitOfferSent(updatedLead || lead);
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-      await postLeadTopic(updatedLead || lead, `📤 Offer sent — ${fmtRange(low, high)}`);
+      await postLeadTopic(updatedLead || lead, `📧 Email offer sent — ${fmtRange(low, high)} (emailed)`);
       await reply(fromChat, `✅ Offer sent — ${fmtRange(low, high)} to ${lead.contact.name || lead.contact.email} for their ${carText(lead)}.`);
       return NextResponse.json({ ok: true });
     }
@@ -895,7 +1042,7 @@ export async function POST(req: NextRequest) {
       // Text the customer the "we need a detail" nudge too (best-effort).
       await smsMoreInfo(lead);
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-      await postLeadTopic(updatedLead || lead, `📤 Asked for info:\n• ${questions.join("\n• ")}`);
+      await postLeadTopic(updatedLead || lead, `❓ Asked for info (emailed):\n• ${questions.join("\n• ")}`);
       const who = lead.contact.name || lead.contact.email;
       await reply(
         fromChat,
@@ -944,7 +1091,7 @@ export async function POST(req: NextRequest) {
         status: lead.status === "new" ? "contacted" : lead.status,
       });
       if (wasNewlyContacted) await emitLeadContacted(updatedLead || lead);
-      await postLeadTopic(updatedLead || lead, `📤 You: ${message}`);
+      await postLeadTopic(updatedLead || lead, `📤 Messaged (emailed): ${message}`);
       await reply(fromChat, `📨 Message sent to ${lead.contact.name || lead.contact.email}.`);
       return NextResponse.json({ ok: true });
     }

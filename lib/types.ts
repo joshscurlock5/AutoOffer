@@ -315,6 +315,16 @@ export interface Lead {
    * customer. Monotonic guard: a redelivered/duplicate in-topic message (id ≤ this)
    * is skipped so the owner's reply can never be sent to the customer twice. */
   lastRelayMsgId?: number;
+  /** The buttons-only "action bar" message in this lead's topic. It's deleted and
+   * re-posted under the newest message after every topic post, so the action buttons
+   * always sit at the bottom of the conversation (no scrolling up to act). */
+  topicActionBarMsgId?: number;
+  /** When the owner taps a topic action button, which action is awaiting his typed
+   * input (with a timestamp for expiry). His next plain message in that topic is then
+   * treated as the input for THIS action — not relayed to the customer — sidestepping
+   * flaky force-reply on mobile/in topics. kind ∈ ask|offer|bought (log a number) or
+   * eoffer|einfo|emsg (draft an email). Cleared once consumed, cancelled, or expired. */
+  pendingTopicAction?: { kind: string; at: string };
   /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
    * button is a toggle on the contacted state (new↔contacted): pressing it when the
    * lead is already contacted — even from an auto email-contact — moves it back to

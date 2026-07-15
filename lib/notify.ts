@@ -284,38 +284,72 @@ export function topicKeyboard(lead: Lead) {
  * a no-op when the Replies forum isn't configured, and never throws. */
 export async function seedReplyTopic(lead: Lead): Promise<void> {
   if (!BOT_TOKEN || !CHAT_REPLIES || lead.replyTopicId != null) return;
+  const c = lead.contact;
+  const channel = c.email && c.phone ? "Email + Text" : c.email ? "Email" : c.phone ? "Text" : "—";
+  const lines = [
+    `💬 ${c.name || "New lead"} · ${carLabel(lead)}`,
+    ...(c.phone ? [`📞 ${c.phone}`] : []),
+    ...(c.email ? [`✉️ ${c.email}`] : []),
+    `Channel: ${channel}`,
+    "",
+    "Type in this topic to message the customer — it goes straight to them (photos not yet supported). Their replies land here.",
+    `🆔 ${lead.id.split("-")[0]}`,
+  ];
+  // postLeadTopic creates the topic, posts the card (no buttons), and drops the
+  // action bar beneath it.
+  await postLeadTopic(lead, lines.join("\n"));
+}
+
+/** Label on the floating action-bar message (the buttons-only message kept at the
+ * bottom of every topic). Telegram requires non-empty text alongside a keyboard. */
+const ACTION_BAR_LABEL = "⚡ Tap to offer, ask, or log — or just type to message the customer.";
+
+/** Delete a single message in a chat (best-effort). The bar is the bot's OWN
+ * message, so this needs no special admin rights. */
+async function deleteTopicMessage(chatId: string, messageId: number): Promise<void> {
+  if (!BOT_TOKEN) return;
   try {
-    const threadId = await getOrCreateReplyTopic(lead);
-    if (threadId == null) return;
-    const c = lead.contact;
-    const channel = c.email && c.phone ? "Email + Text" : c.email ? "Email" : c.phone ? "Text" : "—";
-    const lines = [
-      `💬 ${c.name || "New lead"} · ${carLabel(lead)}`,
-      ...(c.phone ? [`📞 ${c.phone}`] : []),
-      ...(c.email ? [`✉️ ${c.email}`] : []),
-      `Channel: ${channel}`,
-      "",
-      "Type in this topic to message the customer — it goes straight to them (photos not yet supported). Their replies land here.",
-      `🆔 ${lead.id.split("-")[0]}`,
-    ];
-    await notifyTopic({ ...lead, replyTopicId: threadId }, lines.join("\n"), topicKeyboard(lead));
-  } catch (e) {
-    console.error("[notify] seedReplyTopic failed:", e);
+    await fetch(api("deleteMessage"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    });
+  } catch {
+    /* best-effort */
   }
 }
 
-/** Post a line into the lead's topic (creating the topic on demand), always with
- * the action buttons so they sit under the newest message. Used for BOTH inbound
- * customer replies AND mirroring our own outbound emails/texts, so the topic reads
- * as a full back-and-forth record — even before the customer replies. Returns true
- * if it landed in a topic; false means the caller should fall back to a flat post.
+/** Re-anchor the action bar to the BOTTOM of the topic: delete the old buttons-only
+ * message, post a fresh one under the latest message, and remember its id. Keeps a
+ * single, always-reachable action bar at the bottom so the owner never scrolls up to
+ * act. Best-effort; never throws. */
+async function bumpActionBar(lead: Lead, threadId: number): Promise<void> {
+  const chat = String(lead.replyTopicChatId ?? CHAT_REPLIES ?? "");
+  if (!chat) return;
+  if (lead.topicActionBarMsgId != null) await deleteTopicMessage(chat, lead.topicActionBarMsgId);
+  try {
+    const sent = await sendText(ACTION_BAR_LABEL, chat, topicKeyboard(lead), threadId);
+    await updateLead(lead.id, { topicActionBarMsgId: sent.messageId });
+  } catch (e) {
+    console.error("[notify] bumpActionBar failed:", e);
+  }
+}
+
+/** Post a line into the lead's topic (creating the topic on demand), then re-anchor
+ * the action bar beneath it. The content message carries NO buttons — the buttons
+ * live only on the always-at-the-bottom bar. Used for BOTH inbound customer replies
+ * AND mirroring our own outbound emails/texts, so the topic reads as a clean
+ * back-and-forth record — even before the customer replies. Returns true if it
+ * landed in a topic; false means the caller should fall back to a flat post.
  * Best-effort; never throws. */
 export async function postLeadTopic(lead: Lead, text: string): Promise<boolean> {
   if (!BOT_TOKEN || !CHAT_REPLIES) return false;
   try {
     const threadId = await getOrCreateReplyTopic(lead);
     if (threadId == null) return false;
-    const sent = await notifyTopic({ ...lead, replyTopicId: threadId }, text, topicKeyboard(lead));
+    const withTopic = { ...lead, replyTopicId: threadId };
+    const sent = await notifyTopic(withTopic, text); // content only — no buttons
+    await bumpActionBar(withTopic, threadId);
     return sent != null;
   } catch (e) {
     console.error("[notify] postLeadTopic failed:", e);
