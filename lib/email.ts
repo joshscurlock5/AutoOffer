@@ -223,7 +223,9 @@ function confirmationEmail(lead: Lead): Email {
   const faster = `<tr><td style="padding:0 28px 8px;font-size:14px;line-height:1.55;color:#3a4654;">Want it faster? <strong>Call or text ${esc(site.phoneDisplay)}</strong> now — we can often give you your offer on the spot.</td></tr>`;
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    html: shell(head + nextStepsBox(lead) + faster + callCta("fastest")),
+    // refRow carries the tracking tag so a customer's reply to this (the FIRST email
+    // they get) can be traced back to their lead + topic, like the offer/info emails.
+    html: shell(head + nextStepsBox(lead) + faster + callCta("fastest") + refRow(lead)),
   };
 }
 

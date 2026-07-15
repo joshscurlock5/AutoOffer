@@ -174,12 +174,10 @@ function carLabel(lead: Lead): string {
   return v ? `${v.year} ${v.make} ${v.model}` : lead.kind === "inquiry" ? "Inquiry" : "Vehicle";
 }
 
-/** Topic name: "Name · Year Make Model · <channel icon>", clamped to Telegram's 128 chars. */
+/** Topic name: just the vehicle — "2018 Mazda CX-5" — kept simple. Clamped to
+ * Telegram's 128-char limit. */
 function topicNameFor(lead: Lead): string {
-  const c = lead.contact;
-  const icon = c.phone && c.email ? "📞✉️" : c.email ? "✉️" : c.phone ? "📞" : "";
-  const name = (c.name || "").trim() || `#${lead.id.split("-")[0]}`;
-  const base = `${name} · ${carLabel(lead)}${icon ? ` · ${icon}` : ""}`;
+  const base = carLabel(lead);
   return base.length > 128 ? `${base.slice(0, 127)}…` : base;
 }
 
@@ -321,7 +319,11 @@ export async function seedReplyTopic(lead: Lead): Promise<void> {
 
 /** Label on the floating action-bar message (the buttons-only message kept at the
  * bottom of every topic). Telegram requires non-empty text alongside a keyboard. */
-const ACTION_BAR_LABEL = "⚡ Type to message the customer — or tap a button below.";
+// Telegram requires non-empty text alongside a keyboard, so the bar can't be truly
+// blank. An invisible separator renders as (near) nothing; bumpActionBar falls back
+// to a visible glyph if Telegram ever rejects it, so the bar can't silently vanish.
+const ACTION_BAR_LABEL = "⁣";
+const ACTION_BAR_FALLBACK = "⚡";
 
 /** Delete a single message in a chat (best-effort). The bar is the bot's OWN
  * message, so this needs no special admin rights. */
@@ -346,11 +348,16 @@ async function bumpActionBar(lead: Lead, threadId: number): Promise<void> {
   const chat = String(lead.replyTopicChatId ?? CHAT_REPLIES ?? "");
   if (!chat) return;
   if (lead.topicActionBarMsgId != null) await deleteTopicMessage(chat, lead.topicActionBarMsgId);
-  try {
-    const sent = await sendText(ACTION_BAR_LABEL, chat, topicKeyboard(lead), threadId);
-    await updateLead(lead.id, { topicActionBarMsgId: sent.messageId });
-  } catch (e) {
-    console.error("[notify] bumpActionBar failed:", e);
+  // Try the (near-)blank label; if Telegram rejects it, fall back to a visible glyph
+  // so the bar always posts.
+  for (const label of [ACTION_BAR_LABEL, ACTION_BAR_FALLBACK]) {
+    try {
+      const sent = await sendText(label, chat, topicKeyboard(lead), threadId);
+      await updateLead(lead.id, { topicActionBarMsgId: sent.messageId });
+      return;
+    } catch (e) {
+      console.error("[notify] bumpActionBar label failed, trying fallback:", e);
+    }
   }
 }
 
