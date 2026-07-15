@@ -28,11 +28,13 @@ var SITE_URL    = 'https://www.driveoffer.ca';   // your live site
 var CRON_SECRET = 'PASTE_YOUR_CRON_SECRET_HERE';  // = your Amplify CRON_SECRET; logs the reply onto the customer's analytics profile
 // ===========================
 
-// Which emails count as "a customer reply". The default matches inbox mail
-// from the last 2 days whose content mentions driveoffer.ca — i.e. replies
-// that quote one of our emails. To get pinged for ALL new inbox mail instead,
-// change this to: 'in:inbox newer_than:2d'
-var SEARCH = 'in:inbox newer_than:2d "driveoffer.ca"';
+// Which emails count as "a customer reply". Matches inbox mail from the last 2
+// days whose SUBJECT contains "DriveOffer" (every email we send ends its subject
+// with "— DriveOffer", so replies keep it as "Re: … — DriveOffer") — OR that
+// mention driveoffer.ca in the body (legacy). Subject-matching is the reliable
+// part: a body-text filter alone silently missed replies that didn't quote the
+// literal "driveoffer.ca". For ALL new inbox mail instead: 'in:inbox newer_than:2d'
+var SEARCH = 'in:inbox newer_than:2d (subject:DriveOffer OR "driveoffer.ca")';
 
 var LABEL_NAME = 'TGNotified';                 // used to remember what we've already sent
 var MY_ADDRESSES = ['driveofferca@gmail.com', 'hello@driveoffer.ca']; // never alert on our own mail
