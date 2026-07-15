@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getLeads, atomicLeadEngagement } from "@/lib/store";
-import { notifyOwner, leadLine } from "@/lib/notify";
+import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+
+/** Pull the bare email out of a "Name <email@x>" (or plain) address, lowercased. */
+function extractEmail(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  const raw = (m ? m[1] : from).trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
+}
+
+/** Rough HTML→text for when a reply has no plain-text part. */
+function stripHtml(html: string | undefined): string {
+  if (!html) return "";
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 // ---------------------------------------------------------------------------
 //  Resend email-event webhook — the receipts side of lib/email.ts.
@@ -71,7 +92,62 @@ interface ResendEvent {
     subject?: string;
     click?: { link?: string };
     bounce?: { type?: string; subType?: string; message?: string };
+    // email.received (inbound) — metadata only; the body is fetched separately.
+    email_id?: string;
+    from?: string | string[];
   };
+}
+
+/** Handle an inbound customer reply (Resend Inbound `email.received`). The webhook
+ * carries metadata only, so we fetch the body from Resend, then route it to the
+ * customer's Replies-group topic by the SENDER's email (same as the Gmail path).
+ * This replaces the fragile Gmail-inbox + polling chain: replies hit us instantly,
+ * never depend on Gmail delivery, and never get lost to spam filtering. */
+async function handleInbound(event: ResendEvent): Promise<void> {
+  const emailId = event.data?.email_id;
+  const fromRaw = Array.isArray(event.data?.from) ? event.data?.from[0] : event.data?.from;
+  const from = extractEmail(fromRaw || "");
+  const subject = (event.data?.subject || "").trim();
+  if (!from) return;
+
+  // Fetch the full body (webhooks are metadata-only). Best-effort — if it fails we
+  // still post a heads-up so a reply is never silently dropped.
+  let text = "";
+  if (emailId && RESEND_API_KEY) {
+    try {
+      const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+      });
+      if (r.ok) {
+        const body = await r.json().catch(() => ({}));
+        text = (typeof body?.text === "string" && body.text.trim()) || stripHtml(body?.html) || "";
+      } else {
+        console.error(`[resend inbound] body fetch ${r.status}`);
+      }
+    } catch (e) {
+      console.error("[resend inbound] body fetch error:", e);
+    }
+  }
+
+  const lead = await findLeadByEmail(from);
+  if (!lead) return; // no matching customer on file
+
+  await atomicLeadEngagement(lead.id, {
+    set: {
+      lastReplyAt: new Date().toISOString(),
+      lastInboundChannel: "email",
+      nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+    },
+    increment: { repliesCount: 1 },
+  });
+
+  const inbound = [
+    `📩 ${lead.contact.name || "Customer"} (email)`,
+    ...(subject ? [`Subject: ${subject}`] : []),
+    "",
+    `"${(text || "(couldn't load the message text — open it in Resend)").slice(0, 900)}"`,
+  ].join("\n");
+  await postLeadTopic(lead, inbound);
 }
 
 /** The lead this receipt belongs to: most recent non-spam lead on the address. */
@@ -103,6 +179,12 @@ export async function POST(req: NextRequest) {
       event = JSON.parse(raw) as ResendEvent;
     } catch {
       return NextResponse.json({ ok: true }); // malformed body — ack so Resend stops retrying
+    }
+
+    // Inbound customer reply (Resend Inbound) → route straight to their topic.
+    if (event.type === "email.received") {
+      await handleInbound(event);
+      return NextResponse.json({ ok: true });
     }
 
     // email.delivered / email.opened / email.clicked / email.bounced / …
