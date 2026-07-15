@@ -16,7 +16,13 @@ import { site, amvicLicence } from "./site-config";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || `${site.name} <hello@driveoffer.ca>`;
-const REPLY_TO = process.env.EMAIL_REPLY_TO || site.email;
+// Replies go to an address ON the sending domain so Resend Inbound (MX → the
+// `email.received` webhook at /api/webhooks/resend) catches them and posts them
+// straight into the customer's Replies topic — instant, and never lost to a Gmail
+// delivery hiccup. site.email (the Gmail inbox) stays a live fallback: it's still
+// shown in footers, and the Gmail poller (gmail-reply-to-telegram.gs) still relays
+// anyone who mails it directly. Override with EMAIL_REPLY_TO if ever needed.
+const REPLY_TO = process.env.EMAIL_REPLY_TO || "reply@driveoffer.ca";
 const API = "https://api.resend.com/emails";
 const DAY = 86400000;
 
