@@ -295,6 +295,9 @@ export interface Lead {
   /** A drafted free-text message awaiting ✅ Send in Telegram, shown in an email
    * preview first. Cleared on send or cancel. Mirrors pendingOffer. */
   pendingMessage?: string;
+  /** A phone/email the owner typed via /addphone or /addemail inside a topic, awaiting
+   * ✅ Add confirmation. Cleared on add or cancel. Mirrors pendingOffer. */
+  pendingContactEdit?: { field: "phone" | "email"; value: string; at: string };
   /** Owner-logged negotiation trail from Telegram: the customer's asks + our
    * offers over time (+ a final "bought"), for ask-vs-offer / realistic-seller
    * analysis. Decoupled from the email-offer flow so phone-only leads log too. */

@@ -152,6 +152,63 @@ function cancelActionKb(code: string) {
   return { inline_keyboard: [[{ text: "✋ Cancel", callback_data: `tcancel|${code}` }]] };
 }
 
+/** ✅ Add / ✋ Cancel for a pending /addphone or /addemail contact edit (topic flow). */
+function contactConfirmKb(code: string) {
+  return {
+    inline_keyboard: [[
+      { text: "✅ Add", callback_data: `contact|save|${code}` },
+      { text: "✋ Cancel", callback_data: `contact|cancel|${code}` },
+    ]],
+  };
+}
+
+/** In-topic /addphone or /addemail: the ID is implied by the customer's thread, so we
+ * run the same guided flow as the offer/info/message buttons — prompt for the value,
+ * take the owner's next message, then a ✅ Add confirm — instead of the Leads-channel
+ * "<id> <value>" inline form. A value typed inline (/addphone 780-555-1234) skips the
+ * prompt and jumps straight to the confirm. The /addphone command line is scrubbed so
+ * only the final "📞 Phone added" confirmation is left. Best-effort; never throws. */
+async function startTopicContactEdit(
+  field: "phone" | "email",
+  lead: Lead,
+  inlineVal: string,
+  chat: number | string,
+  thread: number,
+  ownerMsgId: number | undefined,
+): Promise<void> {
+  const sid = lead.id.split("-")[0];
+  const icon = field === "phone" ? "📞" : "✉️";
+  const noun = field === "phone" ? "phone number" : "email";
+  const name = lead.contact.name || "this customer";
+  // Keep the topic clean — drop the "/addphone" command message itself.
+  if (typeof ownerMsgId === "number") await deleteMessage(chat, ownerMsgId);
+
+  if (inlineVal) {
+    // Value supplied on the command line — validate and go straight to the confirm.
+    const value = field === "phone" ? cleanPhone(inlineVal) : looksLikeEmail(inlineVal) ? inlineVal.toLowerCase() : "";
+    if (!value) {
+      await reply(chat, `That doesn't look like a ${noun}. Type /add${field} on its own and I'll prompt you.`, thread);
+      return;
+    }
+    await updateLead(lead.id, { pendingContactEdit: { field, value, at: new Date().toISOString() } });
+    const exists = field === "phone" ? lead.contact.phone : lead.contact.email;
+    await sendReturningId(chat, `${exists ? "Update" : "Add"} ${field} for ${name}?\n${icon} ${value}`, contactConfirmKb(sid), thread);
+    return;
+  }
+
+  // No value yet — stash the pending action and prompt (mirrors the act|* buttons).
+  const kind = field === "phone" ? "addphone" : "addemail";
+  const at = new Date().toISOString();
+  await updateLead(lead.id, { pendingTopicAction: { kind, at } });
+  const pmid = await sendReturningId(
+    chat,
+    `${icon} Type the ${noun} to add to ${name}'s profile — your next message here fills it in.`,
+    cancelActionKb(sid),
+    thread,
+  );
+  if (typeof pmid === "number") await updateLead(lead.id, { pendingTopicAction: { kind, at, promptMsgId: pmid } });
+}
+
 /** The lead-action buttons for a short id (put on the alert + the in-place summary):
  * negotiation logging (ask/offer/bought) + the tap-to-act row (email/info/message). */
 function negKeyboardFor(sid: string) {
@@ -618,6 +675,32 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // ✅ Add / ✋ Cancel a pending /addphone or /addemail contact edit (topic flow).
+      // Scrubs the confirm preview either way; on Add, saves the field and posts a clean
+      // confirmation via postLeadTopic — which re-anchors the action bar, so the newly
+      // enabled channel's button (💬 Text after a phone, 📧 Email after an email) appears.
+      const contactM = data.match(/^contact\|(save|cancel)\|(\S+)$/);
+      if (contactM) {
+        const action = contactM[1];
+        const code = contactM[2];
+        const { lead } = await getLeadByShortId(code);
+        if (typeof cb.message?.message_id === "number") await deleteMessage(cbChat, cb.message.message_id);
+        if (!lead) return NextResponse.json({ ok: true });
+        const edit = lead.pendingContactEdit;
+        if (action === "cancel" || !edit) {
+          await updateLead(lead.id, { pendingContactEdit: undefined });
+          return NextResponse.json({ ok: true });
+        }
+        const contact = { ...lead.contact };
+        if (edit.field === "phone") contact.phone = edit.value;
+        else contact.email = edit.value;
+        const updated = await updateLead(lead.id, { contact, pendingContactEdit: undefined });
+        const line = edit.field === "phone" ? `📞 Phone added: ${edit.value}` : `✉️ Email added: ${edit.value}`;
+        await postLeadTopic(updated || { ...lead, contact }, line);
+        await notifyLog(`📇 ${who} added ${edit.field} (${edit.value}) — ${carText(lead)} (${code})`);
+        return NextResponse.json({ ok: true });
+      }
+
       return NextResponse.json({ ok: true });
     }
 
@@ -841,6 +924,32 @@ export async function POST(req: NextRequest) {
             }
             await updateLead(relayLead.id, { pendingInfo: questions });
             await sendReturningId(fromChat, moreInfoPreview(relayLead, questions), confirmSendKb("info", psid), msgThread);
+            return NextResponse.json({ ok: true });
+          }
+          // addphone / addemail → validate the typed value, then a ✅ Add / ✋ Cancel confirm.
+          if (pend.kind === "addphone" || pend.kind === "addemail") {
+            const field: "phone" | "email" = pend.kind === "addphone" ? "phone" : "email";
+            const value = field === "phone" ? cleanPhone(text) : looksLikeEmail(text.trim()) ? text.trim().toLowerCase() : "";
+            if (!value) {
+              await postLeadTopic(
+                relayLead,
+                field === "phone"
+                  ? "⚠️ That doesn't look like a phone number. Type /addphone again, then just the number."
+                  : "⚠️ That doesn't look like an email. Type /addemail again, then just the address.",
+              );
+              return NextResponse.json({ ok: true });
+            }
+            // Scrub the owner's typed value so only the final confirmation is left.
+            if (typeof msg?.message_id === "number") await deleteMessage(fromChat, msg.message_id);
+            await updateLead(relayLead.id, { pendingContactEdit: { field, value, at: new Date().toISOString() } });
+            const exists = field === "phone" ? relayLead.contact.phone : relayLead.contact.email;
+            const icon = field === "phone" ? "📞" : "✉️";
+            await sendReturningId(
+              fromChat,
+              `${exists ? "Update" : "Add"} ${field} for ${relayLead.contact.name || "this customer"}?\n${icon} ${value}`,
+              contactConfirmKb(psid),
+              msgThread,
+            );
             return NextResponse.json({ ok: true });
           }
           // pend.kind === "emsg"
@@ -1182,10 +1291,23 @@ export async function POST(req: NextRequest) {
     //    email-based buttons work. The updated contact flows into their profile.
     const addEmailCmd = text.match(/^\/addemail(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
     if (addEmailCmd) {
-      const code = (addEmailCmd[2] || "").trim();
-      const email = (addEmailCmd[3] || "").trim();
+      const arg1 = (addEmailCmd[2] || "").trim();
+      const arg2 = (addEmailCmd[3] || "").trim();
+      // In a customer's topic the lead is implied by the thread — run the guided
+      // prompt→confirm flow (no ID needed); anything typed inline jumps to the confirm.
+      if (inTopic) {
+        const relayLead = await getLeadByReplyThreadId(msgThread as number);
+        if (!relayLead) {
+          await reply(fromChat, "Couldn't tell which customer this topic is for.", msgThread);
+          return NextResponse.json({ ok: true });
+        }
+        await startTopicContactEdit("email", relayLead, `${arg1} ${arg2}`.trim(), fromChat, msgThread as number, msg?.message_id);
+        return NextResponse.json({ ok: true });
+      }
+      const code = arg1;
+      const email = arg2;
       if (!code || !email) {
-        await reply(fromChat, "Usage: /addemail <id> <email>\nExample: /addemail a1b2c3d4 jordan@email.com");
+        await reply(fromChat, "Usage: /addemail <id> <email>\nExample: /addemail a1b2c3d4 jordan@email.com\n(Or just type /addemail inside a customer's topic.)");
         return NextResponse.json({ ok: true });
       }
       if (!looksLikeEmail(email)) {
@@ -1215,10 +1337,23 @@ export async function POST(req: NextRequest) {
     //     the profile now + future SMS button actions once Twilio is on).
     const addPhoneCmd = text.match(/^\/addphone(@\w+)?\b\s*(\S+)?\s*([\s\S]*)$/i);
     if (addPhoneCmd) {
-      const code = (addPhoneCmd[2] || "").trim();
-      const phoneRaw = (addPhoneCmd[3] || "").trim();
+      const arg1 = (addPhoneCmd[2] || "").trim();
+      const arg2 = (addPhoneCmd[3] || "").trim();
+      // In a customer's topic the lead is implied by the thread — run the guided
+      // prompt→confirm flow (no ID needed); anything typed inline jumps to the confirm.
+      if (inTopic) {
+        const relayLead = await getLeadByReplyThreadId(msgThread as number);
+        if (!relayLead) {
+          await reply(fromChat, "Couldn't tell which customer this topic is for.", msgThread);
+          return NextResponse.json({ ok: true });
+        }
+        await startTopicContactEdit("phone", relayLead, `${arg1} ${arg2}`.trim(), fromChat, msgThread as number, msg?.message_id);
+        return NextResponse.json({ ok: true });
+      }
+      const code = arg1;
+      const phoneRaw = arg2;
       if (!code || !phoneRaw) {
-        await reply(fromChat, "Usage: /addphone <id> <phone>\nExample: /addphone a1b2c3d4 (403) 555-0182");
+        await reply(fromChat, "Usage: /addphone <id> <phone>\nExample: /addphone a1b2c3d4 (403) 555-0182\n(Or just type /addphone inside a customer's topic.)");
         return NextResponse.json({ ok: true });
       }
       const phone = cleanPhone(phoneRaw);

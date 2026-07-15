@@ -363,7 +363,13 @@ async function bumpActionBar(lead: Lead, threadId: number): Promise<void> {
   // non-breaking spaces (closed by an invisible separator so they aren't trimmed) so
   // Telegram keeps the buttons stretched wide; fall back to the plain channel if rejected.
   const c = lead.contact;
-  const chan = c.email && c.phone ? "📧 Email + 💬 Text" : c.email ? "📧 Email" : c.phone ? "💬 Text" : "—";
+  const channel = c.email && c.phone ? "📧 Email + 💬 Text" : c.email ? "📧 Email" : c.phone ? "💬 Text" : "—";
+  // Under the channel line, two plain-language command hints so Samir always sees how to
+  // attach a missing number/email (typing /addphone or /addemail right in this topic).
+  const chan =
+    `${channel}\n` +
+    `/addphone — add a number to text them\n` +
+    `/addemail — add an email to email them`;
   for (const label of [chan + " ".repeat(16) + "⁣", chan]) {
     try {
       const sent = await sendText(label, chat, topicKeyboard(lead), threadId);
