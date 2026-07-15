@@ -46,8 +46,11 @@ export function smsTo(lead: Lead): string | null {
   return toE164(lead.contact.phone);
 }
 
-/** Low-level send. Best-effort: returns false (never throws) on any failure. */
-async function send(to: string, body: string): Promise<boolean> {
+/** Low-level send. Best-effort: returns false (never throws) on any failure. A
+ * mediaUrl turns the message into an MMS (Twilio fetches the image from that public
+ * URL); the number + A2P campaign must be MMS-capable. Canadian long-code MMS support
+ * varies by carrier — verify with Twilio before relying on it. */
+async function send(to: string, body: string, mediaUrl?: string): Promise<boolean> {
   if (!smsConfigured()) return false;
   try {
     const auth = Buffer.from(`${SID}:${TOKEN}`).toString("base64");
@@ -58,6 +61,7 @@ async function send(to: string, body: string): Promise<boolean> {
       // Delivery receipts land on the lead via this signed callback.
       StatusCallback: `${site.url}/api/sms/status`,
     });
+    if (mediaUrl) params.append("MediaUrl", mediaUrl);
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`, {
       method: "POST",
       headers: {
@@ -85,6 +89,15 @@ export async function smsSend(lead: Lead, body: string): Promise<boolean> {
   const to = smsTo(lead);
   if (!to) return false;
   return send(to, body);
+}
+
+/** MMS a photo (owner sent it in the customer's topic) to a lead. mediaUrl must be a
+ * public URL Twilio can fetch (we host the image via /api/media). Dormant no-op until
+ * Twilio is configured + MMS-capable. Best-effort; never throws. */
+export async function smsSendPhoto(lead: Lead, mediaUrl: string, body: string): Promise<boolean> {
+  const to = smsTo(lead);
+  if (!to) return false;
+  return send(to, body, mediaUrl);
 }
 
 const CALL = site.phoneDisplay; // the line customers already know

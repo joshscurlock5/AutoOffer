@@ -364,20 +364,24 @@ export async function releaseReplyTopic(id: string): Promise<void> {
 }
 
 /** Claim an in-topic owner message for relay-to-customer, deduping a Telegram
- * redelivery. Telegram message_ids are per-chat monotonic, so we advance a
- * high-water mark and only proceed for a genuinely newer id — a redelivered
- * (or out-of-order) message with id ≤ the mark fails the condition and is
- * skipped, so the customer can never be texted/emailed the same reply twice. */
+ * redelivery. Membership dedup (a seen-set), NOT a high-water mark: we add this
+ * message_id to relayMsgIds only if it isn't already there. Order-independent, so
+ * every DISTINCT message is claimed exactly once even when a burst (e.g. each photo
+ * of a multi-photo album, delivered concurrently/out of order across Lambda
+ * instances) arrives with ids that aren't monotonically increasing — a running-max
+ * would wrongly drop the lower ids. A true redelivery of the SAME id is still
+ * rejected (it's already in the set), so the customer is never messaged twice.
+ * relayMsgIds is a DynamoDB String Set, distinct from the old lastRelayMsgId scalar. */
 export async function claimRelayMessage(id: string, msgId: number): Promise<boolean> {
   try {
     await ddb.send(
       new UpdateCommand({
         TableName: LEADS_TABLE,
         Key: { id },
-        UpdateExpression: "SET lastRelayMsgId = :m",
+        UpdateExpression: "ADD relayMsgIds :idset",
         ConditionExpression:
-          "attribute_exists(id) AND (attribute_not_exists(lastRelayMsgId) OR lastRelayMsgId < :m)",
-        ExpressionAttributeValues: { ":m": msgId },
+          "attribute_exists(id) AND (attribute_not_exists(relayMsgIds) OR NOT contains(relayMsgIds, :idstr))",
+        ExpressionAttributeValues: { ":idset": new Set([String(msgId)]), ":idstr": String(msgId) },
       }),
     );
     return true;

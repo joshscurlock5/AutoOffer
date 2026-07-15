@@ -326,7 +326,7 @@ export async function seedReplyTopic(lead: Lead): Promise<void> {
     ...(c.phone ? [`📞 ${c.phone}`] : []),
     ...(c.email ? [`✉️ ${c.email}`] : []),
     "",
-    "Type in this topic to message the customer — it goes straight to them (photos not yet supported). Their replies land here.",
+    "Type in this topic to message the customer — it goes straight to them. Send a photo here and they'll get it too (emailed now; texted once Twilio's on). Their replies land here.",
     `🆔 ${lead.id.split("-")[0]}`,
   ];
   // postLeadTopic creates the topic, posts the card (no buttons), and drops the

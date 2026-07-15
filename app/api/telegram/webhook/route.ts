@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBudgetStatus } from "@/lib/marketCache";
 import { getLeadByShortId, updateLead, claimPendingOffer, claimPending, getLeadByReplyThreadId, claimRelayMessage } from "@/lib/store";
-import { sendOfferEmail, sendMoreInfo, sendMessageEmail, cancelScheduledEmails, offerPreview, moreInfoPreview, messagePreview } from "@/lib/email";
-import { smsOfferReady, smsMoreInfo, smsSend, smsTo } from "@/lib/sms";
+import { sendOfferEmail, sendMoreInfo, sendMessageEmail, sendPhotoMessageEmail, cancelScheduledEmails, offerPreview, moreInfoPreview, messagePreview } from "@/lib/email";
+import { smsOfferReady, smsMoreInfo, smsSend, smsSendPhoto, smsConfigured, smsTo } from "@/lib/sms";
+import { uploadOutboundMedia } from "@/lib/media";
 import { telegramChatIds, notifyLog, notifyNewLead, postLeadTopic, topicKeyboard, topicEmailMenu, topicTextMenu, buildText, PARTIAL_LEAD_HEADER } from "@/lib/notify";
 import { parseEdmonton } from "@/lib/time";
 import { emitLeadContacted, emitOfferSent, emitBookingConfirmed } from "@/lib/leadStages";
@@ -299,6 +300,88 @@ async function refreshLeadAlert(lead: Lead): Promise<void> {
   // Keep the original header (an abandoned-form lead must not get relabeled "new").
   const header = lead.status === "partial" || lead.partialNotifiedAt ? PARTIAL_LEAD_HEADER : undefined;
   await editMessage(lead.negChatId, lead.negMsgId, buildText(lead, header), negKeyboardFor(code));
+}
+
+/** Download a Telegram photo/file by file_id → bytes + a filename + content-type.
+ * Two hops: getFile (id → file_path) then the file CDN. Best-effort; null on failure. */
+async function downloadTelegramFile(
+  fileId: string,
+): Promise<{ bytes: Uint8Array; filename: string; contentType: string; ext: string } | null> {
+  if (!BOT_TOKEN) return null;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+    const j = await r.json().catch(() => null);
+    const filePath: string | undefined = j?.result?.file_path;
+    if (!filePath) return null;
+    const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`);
+    if (!dl.ok) return null;
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+    const ext = (filePath.split(".").pop() || "jpg").toLowerCase();
+    const contentType =
+      ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+    return { bytes, filename: `photo.${ext}`, contentType, ext };
+  } catch (e) {
+    console.error("[telegram] file download failed:", e);
+    return null;
+  }
+}
+
+/** Forward a downloaded image to the customer, mirroring the text relay's channel
+ * fallback: email attachment when they have a WORKING email, MMS when they're textable
+ * and Twilio is live — so a bounced-email lead with a good number still gets it. Prefers
+ * the channel they last used. Posts a clean "📤 Sent a photo …" line, or an actionable
+ * note if nothing could carry it. dedupeKey (the Telegram message id) keys the email's
+ * idempotency so a re-send delivers but a redelivery doesn't. Best-effort; never throws. */
+async function forwardImageToCustomer(
+  lead: Lead,
+  file: { bytes: Uint8Array; filename: string; contentType: string; ext: string },
+  caption: string,
+  dedupeKey: string,
+): Promise<void> {
+  const canText = Boolean(smsTo(lead)) && smsConfigured();
+  const tryEmail = async (): Promise<boolean> => {
+    if (!lead.contact.email) return false;
+    const res = await sendPhotoMessageEmail(lead, {
+      base64: Buffer.from(file.bytes).toString("base64"),
+      filename: file.filename,
+      caption,
+      dedupeKey,
+    });
+    return res.ok;
+  };
+  const tryMms = async (): Promise<boolean> => {
+    if (!canText) return false;
+    const mediaUrl = await uploadOutboundMedia(file.bytes, file.contentType, file.ext);
+    return mediaUrl ? smsSendPhoto(lead, mediaUrl, caption || "A photo from DriveOffer.") : false;
+  };
+
+  const preferSms = lead.lastInboundChannel === "sms" && canText;
+  let ok = false;
+  let via = "";
+  if (preferSms) {
+    ok = await tryMms();
+    via = "texted";
+    if (!ok) { ok = await tryEmail(); if (ok) via = "emailed"; }
+  } else {
+    ok = await tryEmail();
+    via = "emailed";
+    if (!ok) { ok = await tryMms(); if (ok) via = "texted"; }
+  }
+
+  if (ok) {
+    await postLeadTopic(lead, `📤 Sent a photo (${via})${caption ? `: ${caption}` : ""}`);
+  } else if (!lead.contact.email && !canText) {
+    await postLeadTopic(
+      lead,
+      "📷 Photos to a text-only customer need Twilio (not live yet). Add an email with /addemail and I'll send it right away.",
+    );
+  } else {
+    await postLeadTopic(lead, "⚠️ Couldn't send the photo. Try again, or add a good email/number with /addemail or /addphone.");
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -857,6 +940,35 @@ export async function POST(req: NextRequest) {
       await clearAfterInput();
       await sendReturningId(fromChat, messagePreview(lead, message), confirmKb("msg"), msgThread);
       return NextResponse.json({ ok: true });
+    }
+
+    // 2b-photo) An IMAGE the owner sent in a customer's topic → forward it to the
+    //     customer: email attachment today (works now), MMS once Twilio is live.
+    //     Covers BOTH a compressed photo (msg.photo, largest rendition) AND an image
+    //     sent "as a file"/uncompressed (msg.document with an image/* mime). Images
+    //     carry no msg.text, so this sits ahead of the plain-text relay below.
+    const photoSizes = Array.isArray(msg?.photo) ? msg.photo : null;
+    const docImage =
+      msg?.document && typeof msg.document?.mime_type === "string" && msg.document.mime_type.startsWith("image/")
+        ? msg.document
+        : null;
+    if (inTopic && (photoSizes?.length || docImage)) {
+      const relayLead = await getLeadByReplyThreadId(msgThread as number);
+      if (relayLead && String(fromChat) === String(relayLead.replyTopicChatId)) {
+        // Membership dedup (claimRelayMessage) is order-independent, so every photo in a
+        // multi-photo album is claimed once even when the burst arrives out of order.
+        const fresh = typeof msg?.message_id === "number" ? await claimRelayMessage(relayLead.id, msg.message_id) : true;
+        if (!fresh) return NextResponse.json({ ok: true });
+        const caption = String(msg?.caption || "").trim();
+        const fileId = docImage ? docImage.file_id : photoSizes[photoSizes.length - 1]?.file_id;
+        const file = fileId ? await downloadTelegramFile(fileId) : null;
+        if (!file) {
+          await postLeadTopic(relayLead, "⚠️ Couldn't fetch that image from Telegram — try sending it again.");
+          return NextResponse.json({ ok: true });
+        }
+        await forwardImageToCustomer(relayLead, file, caption, String(msg?.message_id ?? ""));
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // 2c) In-topic reply relay — the owner typed a PLAIN message inside a customer's

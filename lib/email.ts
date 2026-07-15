@@ -629,7 +629,13 @@ async function postEmail(
   to: string,
   email: Email,
   scheduledAt?: string,
-  opts?: { idempotencyKey?: string; tags?: { name: string; value: string }[] },
+  opts?: {
+    idempotencyKey?: string;
+    tags?: { name: string; value: string }[];
+    // Resend attachments: { filename, content: base64 } — used to email a photo the
+    // owner sent in a topic. Kept small (Resend caps total message size ~40MB).
+    attachments?: { filename: string; content: string }[];
+  },
 ): Promise<string> {
   try {
     const headers: Record<string, string> = { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" };
@@ -645,6 +651,7 @@ async function postEmail(
         html: email.html,
         ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
         ...(opts?.tags?.length ? { tags: opts.tags } : {}),
+        ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}),
       }),
     });
     if (!res.ok) {
@@ -803,6 +810,32 @@ export async function sendMessageEmail(lead: Lead, message: string): Promise<{ o
     // same message dedupes, a genuinely different message still sends.
     idempotencyKey: `message:${lead.id}:${contentKey(message)}`,
     tags: emailTags("message", lead.id),
+  });
+  return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
+}
+
+/** Email a photo the owner sent in a customer's topic — the image goes as an
+ * attachment, with the owner's caption (or a default) as the message body. Reuses the
+ * /message email chrome. Transactional (validEmail, not the nurture gate). Best-effort;
+ * returns a result so the Telegram relay can report what happened. */
+export async function sendPhotoMessageEmail(
+  lead: Lead,
+  photo: { base64: string; filename: string; caption?: string; dedupeKey: string },
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, reason: "email isn't configured (RESEND_API_KEY missing)" };
+  const to = validEmail(lead);
+  if (!to) return { ok: false, reason: "this lead has no valid email address" };
+  const caption = (photo.caption || "").trim();
+  const email = messageEmail(lead, caption || "Here's a photo for you — it's attached to this email.");
+  const id = await postEmail(to, email, undefined, {
+    // Key off the OWNER ACTION (the Telegram message id), not the image content: two
+    // different photos have different ids so both go out, a redelivery of the same id
+    // dedupes, and a deliberate re-send of the SAME image (a new id) actually delivers
+    // instead of being silently deduped. (Redeliveries are also caught upstream by
+    // claimRelayMessage; this is belt-and-suspenders.)
+    idempotencyKey: `photo:${lead.id}:${photo.dedupeKey}`,
+    tags: emailTags("photo", lead.id),
+    attachments: [{ filename: photo.filename, content: photo.base64 }],
   });
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
