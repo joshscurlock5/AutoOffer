@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getLeads, atomicLeadEngagement } from "@/lib/store";
+import { getLeads, atomicLeadEngagement, getLeadByShortId } from "@/lib/store";
 import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
@@ -129,17 +129,26 @@ async function handleInbound(event: ResendEvent): Promise<void> {
     }
   }
 
-  const lead = await findLeadByEmail(from);
-  if (!lead) return; // no matching customer on file
+  // Resolve the customer: the sender's email routes ALL their mail to one thread;
+  // fall back to the "Ref: <short-id>" tag our emails carry (lib/email.ts refRow) for
+  // replies that come from a different/secondary address than the one on file.
+  let lead = await findLeadByEmail(from);
+  if (!lead) {
+    const ref = (text.match(/Ref:\s*([a-z0-9]{4,20})/i) || subject.match(/Ref:\s*([a-z0-9]{4,20})/i))?.[1];
+    if (ref) lead = (await getLeadByShortId(ref)).lead;
+  }
 
-  await atomicLeadEngagement(lead.id, {
-    set: {
-      lastReplyAt: new Date().toISOString(),
-      lastInboundChannel: "email",
-      nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-    },
-    increment: { repliesCount: 1 },
-  });
+  // Never silently drop a reply. If we can't match it to a lead, alert the owner with
+  // the sender + snippet so it always surfaces somewhere — the Reply-To now routes
+  // only to us, so there is no Gmail-inbox fallback catching these.
+  if (!lead) {
+    await notifyOwner(
+      `📩 Customer reply — couldn't match it to a lead\nFrom: ${from}` +
+        `${subject ? `\nSubject: ${subject}` : ""}\n\n"${(text || "(no body)").slice(0, 700)}"`,
+      "replies",
+    );
+    return;
+  }
 
   const inbound = [
     `📩 ${lead.contact.name || "Customer"} (email)`,
@@ -147,12 +156,50 @@ async function handleInbound(event: ResendEvent): Promise<void> {
     "",
     `"${(text || "(couldn't load the message text — open it in Resend)").slice(0, 900)}"`,
   ].join("\n");
-  await postLeadTopic(lead, inbound);
+
+  // Stamp engagement — best-effort; a transient DynamoDB fault must NOT stop us from
+  // surfacing the reply, so isolate it from the owner-facing post below.
+  try {
+    await atomicLeadEngagement(lead.id, {
+      set: {
+        lastReplyAt: new Date().toISOString(),
+        lastInboundChannel: "email",
+        nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      },
+      increment: { repliesCount: 1 },
+    });
+  } catch (e) {
+    console.error("[resend inbound] engagement stamp failed:", e);
+  }
+
+  // Post into the customer's topic; if that fails (topic create/send hiccup, stale
+  // supergroup chat id, bot rate-limit, …) fall back to a flat Replies alert so the
+  // reply is never invisible — and Resend needn't retry (we always ack 200).
+  const posted = await postLeadTopic(lead, inbound);
+  if (!posted) {
+    await notifyOwner(`📩 New customer reply — ${leadLine(lead)}\n\n${inbound}`, "replies");
+  }
 }
 
-/** The lead this receipt belongs to: most recent non-spam lead on the address. */
+/** Canonicalize an address for matching: lowercase/trim, and for Gmail/Googlemail
+ * fold the well-known aliases (dots are ignored, +tag is a suffix) so a reply from
+ * johnsmith@gmail.com still matches a lead captured as john.smith+car@gmail.com. */
+function canonicalEmail(email: string): string {
+  const raw = (email || "").trim().toLowerCase();
+  const at = raw.lastIndexOf("@");
+  if (at < 1) return raw;
+  const domain = raw.slice(at + 1);
+  const local = raw.slice(0, at);
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    return `${local.split("+")[0].replace(/\./g, "")}@gmail.com`;
+  }
+  return raw;
+}
+
+/** The lead this receipt belongs to: most recent non-spam lead on the address
+ * (Gmail-alias-aware, so a dotted/+tagged reply address still matches). */
 async function findLeadByEmail(email: string): Promise<Lead | null> {
-  const norm = email.trim().toLowerCase();
+  const norm = canonicalEmail(email);
   if (!norm) return null;
   let leads: Lead[];
   try {
@@ -162,7 +209,7 @@ async function findLeadByEmail(email: string): Promise<Lead | null> {
   }
   return (
     leads
-      .filter((l) => (l.contact.email || "").trim().toLowerCase() === norm && l.status !== "spam")
+      .filter((l) => canonicalEmail(l.contact.email || "") === norm && l.status !== "spam")
       .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0] || null
   );
 }
