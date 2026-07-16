@@ -50,7 +50,7 @@ export default function WhySell() {
           </div>
 
           {amvicLicence && (
-            <p className="mt-6 text-center text-sm text-muted">{amvicLicence} · Owned by {site.owner}</p>
+            <p className="mt-6 text-center text-sm text-muted">{amvicLicence}</p>
           )}
         </div>
 
