@@ -63,7 +63,7 @@ export default function ContactPopup() {
             </div>
             <div className="mt-4">
               <p className="text-sm font-semibold text-navy">Phone</p>
-              <p className="text-sm text-muted">Call or text our team — a real person answers, 24/7.</p>
+              <p className="text-sm text-muted">Call or text our team — a real person answers during business hours (every day, 8 AM–12 PM).</p>
               <a
                 href={telHref}
                 onClick={() => trackPhoneClick("faq_contact")}

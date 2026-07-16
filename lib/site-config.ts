@@ -27,7 +27,9 @@ export const site = {
     country: "Canada",
   },
 
-  hours: "Open 24/7 — we buy cars around the clock",
+  hours: "Every day, 8 AM–12 PM",
+  // Shown next to the hours so an after-hours visitor knows the form is always open.
+  hoursNote: "You can request an offer online anytime — we reply during business hours.",
 
   // ---- GOOGLE MAP ---------------------------------------------------------
   // No API key needed. Replace the address in q= with your real one

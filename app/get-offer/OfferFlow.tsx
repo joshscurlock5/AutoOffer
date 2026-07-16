@@ -1154,7 +1154,7 @@ export default function OfferFlow() {
           <ol className="mx-auto mt-5 max-w-md space-y-2.5 text-left text-sm text-navy">
             <li className="flex gap-2.5">
               <span className="font-bold text-slate-400">1.</span>
-              <span>We review your {year} {make} {model} and reach out by <span className="font-semibold capitalize">{contactMethod}</span> with your firm offer — as soon as possible (we&apos;re available 24/7).</span>
+              <span>We review your {year} {make} {model} and reach out by <span className="font-semibold capitalize">{contactMethod}</span> with your firm offer — as soon as we can during our hours (every day, 8 AM–12 PM).</span>
             </li>
             <li className="flex gap-2.5">
               <span className="font-bold text-slate-400">2.</span>

@@ -42,6 +42,7 @@ export default function ContactPage() {
             </span>
           </TelLink>
           <p className="mt-4 text-sm text-muted">{site.hours}</p>
+          <p className="mt-1 text-sm text-muted">{site.hoursNote}</p>
         </div>
       </section>
 
@@ -82,6 +83,7 @@ export default function ContactPage() {
                 <span>
                   <span className="block text-sm text-muted">Hours</span>
                   <span className="block font-semibold text-navy">{site.hours}</span>
+                  <span className="mt-0.5 block text-sm text-muted">{site.hoursNote}</span>
                 </span>
               </div>
             </div>

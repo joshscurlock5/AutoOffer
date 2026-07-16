@@ -197,7 +197,10 @@ export default function Footer() {
               </li>
               <li className="flex gap-3">
                 <Clock className="mt-0.5 h-5 w-5 shrink-0 text-navy" />
-                <span>{site.hours}</span>
+                <span>
+                  {site.hours}
+                  <span className="mt-0.5 block text-xs opacity-80">{site.hoursNote}</span>
+                </span>
               </li>
             </ul>
           </div>
