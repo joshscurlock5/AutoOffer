@@ -869,13 +869,6 @@ export default function OfferFlow() {
             <Lock className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" /> Secure form. Your details are only used to prepare your offer.
           </span>
         </div>
-        <p className="text-center text-[11px] leading-relaxed text-muted">
-          By submitting, you agree DriveOffer may call, text, or email you about your offer —
-          offer updates, reminders, and booking confirmations. Msg &amp; data rates may apply and
-          message frequency varies. Reply STOP to opt out, HELP for help. See our{" "}
-          <a href="/privacy" className="underline hover:text-navy">Privacy Policy</a> and{" "}
-          <a href="/terms" className="underline hover:text-navy">Terms</a>.
-        </p>
         </div>
       </form>
   );

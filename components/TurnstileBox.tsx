@@ -15,7 +15,7 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 export default function TurnstileBox({ onToken }: { onToken: (token: string) => void }) {
   if (!SITE_KEY) return null;
   return (
-    <div className="mt-1">
+    <div className="mt-1 flex flex-col items-center gap-1">
       <Turnstile
         siteKey={SITE_KEY}
         options={{ theme: "light", appearance: "interaction-only" }}
