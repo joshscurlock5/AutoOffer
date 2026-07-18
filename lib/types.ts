@@ -379,6 +379,9 @@ export interface Lead {
   nurtureStage?: string;
   nurturePausedUntil?: string;
   lastNurtureAt?: string;
+  /** When the day-21 win-back was sent (ISO) — once-only guard, decoupled from
+   * nurtureStage so it never disturbs an in-flight offer/info nudge track. */
+  winbackSentAt?: string;
   /** True once the customer texted STOP (or Twilio flagged them) — suppresses ALL further SMS. */
   smsOptOut?: boolean;
   /** When the customer texted STOP (opt-out timestamp, for CASL audit + timeline). */

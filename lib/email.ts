@@ -6,10 +6,7 @@ import { makeUnsubToken } from "./unsubscribe";
 // ===========================================================================
 //  Customer emails via Resend's REST API (no SDK, like notify.ts):
 //   - sendLeadConfirmation: instant confirmation when a lead is captured.
-//   - scheduleLeadDrip: 2 follow-up reminders (Day 2 + Day 5) scheduled at lead
-//     time via Resend's `scheduled_at` (no cron needed). Returns their email ids.
-//   - cancelScheduledEmails: cancel those scheduled drips when the lead leaves
-//     "new" (so we never nudge someone the owner already reached).
+//   - cron-driven cadence sends: post-offer + pre-offer nudges, win-back, etc.
 //
 //  All gated (no-op until RESEND_API_KEY is set), best-effort, never throw, and
 //  only target leads with a valid email. PII-free chrome; replies go to the inbox.
@@ -25,7 +22,6 @@ const EMAIL_FROM = process.env.EMAIL_FROM || `${site.name} <hello@driveoffer.ca>
 // anyone who mails it directly. Override with EMAIL_REPLY_TO if ever needed.
 const REPLY_TO = process.env.EMAIL_REPLY_TO || "reply@driveoffer.ca";
 const API = "https://api.resend.com/emails";
-const DAY = 86400000;
 
 // Small inline "icons" for the offer email, built from codepoints so they
 // survive the build + JSON transport intact (literal emoji can arrive escaped).
@@ -68,11 +64,6 @@ function carLine(lead: Lead): string {
   const v = lead.vehicle;
   return v ? esc(`${v.year} ${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ""}`) : "";
 }
-function reachVerb(lead: Lead): string {
-  const m = lead.contact.contactMethod || "call";
-  return m === "email" ? "email you" : m === "text" ? "text you" : "call you";
-}
-
 // ---- HTML building blocks (shared chrome) ---------------------------------
 
 function intro(heading: string, paragraphHtml: string): string {
@@ -89,23 +80,8 @@ function intro(heading: string, paragraphHtml: string): string {
     ${paras}
   </td></tr>`;
 }
-// "What happens next" reassurance box for vehicle leads. (Replaced the old
-// instant "estimated range" box — there is no on-screen number anymore; a
-// specialist prepares the offer and reaches out. To re-introduce an emailed
-// estimate later, add a box here keyed off lead.estimate.)
-function nextStepsBox(lead: Lead): string {
-  if (!lead.vehicle) return "";
-  return `<tr><td style="padding:0 28px;">
-    <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">What happens next</div>
-      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:4px;">A ${esc(site.name)} specialist will ${reachVerb(lead)} with your offer.</div>
-      <div style="font-size:15px;line-height:1.55;color:#0f5132;margin-top:8px;">There's no obligation &mdash; and if it's a fit, we handle pickup, payment, and the paperwork.</div>
-    </div></td></tr>`;
-}
 function ctaBox(): string {
-  return `<tr><td style="padding:0 28px 8px;">
-    <a href="tel:${site.phoneE164}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;">Call or text ${esc(site.phoneDisplay)}</a>
-  </td></tr>`;
+  return callCta("");
 }
 
 // Social-proof strip — mirrors the website's trust bar (components/WhySell.tsx):
@@ -192,22 +168,23 @@ function pillButton(href: string, label: string, badge: string, dark: boolean): 
     : "";
   return `<a href="${href}" style="display:inline-block;background:${bg};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:12px 20px;border-radius:999px;margin:0 8px 8px 0;"><span style="vertical-align:middle;">${label}</span>${badgeHtml}</a>`;
 }
-/** The primary "call or text" button — stacked (a small "Fastest · Call or text"
- * line over the big, tappable number) so it never wraps/smushes on a phone. */
+/** The primary "call or text" button — matches the confirmation email: a small
+ * "⚡ Fastest · Call or text" eyebrow ABOVE, then a green button with the white
+ * phone icon and the tappable number. Centred as a block. */
 function callButtonB(): string {
-  return `<a href="tel:${site.phoneE164}" style="display:block;background:#1A7F54;color:#ffffff;text-decoration:none;text-align:center;padding:13px 18px;border-radius:14px;margin:0 0 8px;">
-    <span style="display:block;font-size:11px;line-height:1.3;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:#d6f5e5;">&#9889; Fastest &middot; Call or text</span>
-    <span style="display:block;font-size:21px;line-height:1.3;font-weight:800;margin-top:2px;">${esc(site.phoneDisplay)}</span>
-  </a>`;
+  return `<div style="text-align:center;">
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:10px;"><span style="color:#F59E0B;">&#9889;</span>&nbsp; Fastest &middot; Call or text</div>
+    <a href="tel:${site.phoneE164}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-size:20px;font-weight:800;letter-spacing:-.01em;padding:14px 30px;border-radius:12px;"><img src="${site.url}/email-icons/phone-white.png" width="18" height="18" alt="" style="vertical-align:middle;position:relative;top:-3px;margin-right:9px;border:0;" />${esc(site.phoneDisplay)}</a>
+  </div>`;
 }
 /** A single "Call or text" button, as a full row. */
 function callCta(_badge: string): string {
-  return `<tr><td style="padding:0 28px 12px;">${callButtonB()}</td></tr>`;
+  return `<tr><td style="padding:6px 28px 14px;">${callButtonB()}</td></tr>`;
 }
-/** Call/text (primary) + a secondary action button (optionally badged). No caption. */
+/** Call/text (primary) + a secondary action button (optionally badged), centred below. */
 function callFirstCta(_callBadge: string, secondUrl: string, secondLabel: string, secondBadge: string): string {
-  const second = secondUrl ? pillButton(secondUrl, secondLabel, secondBadge, true) : "";
-  return `<tr><td style="padding:0 28px 12px;">${callButtonB()}${second}</td></tr>`;
+  const second = secondUrl ? `<div style="text-align:center;margin-top:12px;">${pillButton(secondUrl, secondLabel, secondBadge, true)}</div>` : "";
+  return `<tr><td style="padding:6px 28px 14px;">${callButtonB()}${second}</td></tr>`;
 }
 /** "Call or text is fastest" emphasis line — used to nudge phone contact in every email. */
 function fastestLine(): string {
@@ -226,12 +203,6 @@ function questionsBox(qs: string[]): string {
       <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:#5b6b63;font-weight:700;margin-bottom:4px;">What we still need</div>
       ${items}
     </div></td></tr>`;
-}
-/** A tiny reference line so a customer's reply can be traced back to the lead —
- * the Gmail→Telegram script reads this to prefill the /offer command. */
-function refRow(lead: Lead): string {
-  const sid = lead.id.split("-")[0];
-  return `<tr><td style="padding:4px 28px 10px;font-size:11px;color:#c2c8cf;">Ref: ${esc(sid)}</td></tr>`;
 }
 // footerHtml, when passed, replaces the ENTIRE default footer row (used by the
 // confirmation email's reply-focused footer). Everything else — the header bar,
@@ -269,6 +240,24 @@ function shell(
 // ---- The three messages ---------------------------------------------------
 
 type Email = { subject: string; html: string };
+
+// Reply-focused footer — on EVERY email, so the customer always knows they can
+// just reply to reach a real person. `headline` is tailored per email. Carries the
+// one-click Unsubscribe (marketing opt-out) and a tiny Ref so a reply traces back
+// to the lead. Pass lead=null for a non-lead email (the referral thank-you): it
+// then omits the unsubscribe + Ref.
+function replyFooter(lead: Lead | null, headline: string, withUnsub = false): string {
+  const sid = lead ? esc(lead.id.split("-")[0]) : "";
+  const unsub = withUnsub && lead ? `${site.url}/api/unsubscribe?token=${makeUnsubToken(lead.id)}` : "";
+  return `<tr><td style="padding:26px 28px 30px;">
+      <div style="border-top:1px solid #eceef1;padding-top:24px;text-align:center;">
+        <div style="font-size:22px;line-height:1;color:#64748b;">&#9993;</div>
+        <div style="font-size:16px;font-weight:700;color:#0e1c2b;margin-top:10px;">${headline}</div>
+        <div style="font-size:13.5px;line-height:1.6;color:#7b8794;margin-top:8px;">A real ${esc(site.name)} specialist will respond personally.<br/>We typically reply within minutes during business hours.</div>
+        ${unsub ? `<div style="font-size:12px;line-height:1.6;color:#9aa5b1;margin-top:16px;">Not interested anymore? <a href="${unsub}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a></div>` : ""}
+        ${sid ? `<div style="font-size:10px;color:#cfd5dc;margin-top:12px;">Ref: ${sid}</div>` : ""}
+      </div></td></tr>`;
+}
 
 function confirmationEmail(lead: Lead): Email {
   const v = lead.vehicle;
@@ -322,45 +311,9 @@ function confirmationEmail(lead: Lead): Email {
         <div style="font-size:13px;line-height:1.5;color:#8792a2;margin-top:13px;">Call or text anytime. We're here to help.</div>
       </div></td></tr>`;
 
-  // Reply-focused footer (replaces the standard footer for this email only).
-  // Keeps a tiny Ref line so replies from a different address still trace back
-  // to the lead (the Gmail/Resend reply handlers parse "Ref: <id>").
-  const sid = esc(lead.id.split("-")[0]);
-  const unsubUrl = `${site.url}/api/unsubscribe?token=${makeUnsubToken(lead.id)}`;
-  const footer = `<tr><td style="padding:26px 28px 30px;">
-      <div style="border-top:1px solid #eceef1;padding-top:24px;text-align:center;">
-        <div style="font-size:22px;line-height:1;color:#64748b;">&#9993;</div>
-        <div style="font-size:16px;font-weight:700;color:#0e1c2b;margin-top:10px;">Questions? Just reply to this email.</div>
-        <div style="font-size:13.5px;line-height:1.6;color:#7b8794;margin-top:8px;">A real ${esc(site.name)} specialist will respond personally.<br/>We typically reply within minutes during business hours.</div>
-        <div style="font-size:12px;line-height:1.6;color:#9aa5b1;margin-top:16px;">Not interested anymore? <a href="${unsubUrl}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a></div>
-        <div style="font-size:10px;color:#cfd5dc;margin-top:12px;">Ref: ${sid}</div>
-      </div></td></tr>`;
-
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    html: shell(head + subline + nextBox + ctaCard + proofBox(), undefined, footer),
-  };
-}
-
-function drip1Email(lead: Lead): Email {
-  const first = firstName(lead);
-  const v = lead.vehicle;
-  const carRef = v ? `your <strong>${carLine(lead)}</strong>` : "your car";
-  const body = `Just checking in, ${first} — we'd still love to make you an offer on ${carRef}. Used-car values shift week to week, so it's worth locking in this week's number. It only takes a minute: call or text and we'll get you your offer.`;
-  return {
-    subject: v ? `Still want an offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
-    html: shell(intro(`Still thinking it over, ${first}?`, body) + nextStepsBox(lead) + ctaBox() + proofBox()),
-  };
-}
-
-function drip2Email(lead: Lead): Email {
-  const first = firstName(lead);
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Last check-in, ${first} — we'd still love to buy ${carRef}, and we come to you and pay on the spot (e-transfer or bank draft). No pressure at all — whenever you're ready, just call or text and we'll handle the rest.`;
-  return {
-    subject: `Ready when you are — ${site.name}`,
-    html: shell(intro("Still here when you're ready", body) + ctaBox() + proofBox()),
+    html: shell(head + subline + nextBox + ctaCard + proofBox(), undefined, replyFooter(lead, "Questions? Just reply to this email.")),
   };
 }
 
@@ -376,9 +329,9 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
       : `${money(lead.offer.low)} &ndash; ${money(lead.offer.high)}`
     : "your offer";
   const bodies = [
-    `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you.\nThe fastest way to lock it in is a quick call or text — we can often confirm on the spot.\nReady to go? Book a time below and we'll come to you and pay on the spot.`,
-    `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands.\nUsed values shift week to week, so it's worth locking in this week's number.\nCall or text for the quickest answer, or book your pickup below.`,
-    `Last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>.\nWhenever you're ready, call or text or pick a time below and we'll come to you and pay on the spot.`,
+    `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you.`,
+    `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands.\nUsed values shift week to week, so it's worth locking in this week's number.`,
+    `Last note on your offer of <strong>${priceText}</strong> for your <strong>${car}</strong>.\nWhenever you're ready, just call, text, or reply and we'll come to you and pay on the spot.`,
   ];
   const subjects = [
     `Any questions about your ${plain} offer?`,
@@ -389,7 +342,7 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
   const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
   return {
     subject: subjects[i],
-    html: shell(intro(headings[i], bodies[i]) + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + proofBox()),
+    html: shell(intro(headings[i], bodies[i]) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "To book a time or ask anything, just reply to this email.", true)),
   };
 }
 
@@ -397,53 +350,44 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
 function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your vehicle";
-  const body = `To get you an accurate offer on ${carRef}, we just need a couple details.\nThe fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then.\nPrefer email? Just reply with the answers below.`;
+  const heading = v ? `We reviewed your ${esc(v.make)} ${esc(v.model)}` : "We reviewed your details";
+  const body = `Thanks for the details so far! One of our specialists went over ${carRef}, and to put together an accurate offer we just need a couple more details:`;
+  // A personal sign-off so it reads like a note from a real rep, not a blast.
+  const signoff = `<tr><td style="padding:16px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
+    Looking forward to getting you your offer.<br/><br/>
+    Thanks,<br/>
+    <strong>Your ${esc(site.name)} Representative</strong>
+  </td></tr>`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
-    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest") + refRow(lead) + proofBox()),
+    html: shell(intro(heading, body) + questionsBox(questions) + callCta("fastest") + signoff + proofBox(), undefined, replyFooter(lead, "Easiest way to answer? Just reply to this email.")),
   };
 }
 
-// Cron reminder while we're awaiting the customer's info (after /moreinfo or /ask).
-function awaitingInfoReminderEmail(lead: Lead): Email {
+// Pre-offer nudges while we're awaiting the customer's info (cron-driven, after
+// /moreinfo or /ask): +2 / +5 / +10 days, mirroring the post-offer set. The ONLY
+// reason we haven't quoted yet is these missing details, so EVERY step re-prints
+// the exact questions we asked (questionsBox) — they may simply have missed the
+// first email. Copy escalates gently across the three steps. step 0/1/2.
+function awaitingInfoReminderEmail(lead: Lead, step = 0): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `We're ready to send your offer on ${carRef} as soon as we get the final details.\nThe fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot.\nPrefer email? Just reply with the answers below and we'll take it from there.`;
+  const plain = v ? `${v.make} ${v.model}` : "";
+  const bodies = [
+    `Just circling back on ${carRef} — we can get your offer out the moment we have a couple more details from you.`,
+    `Your offer for ${carRef} is ready to go as soon as we hear back — we just need those last details.`,
+    `Last check-in on ${carRef} — whenever you get a minute, send these over and we'll get your offer right out to you.`,
+  ];
+  const subjects = [
+    plain ? `A couple details to finish your ${plain} offer` : `A couple details to finish your offer — ${site.name}`,
+    plain ? `Still want your offer for your ${plain}?` : `Still want your offer? — ${site.name}`,
+    plain ? `Last reminder — your ${plain} offer is ready` : `Last reminder — your offer is ready — ${site.name}`,
+  ];
+  const headings = ["Let's finish your offer", "Still want your offer?", "Still here when you're ready"];
+  const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
   return {
-    subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
-    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + refRow(lead) + proofBox()),
-  };
-}
-
-// Confirmation after the customer self-books an inspection.
-function bookingConfirmationEmail(lead: Lead): Email {
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const when = lead.appointmentAt
-    ? new Date(lead.appointmentAt).toLocaleString("en-CA", {
-        timeZone: "America/Edmonton",
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "your selected time";
-  const where = lead.appointmentLocation ? esc(lead.appointmentLocation) : "the address you gave us";
-  const detailBox = `<tr><td style="padding:0 28px;">
-    <div style="background:#EAF5EF;border:1px solid #cfe6da;border-radius:12px;padding:18px;margin-bottom:18px;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#5b6b63;font-weight:600;">Your inspection</div>
-      <div style="font-size:18px;font-weight:800;color:#0f5132;margin-top:6px;">${when}</div>
-      <div style="font-size:15px;color:#1f2a36;margin-top:6px;">&#128205; ${where}</div>
-    </div></td></tr>`;
-  const confirmNote = `<tr><td style="padding:0 28px 10px;">
-    <div style="font-size:14px;line-height:1.55;color:#3a4654;">We'll send you a reminder the morning of — <strong>please tap &ldquo;Confirm&rdquo; so we know you're still on.</strong></div>
-    <div style="font-size:14px;line-height:1.55;color:#3a4654;margin-top:8px;">We only send a rep out to bookings that are confirmed.</div>
-  </td></tr>`;
-  const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft).\nNeed to change it? Just call or text.`;
-  return {
-    subject: `Booked — your ${site.name} inspection`,
-    html: shell(intro("You're booked!", body) + detailBox + confirmNote + ctaBox() + proofBox()),
+    subject: subjects[i],
+    html: shell(intro(headings[i], bodies[i]) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "Got the details? Just reply to this email.", true)),
   };
 }
 
@@ -461,64 +405,19 @@ function bookingDayOfEmail(lead: Lead): Email {
   const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot.\n<strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit.\nSomething changed? Just call or text.`;
   return {
     subject: `Today: your ${site.name} inspection at ${time}`,
-    html: shell(intro("See you today!", body) + confirmBtn + ctaBox() + proofBox()),
+    html: shell(intro("See you today!", body) + confirmBtn + ctaBox() + proofBox(), undefined, replyFooter(lead, "Running late or need to reschedule? Just reply to this email.")),
   };
 }
 
-// Day-10 extended nurture for a lead still sitting in "new" (cron-driven).
-function extendedNurtureEmail(lead: Lead): Email {
-  const first = firstName(lead);
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Hi ${first} — still thinking about selling ${carRef}? No rush, but used-car values move week to week, so this week's number may be better than you'd expect. Call or text and we'll get you a firm offer — we come to you and pay on the spot.`;
-  return {
-    subject: v ? `A quick offer for your ${v.make} ${v.model}?` : `Still here when you're ready — ${site.name}`,
-    html: shell(intro(`Still open to an offer, ${first}?`, body) + ctaBox() + proofBox()),
-  };
-}
-
-// Day-21 win-back for a lead marked "lost" (declined / went cold), cron-driven, once.
+// Day-21 win-back — re-engages any still-open lead ~3 weeks after it came in (not
+// just "lost" ones). Quote-agnostic wording, so it fits leads we never quoted too.
 function winbackEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Still have ${carRef}?\nPrices have moved, and we'd be glad to take another look and re-quote — no obligation at all.\nIf you've already sold it, no worries; just ignore this.`;
+  const body = `We'd still love to make you an offer on ${carRef} — no obligation at all.\nUsed-car prices move week to week, so it may be worth more than you'd expect.\nAlready sold it? No worries — just ignore this.`;
   return {
-    subject: v ? `Still have your ${v.make} ${v.model}? Happy to re-quote` : `Happy to re-quote — ${site.name}`,
-    html: shell(intro("Want a fresh offer?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "") + proofBox()),
-  };
-}
-
-// Customer reminder before a booked inspection (cron-driven off appointmentAt).
-function appointmentReminderEmail(lead: Lead): Email {
-  const first = firstName(lead);
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const when = lead.appointmentAt
-    ? new Date(lead.appointmentAt).toLocaleString("en-CA", {
-        timeZone: "America/Edmonton",
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "soon";
-  const body = `Hi ${first} — quick reminder that we're set to look at ${carRef} on <strong>${when}</strong>. We'll confirm the offer on the spot and, if it's a yes, pay you right there (e-transfer or bank draft). Need to reschedule? Just call or text.`;
-  return {
-    subject: `Reminder: your ${site.name} inspection ${when}`,
-    html: shell(intro("See you soon", body) + ctaBox() + proofBox()),
-  };
-}
-
-// Abandoned-cart recovery: a single, transactional nudge to someone who typed
-// their contact but never submitted (cron-driven off a "partial" lead).
-function partialRecoveryEmail(lead: Lead): Email {
-  const v = lead.vehicle;
-  const carRef = v ? `your ${carLine(lead)}` : "your car";
-  const body = `Looks like you started getting an offer on ${carRef} but didn't finish.\nPick up where you left off — it only takes a minute, and we come to you and pay on the spot.`;
-  return {
-    subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Finish your offer — ${site.name}`,
-    html: shell(intro("Your offer is almost ready", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Finish online &rarr;", "") + proofBox()),
+    subject: v ? `Still have your ${v.make} ${v.model}? We'd love to make an offer` : `Still selling your car? — ${site.name}`,
+    html: shell(intro("Still have your car?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "") + proofBox(), undefined, replyFooter(lead, "Want another look? Just reply to this email.", true)),
   };
 }
 
@@ -528,18 +427,16 @@ function referralConfirmationEmail(ref: Referral): Email {
   const first = esc((ref.referrer.name || "there").trim().split(" ")[0] || "there");
   const friend = ref.friend?.name ? esc(ref.friend.name.trim().split(" ")[0]) : "";
   const who = friend || "your friend";
-  const body = `Thanks for spreading the word!\nWe've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon.\nWhen ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid.`;
-  const codeBox = `<tr><td style="padding:0 28px;">
-    <div style="background:#EAF5EF;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#5b6b63;font-weight:600;">Your referral code</div>
-      <div style="font-size:24px;font-weight:800;color:#0f5132;margin-top:2px;letter-spacing:.02em;">${esc(ref.code)}</div>
-      <div style="font-size:13px;color:#5b6b63;margin-top:4px;">Ask ${who} to mention this code so we know the referral came from you.</div>
-    </div></td></tr>`;
+  const body = `Thanks for spreading the word!\nWe've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon.\nWhen ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid, nothing more you need to do.`;
+  // No pushy call button here — a referral isn't urgent. The footer just offers
+  // both ways to reach us (reply or call) in case they have any questions.
+  const contact = `Questions or concerns? Reply here, or call <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>.`;
   return {
     subject: `Thanks for referring ${friend || "a friend"} — ${site.name}`,
     html: shell(
-      intro(`Thanks, ${first}!`, body) + codeBox + linkButton(site.url, "Visit DriveOffer") + ctaBox(),
-      "You're receiving this because you referred a friend at driveoffer.ca.",
+      intro(`Thanks, ${first}!`, body),
+      undefined,
+      replyFooter(null, contact),
     ),
   };
 }
@@ -562,22 +459,17 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
       <div style="font-size:13px;color:#5b6b63;margin-top:8px;">Based on the details you gave us — it'd only change if something about the car turns out different than described.</div>
     </div></td></tr>`;
 
-  const questionsLine = `<tr><td style="padding:0 28px 6px;font-size:14px;line-height:1.55;color:#3a4654;">
-    Questions? You can always reply to this email, or <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:600;">call or text us</a> — whatever's easiest.
-  </td></tr>`;
-
   const noPressure = `<tr><td style="padding:2px 28px 4px;">
     <div style="font-size:15px;line-height:1.6;color:#3a4654;">No pressure &mdash; once you see it, it's your call.</div>
     <div style="font-size:15px;line-height:1.6;color:#3a4654;margin-top:10px;">If it's a yes, we come to you and pay on the spot.</div>
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Talk soon,<br/>
-    <strong>The ${esc(site.name)} Team</strong><br/>
-    <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; <a href="mailto:${esc(site.email)}" style="color:#1A7F54;text-decoration:none;">${esc(site.email)}</a>
+    <strong>The ${esc(site.name)} Team</strong>
   </td></tr>`;
   return {
     subject: plain ? `Your offer for your ${plain} — ${site.name}` : `Your offer is ready — ${site.name}`,
-    html: shell(intro("Your offer is ready", leadIn) + offerBox + questionsLine + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + noPressure + signoff + proofBox()),
+    html: shell(intro("Your offer is ready", leadIn) + offerBox + callCta("fastest") + noPressure + signoff + proofBox(), undefined, replyFooter(lead, "To schedule or ask anything, just reply to this email.")),
   };
 }
 
@@ -603,12 +495,14 @@ function messageEmail(lead: Lead, message: string): Email {
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#5b6b63;font-weight:700;margin-bottom:9px;">New message</div>
       ${paras}
     </div></td></tr>`;
-  const fastest = `<tr><td style="padding:12px 28px 10px;font-size:14px;line-height:1.55;color:#3a4654;">
-    <strong>Fastest response:</strong> just reply to this email, or call or text us anytime.
+  // Sign-off under the message so it reads as a note from a real person.
+  const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
+    Thank you,<br/>
+    <strong>Your ${esc(site.name)} Representative</strong>
   </td></tr>`;
   return {
     subject: `A message from ${site.name}`,
-    html: shell(head + box + fastest + callCta("fastest") + refRow(lead)),
+    html: shell(head + box + signoff + callCta("fastest"), undefined, replyFooter(lead, "Just reply to this email to get back to us.")),
   };
 }
 
@@ -833,17 +727,6 @@ export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<v
   });
 }
 
-/** Day-10 extended nurture for a lead still in "new". */
-export async function sendExtendedNurture(lead: Lead): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const to = nurtureEmail(lead);
-  if (!to) return;
-  await postEmail(to, extendedNurtureEmail(lead), undefined, {
-    idempotencyKey: `extended_nurture:${lead.id}`,
-    tags: emailTags("extended_nurture", lead.id),
-  });
-}
-
 /** Day-21 win-back for a lead marked "lost". */
 export async function sendWinback(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
@@ -855,37 +738,15 @@ export async function sendWinback(lead: Lead): Promise<void> {
   });
 }
 
-/** Reminder to the customer before a booked inspection. */
-export async function sendAppointmentReminder(lead: Lead): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
-  if (!to) return;
-  await postEmail(to, appointmentReminderEmail(lead), undefined, {
-    // Discriminator is the appointment time so a reschedule still sends a fresh reminder.
-    idempotencyKey: `appointment_reminder:${lead.id}:${lead.appointmentAt || ""}`,
-    tags: emailTags("appointment_reminder", lead.id),
-  });
-}
-
-/** One-time abandoned-cart recovery to a "partial" lead that left an email. */
-export async function sendPartialRecovery(lead: Lead): Promise<void> {
+/** Pre-offer nudge while awaiting the customer's info (cron, after /moreinfo or /ask). step 0=+2d, 1=+5d, 2=+10d. */
+export async function sendAwaitingInfoReminder(lead: Lead, step: number): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, partialRecoveryEmail(lead), undefined, {
-    idempotencyKey: `partial_recovery:${lead.id}`,
-    tags: emailTags("partial_recovery", lead.id),
-  });
-}
-
-/** Reminder while awaiting the customer's info (cron, after /moreinfo or /ask). */
-export async function sendAwaitingInfoReminder(lead: Lead): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const to = nurtureEmail(lead);
-  if (!to) return;
-  await postEmail(to, awaitingInfoReminderEmail(lead), undefined, {
-    idempotencyKey: `awaiting_info_reminder:${lead.id}`,
-    tags: emailTags("awaiting_info_reminder", lead.id),
+  const kind = `awaiting_info_reminder_${step}`;
+  await postEmail(to, awaitingInfoReminderEmail(lead, step), undefined, {
+    idempotencyKey: `${kind}:${lead.id}`,
+    tags: emailTags(kind, lead.id),
   });
 }
 
@@ -947,18 +808,6 @@ export async function sendPhotoMessageEmail(
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
-/** Confirmation after the customer self-books an inspection. */
-export async function sendBookingConfirmation(lead: Lead): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const to = validEmail(lead);
-  if (!to) return;
-  await postEmail(to, bookingConfirmationEmail(lead), undefined, {
-    // Discriminator is the appointment time so a re-booking sends a fresh confirmation.
-    idempotencyKey: `booking_confirmation:${lead.id}:${lead.appointmentAt || ""}`,
-    tags: emailTags("booking_confirmation", lead.id),
-  });
-}
-
 /** Morning-of inspection reminder with a confirm button (cron-driven). */
 export async function sendBookingDayOf(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
@@ -970,24 +819,7 @@ export async function sendBookingDayOf(lead: Lead): Promise<void> {
   });
 }
 
-/**
- * Schedule the 2 reminder follow-ups (Day 2 + Day 5) via Resend's scheduled send.
- * Returns the scheduled email ids (to cancel later). Best-effort; [] if unconfigured.
- */
-export async function scheduleLeadDrip(lead: Lead): Promise<string[]> {
-  if (!RESEND_API_KEY) return [];
-  const to = nurtureEmail(lead);
-  if (!to) return [];
-  const at1 = new Date(Date.now() + 2 * DAY).toISOString();
-  const at2 = new Date(Date.now() + 5 * DAY).toISOString();
-  const results = await Promise.allSettled([
-    postEmail(to, drip1Email(lead), at1, { idempotencyKey: `drip1:${lead.id}`, tags: emailTags("drip1", lead.id) }),
-    postEmail(to, drip2Email(lead), at2, { idempotencyKey: `drip2:${lead.id}`, tags: emailTags("drip2", lead.id) }),
-  ]);
-  return results.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
-}
-
-/** Cancel scheduled drip emails (when a lead leaves "new"). Best-effort; never throws. */
+/** Cancel scheduled emails by id. Best-effort; never throws. */
 export async function cancelScheduledEmails(ids: string[]): Promise<void> {
   if (!RESEND_API_KEY || !ids?.length) return;
   await Promise.allSettled(

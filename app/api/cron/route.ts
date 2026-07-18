@@ -7,15 +7,12 @@ import {
   sendAwaitingInfoReminder,
   sendWinback,
   sendBookingDayOf,
-  sendPartialRecovery,
 } from "@/lib/email";
 import {
   smsPostOfferFollowup,
   smsAwaitingInfo,
   smsWinback,
   smsBookingDayOf,
-  smsPartialRecovery,
-  smsConfigured,
 } from "@/lib/sms";
 import type { Lead } from "@/lib/types";
 
@@ -148,6 +145,9 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
       // pestering an actively-engaged lead. Bounded (the reply sets ~7d) so it
       // never permanently silences a lead, and win-back (day 21) still fires later.
       const nurturePaused = lead.nurturePausedUntil ? now < new Date(lead.nurturePausedUntil).getTime() : false;
+      // Tracks whether a nurture email already went out this pass, so the day-21
+      // win-back below never piles onto a nudge sent in the same run.
+      let nurtured = false;
       if (!nurturePaused && lead.nurtureStage === "offer_sent" && lead.offerSentAt && lead.status === "contacted") {
         // (A) Offer reminders after the offer was sent: +2 / +5 / +10 days.
         const base = new Date(lead.offerSentAt).getTime();
@@ -158,31 +158,44 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
             await smsPostOfferFollowup(lead);
             await updateLead(lead.id, { lastNurtureAt: nowISO });
             summary.postOffer += 1;
+            nurtured = true;
             break;
           }
         }
       } else if (!nurturePaused && lead.nurtureStage === "awaiting_info" && lead.moreInfoSentAt && lead.status === "contacted") {
-        // (D) Awaiting-info reminders after /moreinfo or /ask: +2 / +5 days.
+        // (D) Pre-offer nudges after /moreinfo or /ask: +2 / +5 / +10 days, mirroring
+        // the post-offer set. Each step re-sends the exact questions we asked — the
+        // only reason we haven't quoted is these missing details.
         const base = new Date(lead.moreInfoSentAt).getTime();
-        const dues = [base + 2 * DAY, base + 5 * DAY];
+        const dues = [base + 2 * DAY, base + 5 * DAY, base + 10 * DAY];
         for (let i = 0; i < dues.length; i += 1) {
           if (now >= dues[i] && lastNurture < dues[i]) {
-            await sendAwaitingInfoReminder(lead);
+            await sendAwaitingInfoReminder(lead, i);
             await smsAwaitingInfo(lead);
             await updateLead(lead.id, { lastNurtureAt: nowISO });
             summary.awaitingInfo += 1;
+            nurtured = true;
             break;
           }
         }
-      } else if (!nurturePaused && lead.status === "lost" && lead.nurtureStage !== "winback_sent" && created) {
-        // (B) Day-21 win-back for a declined lead, once.
-        const due = created + 21 * DAY;
-        if (now >= due) {
-          await sendWinback(lead);
-          await smsWinback(lead);
-          await updateLead(lead.id, { nurtureStage: "winback_sent", lastNurtureAt: nowISO });
-          summary.winback += 1;
-        }
+      }
+
+      // (B) Day-21 win-back — a safety net that re-engages ANY still-open lead ~3
+      // weeks after it came in. We no longer wait for a "lost" marking: sellers
+      // rarely get marked lost (they may resurface months later), so this goes to
+      // essentially everyone. Fires once (winbackSentAt). Skips converted (closed),
+      // already-booked (scheduled), never-submitted (partial), and junk (spam)
+      // leads, and won't pile onto a nudge already sent this run.
+      const skipWinback =
+        lead.status === "closed" ||
+        lead.status === "scheduled" ||
+        lead.status === "partial" ||
+        lead.status === "spam";
+      if (!nurtured && !nurturePaused && !skipWinback && !lead.winbackSentAt && created && now >= created + 21 * DAY) {
+        await sendWinback(lead);
+        await smsWinback(lead);
+        await updateLead(lead.id, { winbackSentAt: nowISO, lastNurtureAt: nowISO });
+        summary.winback += 1;
       }
 
       // --- Appointment: day-of customer reminder (morning, with confirm) + T-2h owner ping ---
@@ -216,20 +229,13 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
         const eKey = lead.contact.email ? "e:" + lead.contact.email.toLowerCase() : "";
         const pKey = lead.contact.phone ? "p:" + lead.contact.phone.replace(/\D/g, "") : "";
         if ((eKey && realContacts.has(eKey)) || (pKey && realContacts.has(pKey))) {
-          // They converted after all — mark done, never nudge.
+          // They converted after all — mark done.
           await updateLead(lead.id, { nurtureStage: "partial_done" });
         } else {
-          if (lead.contact.email) {
-            await sendPartialRecovery(lead);
-          }
-          if (lead.contact.phone) {
-            if (smsConfigured()) {
-              await smsPartialRecovery(lead);
-            } else if (!lead.contact.email) {
-              // No SMS yet and no email — fall back to the owner ping (unchanged behavior).
-              await notifyOwner(`🛒 Abandoned offer — reach out:\n${leadLine(lead)}`);
-            }
-          }
+          // No automated email/SMS to someone who started but didn't submit — just
+          // flag it so the owner can reach out by hand (via the Telegram topic) if
+          // they want. Marked done so it's only surfaced once.
+          await notifyOwner(`🛒 Abandoned offer — reach out if you'd like:\n${leadLine(lead)}`);
           await updateLead(lead.id, { nurtureStage: "partial_done", lastNurtureAt: nowISO });
           summary.partialRecovery += 1;
         }

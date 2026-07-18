@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLeadByBookingToken, updateLead } from "@/lib/store";
 import { availableDays, isValidSlot } from "@/lib/availability";
-import { sendBookingConfirmation } from "@/lib/email";
 import { smsBookingConfirmation } from "@/lib/sms";
 import { notifyOwner, leadLine } from "@/lib/notify";
 import { clientIpFrom, allowRequest } from "@/lib/rateLimit";
@@ -66,8 +65,7 @@ export async function POST(req: NextRequest) {
   });
   const finalLead: Lead = updated || { ...lead, appointmentAt: startISO, appointmentLocation: location, status: "scheduled" };
 
-  // Best-effort confirmation + owner alert (never fail the booking).
-  await sendBookingConfirmation(finalLead);
+  // Best-effort owner alert (never fail the booking).
   await smsBookingConfirmation(finalLead);
   const when = formatEdmonton(startISO, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   await notifyOwner(`📅 Customer booked an inspection\n${leadLine(finalLead)}\n${when}\n📍 ${location}`, "bookings");
