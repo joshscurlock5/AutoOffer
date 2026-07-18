@@ -267,6 +267,11 @@ export interface Lead {
   actualSalePrice?: number;
   /** When the actual sale price was recorded (ISO). */
   soldAt?: string;
+  /** Total all-in cost of the car (CAD) — the purchase price plus reconditioning,
+   * transport, fees, detailing, etc. When recorded it becomes the cost basis for
+   * profit/margin (profit = sale − allInExpenses); falls back to purchasePrice when
+   * unset. Usually higher than purchasePrice and filled in after the buy. */
+  allInExpenses?: number;
   /**
    * Meta ad-match keys captured at lead creation, kept so a later offline
    * "Purchase" conversion can be attributed back to the originating ad click

@@ -2304,7 +2304,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <StatCard label="Leads" value={String(view.totals.leads)} tip={SRC.site} delta={prevView ? <Delta now={view.totals.leads} prev={prevView.totals.leads} /> : undefined} />
             <StatCard label="Booked" value={String(booked)} tip="Your website's database — leads that reached a booked inspection (scheduled or closed)." delta={prevView ? <Delta now={booked} prev={prevView.funnelByRank.booked} /> : undefined} />
-            <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin${view.totals.marginIsEstimate ? " · est" : ""}`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car. “est” means it still includes a car you've bought but not sold yet." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
+            <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin${view.totals.marginIsEstimate ? " · est" : ""}`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus your all-in cost (logged all-in expenses when present, else the bought-for price). “est” means it still includes a car you've bought but not sold yet." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
             <StatCard
               label="Speed to lead"
               value={fmtMins(view.totals.medianResponseMins)}

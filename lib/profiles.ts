@@ -492,8 +492,9 @@ function buildOne(
   const offerSentAt = earliestOf((l) => l.offerSentAt);
   const scheduledAt = earliestOf((l) => l.scheduledAt);
 
-  // Economics, computed over CLOSED leads only: purchasePrice is cost, revenue
-  // is real sale (falling back to the expected resale when a deal hasn't been
+  // Economics, computed over CLOSED leads only: cost is your all-in cost (the
+  // logged all-in expenses when present, else the purchase price), revenue is the
+  // real sale (falling back to the expected resale when a deal hasn't been
   // reconciled yet), margin is sale minus cost.
   const closedLeads = leads.filter((l) => l.status === "closed");
   let cashPaidOut: number | undefined;
@@ -506,7 +507,7 @@ function buildOne(
     revenue = 0;
     margin = 0;
     for (const l of closedLeads) {
-      const cost = l.purchasePrice || 0;
+      const cost = l.allInExpenses ?? l.purchasePrice ?? 0;
       const sale = l.actualSalePrice ?? l.expectedResale ?? null;
       cashPaidOut += cost;
       revenue += sale || 0;

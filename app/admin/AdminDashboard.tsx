@@ -92,9 +92,11 @@ export default function AdminDashboard({
       ),
     [leads],
   );
-  const invCash = inventoryLeads.reduce((s, l) => s + (l.purchasePrice || 0), 0);
+  // Cash tied up + estimated profit use your all-in cost (logged expenses when
+  // present, else the purchase price) as the cost basis.
+  const invCash = inventoryLeads.reduce((s, l) => s + (l.allInExpenses ?? l.purchasePrice ?? 0), 0);
   const invEstProfit = inventoryLeads.reduce(
-    (s, l) => s + (l.expectedResale != null && l.purchasePrice != null ? l.expectedResale - l.purchasePrice : 0),
+    (s, l) => s + (l.expectedResale != null ? l.expectedResale - (l.allInExpenses ?? l.purchasePrice ?? 0) : 0),
     0,
   );
 
@@ -676,6 +678,7 @@ function LeadCard({
 }) {
   const [note, setNote] = useState(lead.notes || "");
   const [price, setPrice] = useState(lead.purchasePrice != null ? String(lead.purchasePrice) : "");
+  const [allIn, setAllIn] = useState(lead.allInExpenses != null ? String(lead.allInExpenses) : "");
   const [resale, setResale] = useState(lead.expectedResale != null ? String(lead.expectedResale) : "");
   const [sold, setSold] = useState(lead.actualSalePrice != null ? String(lead.actualSalePrice) : "");
   const [copied, setCopied] = useState(false);
@@ -687,21 +690,27 @@ function LeadCard({
     return Number.isNaN(n) ? null : n;
   };
   const costV = toNum(price);
+  const allInV = toNum(allIn);
   const resaleV = toNum(resale);
   const soldV = toNum(sold);
   const dealChanged =
     (costV != null && costV !== (lead.purchasePrice ?? null)) ||
+    (allInV != null && allInV !== (lead.allInExpenses ?? null)) ||
     (resaleV != null && resaleV !== (lead.expectedResale ?? null)) ||
     (soldV != null && soldV !== (lead.actualSalePrice ?? null));
-  // Profit = actual sale (if recorded) else expected resale, minus your cost.
+  // Profit = actual sale (if recorded) else expected resale, minus your cost basis.
+  // Cost basis = your all-in cost (purchase + logged expenses) when recorded, else
+  // the bought-for price. Margin % is taken over that same cost basis.
   const saleForProfit = soldV ?? lead.actualSalePrice ?? resaleV ?? lead.expectedResale ?? null;
-  const costForProfit = costV ?? lead.purchasePrice ?? null;
+  const costForProfit = allInV ?? lead.allInExpenses ?? costV ?? lead.purchasePrice ?? null;
+  const costIsAllIn = (allInV ?? lead.allInExpenses) != null;
   const isActualSale = (soldV ?? lead.actualSalePrice) != null;
   const profit = saleForProfit != null && costForProfit != null ? saleForProfit - costForProfit : null;
   const marginPct = profit != null && costForProfit ? Math.round((profit / costForProfit) * 100) : null;
   function saveDeal() {
     const patch: Partial<Lead> = {};
     if (costV != null && costV !== (lead.purchasePrice ?? null)) patch.purchasePrice = costV;
+    if (allInV != null && allInV !== (lead.allInExpenses ?? null)) patch.allInExpenses = allInV;
     if (resaleV != null && resaleV !== (lead.expectedResale ?? null)) patch.expectedResale = resaleV;
     if (soldV != null && soldV !== (lead.actualSalePrice ?? null)) {
       patch.actualSalePrice = soldV;
@@ -902,8 +911,9 @@ function LeadCard({
 
           {/* deal economics — cost, expected resale, actual sale + live profit */}
           <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <PriceInput id={`cost-${lead.id}`} label="Bought for" value={price} onChange={setPrice} />
+              <PriceInput id={`allin-${lead.id}`} label="All-in cost" value={allIn} onChange={setAllIn} />
               <PriceInput id={`resale-${lead.id}`} label="Est. resale" value={resale} onChange={setResale} />
               <PriceInput id={`sold-${lead.id}`} label="Sold for" value={sold} onChange={setSold} />
             </div>
@@ -914,6 +924,7 @@ function LeadCard({
                   {marginPct != null && (
                     <span className="font-semibold text-muted"> ({profit >= 0 ? "+" : ""}{marginPct}%)</span>
                   )}
+                  <span className="font-normal text-muted"> · vs {costIsAllIn ? "all-in cost" : "bought-for"}</span>
                 </span>
               ) : (
                 <span className="text-xs text-muted">Add a cost + a resale or sale price to see profit.</span>
@@ -1211,7 +1222,7 @@ function AddLeadModal({
   const [f, setF] = useState({
     name: "", phone: "", email: "", contactMethod: "call", source: "phone",
     year: "", make: "", model: "", trim: "", mileageKm: "", conditionNote: "",
-    status: "closed", purchasePrice: "", expectedResale: "", actualSalePrice: "",
+    status: "closed", purchasePrice: "", allInExpenses: "", expectedResale: "", actualSalePrice: "",
     notes: "", reportToMeta: true,
   });
   const [saving, setSaving] = useState(false);
@@ -1293,10 +1304,14 @@ function AddLeadModal({
               ))}
             </select>
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-3">
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="text-xs font-semibold text-muted">
               Bought for
               <input className="field mt-1" value={f.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="$" inputMode="numeric" />
+            </label>
+            <label className="text-xs font-semibold text-muted">
+              All-in cost
+              <input className="field mt-1" value={f.allInExpenses} onChange={(e) => set("allInExpenses", e.target.value)} placeholder="$" inputMode="numeric" />
             </label>
             <label className="text-xs font-semibold text-muted">
               Est. resale

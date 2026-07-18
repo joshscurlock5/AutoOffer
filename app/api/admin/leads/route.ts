@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
       : undefined;
 
   const purchasePrice = posMoney(b.purchasePrice);
+  const allInExpenses = posMoney(b.allInExpenses);
   const expectedResale = posMoney(b.expectedResale);
   const actualSalePrice = posMoney(b.actualSalePrice);
   const notes = s(b.notes, 1000) || undefined;
@@ -117,6 +118,7 @@ export async function POST(req: NextRequest) {
     attribution,
     ...(notes ? { notes } : {}),
     ...(purchasePrice != null ? { purchasePrice } : {}),
+    ...(allInExpenses != null ? { allInExpenses } : {}),
     ...(expectedResale != null ? { expectedResale } : {}),
     ...(actualSalePrice != null ? { actualSalePrice, soldAt: nowISO } : {}),
     // Entered after the fact, so lifecycle stamps all read "now" — keeps the
