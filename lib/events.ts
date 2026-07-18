@@ -1,5 +1,5 @@
 import { consentDenied } from "./consent";
-import { getBehavior } from "./attribution";
+import { getBehavior, getAttribution } from "./attribution";
 
 // ===========================================================================
 //  First-party event stream — client half.
@@ -58,8 +58,17 @@ function flush(): void {
   };
   sending = true;
   try {
+    // Attach the already-captured first-touch attribution (ad set = utm_content)
+    // once per batch, top-level — lets the server tag each event row so the
+    // anonymous on-site funnel can be split by ad set. No new capture; reads the
+    // same localStorage value that rides along with lead submissions.
+    const a = getAttribution();
+    const attr: Record<string, string> = {};
+    if (a.utmContent) attr.utmContent = a.utmContent;
+    if (a.utmCampaign) attr.utmCampaign = a.utmCampaign;
+    if (a.utmSource) attr.utmSource = a.utmSource;
     const blob = new Blob(
-      [JSON.stringify({ sessionId, ...(visitorId ? { visitorId } : {}), events: batch })],
+      [JSON.stringify({ sessionId, ...(visitorId ? { visitorId } : {}), ...(Object.keys(attr).length ? { attr } : {}), events: batch })],
       { type: "application/json" },
     );
     const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon("/api/events", blob);

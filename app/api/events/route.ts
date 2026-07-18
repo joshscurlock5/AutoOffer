@@ -78,10 +78,17 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as {
       sessionId?: unknown;
       visitorId?: unknown;
+      attr?: unknown;
       events?: unknown;
     } | null;
     const sessionId = str(body?.sessionId, 60);
     const visitorId = str(body?.visitorId, 64);
+    // First-touch marketing attribution (ad set = utm_content) so the anonymous
+    // on-site funnel can later be split by ad set. Same caps as lib/attribution.ts.
+    const attrIn = (body?.attr && typeof body.attr === "object" ? body.attr : {}) as Record<string, unknown>;
+    const utmContent = str(attrIn.utmContent, 200);
+    const utmCampaign = str(attrIn.utmCampaign, 200);
+    const utmSource = str(attrIn.utmSource, 120);
     const rawEvents = Array.isArray(body?.events) ? body!.events.slice(0, MAX_EVENTS) : [];
     if (!sessionId || !rawEvents.length) return NextResponse.json({ ok: true });
 
@@ -136,6 +143,9 @@ export async function POST(req: NextRequest) {
         at,
         ...(visitorId ? { vid: visitorId } : {}),
         ...(tokenLeadId && hadToken ? { leadId: tokenLeadId } : {}),
+        ...(utmContent ? { utmContent } : {}),
+        ...(utmCampaign ? { utmCampaign } : {}),
+        ...(utmSource ? { utmSource } : {}),
         ttl,
       });
     }

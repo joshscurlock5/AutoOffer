@@ -17,6 +17,8 @@ export interface Filters {
   stage?: string;
   contactMethod?: string;
   make?: string;
+  /** Meta ad set (utm_content) — e.g. Alberta vs BC vs Saskatchewan within one campaign. */
+  adset?: string;
   /** Lead-score band: hot (70+), warm (40–69), cool (<40). */
   scoreBand?: string;
 }
@@ -68,6 +70,7 @@ export interface FilterOptions {
   stages: string[];
   contactMethods: string[];
   makes: string[];
+  adsets: string[];
   scoreBands: string[];
 }
 
@@ -151,6 +154,7 @@ export function computeFilterOptions(profiles: Profile[]): FilterOptions {
     stages: uniq(profiles.map((p) => p.stage)),
     contactMethods: uniq(profiles.map((p) => p.contactMethod)),
     makes: uniq(profiles.map((p) => p.make)),
+    adsets: uniq(profiles.map((p) => p.attribution?.utmContent)),
     scoreBands: ["hot", "warm", "cool"],
   };
 }
@@ -173,6 +177,7 @@ export function filterProfiles(profiles: Profile[], f: Filters): Profile[] {
     if (f.stage && p.stage !== f.stage) return false;
     if (f.contactMethod && p.contactMethod !== f.contactMethod) return false;
     if (f.make && p.make !== f.make) return false;
+    if (f.adset && (p.attribution?.utmContent || "") !== f.adset) return false;
     if (f.scoreBand && scoreBand(p.score) !== f.scoreBand) return false;
     return true;
   });

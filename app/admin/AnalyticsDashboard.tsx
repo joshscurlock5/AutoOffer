@@ -855,6 +855,7 @@ function ControlBar({
           <Sel label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
           <Sel label="Province/Region" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
           <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
+          <Sel label="Ad set" value={filters.adset} onChange={(v) => set({ adset: v })} opts={options.adsets} />
           <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
           <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
           <Sel label="Score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} />
@@ -2610,7 +2611,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
   // Only the dimension filters count here — the date range lives in its own control.
-  const activeFilters = [filters.country, filters.region, filters.source, filters.device, filters.stage, filters.scoreBand].filter(Boolean).length;
+  const activeFilters = [filters.country, filters.region, filters.source, filters.adset, filters.device, filters.stage, filters.scoreBand].filter(Boolean).length;
 
   const booked = view.funnelByRank.booked;
   const tabs: { key: Tab; label: string }[] = [

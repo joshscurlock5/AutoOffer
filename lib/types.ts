@@ -449,6 +449,12 @@ export interface SiteEvent {
   vid?: string;
   /** Present when the event carried a booking token the server resolved. */
   leadId?: string;
+  /** First-touch marketing attribution, stamped by /api/events from the beacon so
+   * the anonymous on-site funnel can be split by ad set. utmContent = Meta ad set
+   * name (requires utm_content={{adset.name}} on the ads). Absent on old rows. */
+  utmContent?: string;
+  utmCampaign?: string;
+  utmSource?: string;
   /** Epoch-seconds TTL attribute. */
   ttl: number;
 }
