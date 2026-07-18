@@ -278,6 +278,7 @@ export function computeView(profiles: Profile[], dateBounds?: { dateFrom?: strin
 export const SEGMENT_DIMENSIONS = [
   { key: "source", label: "Source" },
   { key: "campaign", label: "Campaign" },
+  { key: "adset", label: "Ad set" },
   { key: "device", label: "Device" },
   { key: "country", label: "Country" },
   { key: "region", label: "Province/Region" },
@@ -312,6 +313,11 @@ function dimValue(p: Profile, dim: SegmentDimension): string {
     case "campaign":
       // A manual "assign to campaign" correction wins over the tracked UTM here too.
       return p.assignedCampaign || p.attribution?.utmCampaign || "(untagged)";
+    case "adset":
+      // utm_content carries the Meta AD SET name (requires utm_content={{adset.name}}
+      // on the ads). Splits leads by ad set — e.g. Alberta vs BC vs Saskatchewan —
+      // within a single campaign, which the campaign dimension alone can't.
+      return p.attribution?.utmContent || "(untagged)";
     case "device":
       return p.device?.type || "unknown";
     case "country":
