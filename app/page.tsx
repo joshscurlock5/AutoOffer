@@ -34,12 +34,12 @@ export default function HomePage() {
                     className="hidden items-center gap-2.5 wide:inline-flex"
                   >
                     <GoogleG className="h-7 w-7" />
-                    <span className="flex text-amber-400" role="img" aria-label="5.0 out of 5 stars">
+                    <span className="flex text-amber-400" role="img" aria-label={`${site.googleRating} out of 5 stars`}>
                       {[0, 1, 2, 3, 4].map((i) => (
                         <Star key={i} className="h-6 w-6" />
                       ))}
                     </span>
-                    <span className="font-display text-2xl font-extrabold text-navy">5.0</span>
+                    <span className="font-display text-2xl font-extrabold text-navy">{site.googleRating}</span>
                     <span className="text-lg text-muted">stars</span>
                   </a>
                 )}

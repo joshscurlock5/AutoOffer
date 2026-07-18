@@ -1,6 +1,6 @@
 import { Section } from "./Section";
 import { Star, GoogleG } from "./icons";
-import { site, amvicLicence } from "@/lib/site-config";
+import { site, amvicLicence, carsBoughtDisplay, amountPaidDisplay } from "@/lib/site-config";
 
 const points = [
   { icon: "/icons/whysell-easy.png", title: "Easy", body: "Sell your car fast, safe, and fair." },
@@ -15,10 +15,12 @@ export default function WhySell() {
         {/* Compartment 1 — the trust / stats banner, on its own. */}
         <div className="card px-6 py-8 sm:py-10">
           <div className="flex flex-col items-center justify-center gap-8 wide:flex-row wide:gap-12">
-            {/* Cars purchased */}
+            {/* Cars purchased. These three stats + the licence line are also the
+                email proof strip (lib/email.ts proofBox) — both read the same
+                site-config values, so a number only ever changes in one place. */}
             <div className="text-center">
               <p className="font-display text-4xl font-extrabold text-navy sm:text-5xl">
-                {site.carsBought.toLocaleString("en-CA")}+
+                {carsBoughtDisplay}
               </p>
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-muted">Cars purchased</p>
             </div>
@@ -28,12 +30,12 @@ export default function WhySell() {
             {/* Google rating — same badge as elsewhere, scaled to match the stat. */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-2.5">
-                <span className="flex text-amber-400" role="img" aria-label="5.0 out of 5 stars">
+                <span className="flex text-amber-400" role="img" aria-label={`${site.googleRating} out of 5 stars`}>
                   {[0, 1, 2, 3, 4].map((i) => (
                     <Star key={i} className="h-7 w-7 sm:h-8 sm:w-8" />
                   ))}
                 </span>
-                <span className="font-display text-4xl font-extrabold text-navy sm:text-5xl">5.0</span>
+                <span className="font-display text-4xl font-extrabold text-navy sm:text-5xl">{site.googleRating}</span>
               </div>
               <p className="mt-1 flex items-center justify-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted">
                 <GoogleG className="h-4 w-4" /> Google reviews
@@ -44,7 +46,7 @@ export default function WhySell() {
 
             {/* Paid to sellers */}
             <div className="text-center">
-              <p className="font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">$45M+</p>
+              <p className="font-display text-4xl font-extrabold text-emerald-700 sm:text-5xl">{amountPaidDisplay}</p>
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-muted">Paid to sellers</p>
             </div>
           </div>

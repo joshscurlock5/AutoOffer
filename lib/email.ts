@@ -1,6 +1,7 @@
 import "server-only";
 import type { Lead, Referral } from "./types";
-import { site, amvicLicence } from "./site-config";
+import { site, amvicLicence, carsBoughtDisplay, amountPaidDisplay } from "./site-config";
+import { makeUnsubToken } from "./unsubscribe";
 
 // ===========================================================================
 //  Customer emails via Resend's REST API (no SDK, like notify.ts):
@@ -107,17 +108,57 @@ function ctaBox(): string {
   </td></tr>`;
 }
 
-// Social-proof strip for the nurture emails — pulls straight from site-config so
-// the numbers never drift. Reused by the drip / win-back / follow-up templates.
+// Social-proof strip — mirrors the website's trust bar (components/WhySell.tsx):
+// three stats, big number over a small uppercase label, hairline rules between,
+// licence line centred beneath. Numbers come from site-config so the two surfaces
+// can't drift.
+//
+// On every customer email EXCEPT the three personal ones (message / photo / referral
+// thank-you): a 1:1 note from a rep shouldn't carry a marketing strip.
+//
+// Email-HTML constraints, do not "modernise" these away:
+//  - <table>, not flex/grid — Outlook renders through Word's engine.
+//  - Dividers are border-left on the cells; 1px spacer cells collapse in Outlook.
+//  - Stars are stacked ABOVE the rating (not inline) so they can be a proper size
+//    in a narrow phone column; cells are vertical-align:bottom so the three numbers
+//    and labels line up across columns even though the middle one is taller.
+//  - The Google "G" is text here, not the real multicolour logo — that logo is an
+//    image (Gmail strips inline SVG), and this strip is image-free by design.
+//  - Middle column is wider (star room). Verified no overflow at 375/320px.
 function proofBox(): string {
-  const bits = [
-    `<a href="${site.reviewsUrl}" style="color:#1A7F54;text-decoration:none;">&#9733;&#9733;&#9733;&#9733;&#9733; top-rated on Google</a>`,
-    `${site.carsBought.toLocaleString("en-CA")}+ cars bought`,
-    amvicLicence,
-    "paid on the spot",
-  ].filter(Boolean).join(" &middot; ");
-  return `<tr><td style="padding:0 28px 4px;">
-    <div style="border-top:1px solid #eceef1;padding-top:12px;font-size:13px;line-height:1.6;color:#5b6b63;">${bits}</div>
+  const cell = "padding:0 2px;text-align:center;vertical-align:bottom;";
+  const num = "font-size:20px;line-height:1.15;font-weight:800;letter-spacing:-.025em;";
+  const lbl =
+    "font-size:8.5px;line-height:1.35;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#4B5563;padding-top:5px;";
+  const rule = "border-left:1px solid #E2E8F0;";
+
+  const stars = `<div style="color:#FBBF24;font-size:14px;line-height:1;letter-spacing:1px;padding-bottom:4px;">&#9733;&#9733;&#9733;&#9733;&#9733;</div>`;
+
+  return `<tr><td style="padding:2px 28px 4px;">
+    <div style="border-top:1px solid #eceef1;padding-top:18px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;table-layout:fixed;">
+        <tr>
+          <td width="30%" style="${cell}">
+            <div style="${num}color:#0e1c2b;">${carsBoughtDisplay}</div>
+            <div style="${lbl}">Cars purchased</div>
+          </td>
+          <td width="40%" style="${cell}${rule}">
+            ${stars}
+            <div style="${num}color:#0e1c2b;">${esc(site.googleRating)}</div>
+            <div style="${lbl}">Google reviews</div>
+          </td>
+          <td width="30%" style="${cell}${rule}">
+            <div style="${num}color:#0e1c2b;">${amountPaidDisplay}</div>
+            <div style="${lbl}">Paid to sellers</div>
+          </td>
+        </tr>
+      </table>
+      ${
+        amvicLicence
+          ? `<div style="text-align:center;font-size:11.5px;line-height:1.5;color:#4B5563;padding-top:14px;">${amvicLicence}</div>`
+          : ""
+      }
+    </div>
   </td></tr>`;
 }
 
@@ -192,10 +233,23 @@ function refRow(lead: Lead): string {
   const sid = lead.id.split("-")[0];
   return `<tr><td style="padding:4px 28px 10px;font-size:11px;color:#c2c8cf;">Ref: ${esc(sid)}</td></tr>`;
 }
+// footerHtml, when passed, replaces the ENTIRE default footer row (used by the
+// confirmation email's reply-focused footer). Everything else — the header bar,
+// the card chrome — stays identical across every email.
 function shell(
   innerRows: string,
   footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
+  footerHtml?: string,
 ): string {
+  const footer =
+    footerHtml ??
+    `<tr><td style="padding:24px 28px 28px;">
+          <div style="border-top:1px solid #eceef1;padding-top:16px;font-size:13px;line-height:1.6;color:#7b8794;">
+            AMVIC Licensed Wholesaler &middot; We come to you &middot; Paid the same visit.<br/>
+            ${site.name} &middot; <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; ${esc(site.email)}<br/>
+            ${footerNote}
+          </div>
+        </td></tr>`;
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 12px;">
@@ -205,13 +259,7 @@ function shell(
           <span style="font-size:20px;font-weight:800;color:#ffffff;">Drive<span style="color:#4f7cf7;">Offer</span></span>
         </td></tr>
         ${innerRows}
-        <tr><td style="padding:24px 28px 28px;">
-          <div style="border-top:1px solid #eceef1;padding-top:16px;font-size:13px;line-height:1.6;color:#7b8794;">
-            AMVIC Licensed Wholesaler &middot; We come to you &middot; Paid the same visit.<br/>
-            ${site.name} &middot; <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;">${esc(site.phoneDisplay)}</a> &middot; ${esc(site.email)}<br/>
-            ${footerNote}
-          </div>
-        </td></tr>
+        ${footer}
       </table>
     </td></tr>
   </table>
@@ -225,13 +273,72 @@ type Email = { subject: string; html: string };
 function confirmationEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const heading = v ? `We've got your ${carLine(lead)}` : "We've got your details";
-  const head = `<tr><td style="padding:28px 28px 4px;"><h1 style="margin:0;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">${heading}</h1></td></tr>`;
-  const faster = `<tr><td style="padding:0 28px 8px;font-size:14px;line-height:1.55;color:#3a4654;">Want it faster? <strong>Call or text ${esc(site.phoneDisplay)}</strong> now — we can often give you your offer on the spot.</td></tr>`;
+  const head = `<tr><td style="padding:30px 28px 2px;"><h1 style="margin:0;font-size:24px;line-height:1.2;color:#0e1c2b;font-weight:800;letter-spacing:-.02em;">${heading}</h1></td></tr>`;
+  const subline = `<tr><td style="padding:6px 28px 4px;font-size:16px;line-height:1.55;color:#5b6b7b;">Thanks for your request! A ${esc(site.name)} specialist will contact you soon with your offer.</td></tr>`;
+
+  // "What happens next" — a 3-step card. Each step is a hosted icon (public/
+  // email-icons/*.png, served from the site) in a soft circle, with a small
+  // numbered badge in the top-left corner, over a title + description.
+  //
+  // The badge overlaps the corner via position:absolute inside a relative wrapper.
+  // Clients that strip positioning (Gmail web) fall back gracefully: the badge is
+  // FIRST in source, so it renders just above the icon instead — still legible.
+  // alt="" keeps the layout clean when a client blocks images (the title carries
+  // the meaning). Columns are table-layout:fixed so the three stay even.
+  const step = (n: string, icon: string, title: string, desc: string, divider: boolean) => `
+        <td width="33%" style="vertical-align:top;text-align:center;padding:0 6px;${divider ? "border-left:1px solid #e4e9ed;" : ""}">
+          <div style="display:inline-block;position:relative;margin-bottom:12px;">
+            <div style="position:absolute;top:-5px;left:-5px;width:20px;height:20px;border-radius:50%;background:#4B5563;border:2px solid #F5F7F9;text-align:center;">
+              <span style="font-size:11px;font-weight:800;color:#ffffff;line-height:20px;">${n}</span>
+            </div>
+            <div style="width:46px;height:46px;line-height:46px;border-radius:50%;background:#ECEFF3;text-align:center;">
+              <img src="${site.url}/email-icons/${icon}" width="26" height="26" alt="" style="vertical-align:middle;border:0;" />
+            </div>
+          </div>
+          <div style="font-size:15px;font-weight:700;color:#0e1c2b;letter-spacing:-.01em;">${title}</div>
+          <div style="font-size:12.5px;line-height:1.5;color:#5b6b7b;margin-top:5px;overflow-wrap:break-word;">${desc}</div>
+        </td>`;
+  const nextBox = `<tr><td style="padding:8px 28px 0;">
+      <div style="background:#F5F7F9;border-radius:16px;padding:24px 20px;margin:16px 0 6px;">
+        <div style="text-align:center;font-size:12px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#64748b;margin-bottom:22px;">What happens next</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;table-layout:fixed;">
+          <tr>
+            ${step("1", "phone.png", "We contact you", "A specialist will call, text, or email you shortly.", false)}
+            ${step("2", "tag.png", "Get your offer", "A fair, no-obligation offer for your vehicle.", true)}
+            ${step("3", "car.png", "We come to you", "We handle pickup, payment, and all the paperwork.", true)}
+          </tr>
+        </table>
+      </div></td></tr>`;
+
+  // Prominent "call now" card — the hero action. Outlined (not filled) so it sits
+  // lighter than the steps card above it. The button is inline-block + centred so
+  // it's proportionate rather than a full-width slab.
+  const ctaCard = `<tr><td style="padding:12px 28px 6px;">
+      <div style="border:1px solid #e4e9ed;border-radius:16px;padding:26px 20px;text-align:center;">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b;"><span style="color:#F59E0B;">&#9889;</span>&nbsp; Fastest way to get your offer</div>
+        <div style="font-size:26px;line-height:1.15;font-weight:800;color:#0e1c2b;margin-top:10px;letter-spacing:-.03em;">Get your offer in minutes.</div>
+        <div style="font-size:15px;line-height:1.5;color:#5b6b7b;font-weight:600;margin-top:6px;">Talk to a real person now.</div>
+        <a href="tel:${site.phoneE164}" style="display:inline-block;background:#1A7F54;color:#ffffff;text-decoration:none;font-size:20px;font-weight:800;letter-spacing:-.01em;padding:14px 30px;border-radius:12px;margin-top:16px;"><img src="${site.url}/email-icons/phone-white.png" width="18" height="18" alt="" style="vertical-align:middle;position:relative;top:-3px;margin-right:9px;border:0;" />${esc(site.phoneDisplay)}</a>
+        <div style="font-size:13px;line-height:1.5;color:#8792a2;margin-top:13px;">Call or text anytime. We're here to help.</div>
+      </div></td></tr>`;
+
+  // Reply-focused footer (replaces the standard footer for this email only).
+  // Keeps a tiny Ref line so replies from a different address still trace back
+  // to the lead (the Gmail/Resend reply handlers parse "Ref: <id>").
+  const sid = esc(lead.id.split("-")[0]);
+  const unsubUrl = `${site.url}/api/unsubscribe?token=${makeUnsubToken(lead.id)}`;
+  const footer = `<tr><td style="padding:26px 28px 30px;">
+      <div style="border-top:1px solid #eceef1;padding-top:24px;text-align:center;">
+        <div style="font-size:22px;line-height:1;color:#64748b;">&#9993;</div>
+        <div style="font-size:16px;font-weight:700;color:#0e1c2b;margin-top:10px;">Questions? Just reply to this email.</div>
+        <div style="font-size:13.5px;line-height:1.6;color:#7b8794;margin-top:8px;">A real ${esc(site.name)} specialist will respond personally.<br/>We typically reply within minutes during business hours.</div>
+        <div style="font-size:12px;line-height:1.6;color:#9aa5b1;margin-top:16px;">Not interested anymore? <a href="${unsubUrl}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a></div>
+        <div style="font-size:10px;color:#cfd5dc;margin-top:12px;">Ref: ${sid}</div>
+      </div></td></tr>`;
+
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    // refRow carries the tracking tag so a customer's reply to this (the FIRST email
-    // they get) can be traced back to their lead + topic, like the offer/info emails.
-    html: shell(head + nextStepsBox(lead) + faster + callCta("fastest") + refRow(lead)),
+    html: shell(head + subline + nextBox + ctaCard + proofBox(), undefined, footer),
   };
 }
 
@@ -293,7 +400,7 @@ function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const body = `To get you an accurate offer on ${carRef}, we just need a couple details.\nThe fastest and easiest way is to <strong>call or text us</strong> — we can usually finish your offer right then.\nPrefer email? Just reply with the answers below.`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
-    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest") + refRow(lead)),
+    html: shell(intro("Just need a couple details", body) + questionsBox(questions) + callCta("fastest") + refRow(lead) + proofBox()),
   };
 }
 
@@ -304,7 +411,7 @@ function awaitingInfoReminderEmail(lead: Lead): Email {
   const body = `We're ready to send your offer on ${carRef} as soon as we get the final details.\nThe fastest way is a quick <strong>call or text</strong> — we can often sort it out and give you a number on the spot.\nPrefer email? Just reply with the answers below and we'll take it from there.`;
   return {
     subject: v ? `Still want your offer for your ${v.make} ${v.model}?` : `Still want your offer? — ${site.name}`,
-    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + refRow(lead)),
+    html: shell(intro("Let's finish your offer", body) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + refRow(lead) + proofBox()),
   };
 }
 
@@ -336,7 +443,7 @@ function bookingConfirmationEmail(lead: Lead): Email {
   const body = `A ${esc(site.name)} rep will come to ${carRef} at the time and place below, inspect your vehicle, and pay you on the spot (bank draft).\nNeed to change it? Just call or text.`;
   return {
     subject: `Booked — your ${site.name} inspection`,
-    html: shell(intro("You're booked!", body) + detailBox + confirmNote + ctaBox()),
+    html: shell(intro("You're booked!", body) + detailBox + confirmNote + ctaBox() + proofBox()),
   };
 }
 
@@ -354,7 +461,7 @@ function bookingDayOfEmail(lead: Lead): Email {
   const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot.\n<strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit.\nSomething changed? Just call or text.`;
   return {
     subject: `Today: your ${site.name} inspection at ${time}`,
-    html: shell(intro("See you today!", body) + confirmBtn + ctaBox()),
+    html: shell(intro("See you today!", body) + confirmBtn + ctaBox() + proofBox()),
   };
 }
 
@@ -377,7 +484,7 @@ function winbackEmail(lead: Lead): Email {
   const body = `Still have ${carRef}?\nPrices have moved, and we'd be glad to take another look and re-quote — no obligation at all.\nIf you've already sold it, no worries; just ignore this.`;
   return {
     subject: v ? `Still have your ${v.make} ${v.model}? Happy to re-quote` : `Happy to re-quote — ${site.name}`,
-    html: shell(intro("Want a fresh offer?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "")),
+    html: shell(intro("Want a fresh offer?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "") + proofBox()),
   };
 }
 
@@ -399,7 +506,7 @@ function appointmentReminderEmail(lead: Lead): Email {
   const body = `Hi ${first} — quick reminder that we're set to look at ${carRef} on <strong>${when}</strong>. We'll confirm the offer on the spot and, if it's a yes, pay you right there (e-transfer or bank draft). Need to reschedule? Just call or text.`;
   return {
     subject: `Reminder: your ${site.name} inspection ${when}`,
-    html: shell(intro("See you soon", body) + ctaBox()),
+    html: shell(intro("See you soon", body) + ctaBox() + proofBox()),
   };
 }
 
@@ -411,7 +518,7 @@ function partialRecoveryEmail(lead: Lead): Email {
   const body = `Looks like you started getting an offer on ${carRef} but didn't finish.\nPick up where you left off — it only takes a minute, and we come to you and pay on the spot.`;
   return {
     subject: v ? `Finish your offer for your ${v.make} ${v.model}?` : `Finish your offer — ${site.name}`,
-    html: shell(intro("Your offer is almost ready", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Finish online &rarr;", "")),
+    html: shell(intro("Your offer is almost ready", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Finish online &rarr;", "") + proofBox()),
   };
 }
 
@@ -470,7 +577,7 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   </td></tr>`;
   return {
     subject: plain ? `Your offer for your ${plain} — ${site.name}` : `Your offer is ready — ${site.name}`,
-    html: shell(intro("Your offer is ready", leadIn) + offerBox + questionsLine + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + noPressure + signoff),
+    html: shell(intro("Your offer is ready", leadIn) + offerBox + questionsLine + callFirstCta("fastest", bookingLink(lead), "Book online", "optional") + noPressure + signoff + proofBox()),
   };
 }
 

@@ -47,6 +47,7 @@ export const site = {
 
   // ---- REVIEWS (link to your Google/Facebook reviews; "" hides prompts) ----
   reviewsUrl: "https://g.page/r/CVt_QnCYRto-EBM", //  Google Business Profile (view reviews); add "/review" to deep-link the write-a-review dialog
+  googleRating: "5.0", //  shown beside the stars on the trust bar + in emails
 
   // ---- OWNER / LICENSING / TRUST ------------------------------------------
   // Leave any string blank ("") and its trust badge stays hidden.
@@ -59,6 +60,10 @@ export const site = {
   insuranceText: "$3M dealer-plate insurance", //  the business's OWN coverage (NOT customer coverage)
   yearsExperience: 5, //                                     years wholesaling
   carsBought: 3000, //  vehicles purchased — single source of truth for the "cars" stat
+  // Total paid out to sellers. Sits beside carsBought on the trust bar and in every
+  // email, so the two must stay in step — a reader who divides them gets the average
+  // price per car (currently ~$15k). Move one, move the other.
+  amountPaid: 45_000_000,
 
   // ---- TEAM / OWNERSHIP ---------------------------------------------------
   // ⚠️ operatedBy MUST match your registered business name exactly — this is
@@ -101,4 +106,13 @@ export const mailHref = `mailto:${site.email}`;
 // "AMVIC Licensed Wholesaler #B2036941" — empty until the licence number is set.
 export const amvicLicence = site.amvicNumber
   ? `AMVIC Licensed ${site.amvicClass} #${site.amvicNumber}`
+  : "";
+
+// ---- Trust-bar stats — ONE definition, rendered by both the website
+// (components/WhySell.tsx) and every customer email (lib/email.ts proofBox).
+// Change a number in `site` above and both surfaces follow. Don't hardcode
+// these anywhere else.
+export const carsBoughtDisplay = `${site.carsBought.toLocaleString("en-CA")}+`; // "3,000+"
+export const amountPaidDisplay = site.amountPaid
+  ? `$${Math.round(site.amountPaid / 1_000_000)}M+` // "$45M+"
   : "";

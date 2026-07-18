@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
 import { track, trackFunnel } from "@/lib/analytics";
-import { site } from "@/lib/site-config";
+import { site, carsBoughtDisplay } from "@/lib/site-config";
 import { ArrowRight, Car, GoogleG, Star, Lock } from "./icons";
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -165,7 +165,7 @@ export default function ValueWidget() {
       {/* Mobile/small only: social proof inside the form (desktop shows it by the tagline). */}
       <div className="mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-3 border-t border-slate-100 pt-4 wide:hidden">
         <p className="text-sm text-muted">
-          <span className="text-2xl font-extrabold text-navy">{site.carsBought.toLocaleString("en-CA")}+</span> cars sold to DriveOffer
+          <span className="text-2xl font-extrabold text-navy">{carsBoughtDisplay}</span> cars sold to DriveOffer
         </p>
         {(site.reviewsUrl as string) && (
           <a
