@@ -2104,7 +2104,368 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
 
 // ---------------------------------------------------------------------------
 
-type Tab = "sources" | "overview" | "acquisition" | "funnel" | "people";
+// ===========================================================================
+//  Ads — comprehensive Meta ad analytics with a persisted DAILY time-series.
+//  Reads /api/admin/meta-insights (DynamoDB snapshots + live fallback). Switch
+//  level (account/campaign/adset/ad), breakdown (age/gender/region/placement/
+//  device), and Ads-Manager-style column presets; per-day trend + sortable
+//  table. "Sync from Meta now" backfills on demand (no waiting for the cron).
+// ===========================================================================
+
+interface SnapRow {
+  level: string; date: string; entityId: string; entityName: string;
+  breakdownKey: string; breakdownValue: string; spend: number;
+  metrics: Record<string, number | string | null>;
+  campaignName?: string; adsetName?: string;
+}
+
+const AD_LEVELS = [
+  { key: "account", label: "Account" },
+  { key: "campaign", label: "Campaign" },
+  { key: "adset", label: "Ad set" },
+  { key: "ad", label: "Ad" },
+];
+const AD_BREAKDOWNS: Record<string, { key: string; label: string }[]> = {
+  account: [{ key: "none", label: "None" }],
+  adset: [{ key: "none", label: "None" }],
+  ad: [{ key: "none", label: "None" }],
+  campaign: [
+    { key: "none", label: "None" },
+    { key: "age", label: "Age" },
+    { key: "gender", label: "Gender" },
+    { key: "region", label: "Region" },
+    { key: "placement", label: "Placement" },
+    { key: "device", label: "Device" },
+  ],
+};
+
+interface Agg {
+  key: string;
+  name: string;
+  spend: number;
+  sums: Record<string, number>;
+  cats: Record<string, string>;
+}
+// Metric accessors over summed additive bases (conversion action_types match the
+// probe: action.lead / landing_page_view / purchase / view_content / ...).
+const gLeads = (a: Agg) => a.sums["action.lead"] || a.sums["action.offsite_conversion.fb_pixel_lead"] || a.sums["action.onsite_web_lead"] || 0;
+const gLPV = (a: Agg) => a.sums["action.landing_page_view"] || a.sums["action.omni_landing_page_view"] || 0;
+const gLinkClicks = (a: Agg) => a.sums["inline_link_clicks"] || 0;
+const gClicks = (a: Agg) => a.sums["clicks"] || 0;
+const gImpr = (a: Agg) => a.sums["impressions"] || 0;
+const gReach = (a: Agg) => a.sums["reach"] || 0;
+const gOutbound = (a: Agg) => a.sums["outbound_clicks"] || 0;
+const gPurch = (a: Agg) => a.sums["action.purchase"] || a.sums["action.offsite_conversion.fb_pixel_purchase"] || a.sums["action.omni_purchase"] || 0;
+const gPurchVal = (a: Agg) => a.sums["value.purchase"] || a.sums["value.offsite_conversion.fb_pixel_purchase"] || a.sums["value.omni_purchase"] || 0;
+const gViewContent = (a: Agg) => a.sums["action.view_content"] || a.sums["action.offsite_conversion.fb_pixel_view_content"] || 0;
+const gIC = (a: Agg) => a.sums["action.initiate_checkout"] || a.sums["action.offsite_conversion.fb_pixel_initiate_checkout"] || 0;
+const gVideoPlays = (a: Agg) => a.sums["video_plays"] || 0;
+const gThru = (a: Agg) => a.sums["video_thruplay"] || 0;
+const divS = (n: number, d: number) => (d ? n / d : 0);
+
+type ColType = "money" | "money2" | "int" | "pct" | "num" | "rank";
+interface Col { key: string; label: string; type: ColType; get: (a: Agg) => number | string | undefined; tip?: string }
+const COLUMN_PRESETS: { key: string; label: string; cols: Col[] }[] = [
+  { key: "performance", label: "Performance", cols: [
+    { key: "leads", label: "Leads", type: "int", get: gLeads },
+    { key: "cpl", label: "Cost / lead", type: "money2", get: (a) => divS(a.spend, gLeads(a)) },
+    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
+    { key: "reach", label: "Reach*", type: "int", get: gReach, tip: "Summed across days — an over-count vs Meta's de-duplicated reach for the whole window." },
+    { key: "impr", label: "Impressions", type: "int", get: gImpr },
+    { key: "freq", label: "Freq*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
+    { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
+  ]},
+  { key: "delivery", label: "Delivery", cols: [
+    { key: "reach", label: "Reach*", type: "int", get: gReach },
+    { key: "impr", label: "Impressions", type: "int", get: gImpr },
+    { key: "freq", label: "Freq*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
+    { key: "cpm", label: "CPM", type: "money2", get: (a) => divS(a.spend, gImpr(a)) * 1000 },
+    { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
+    { key: "quality_ranking", label: "Quality", type: "rank", get: (a) => a.cats["quality_ranking"] },
+    { key: "engagement_rate_ranking", label: "Engagement", type: "rank", get: (a) => a.cats["engagement_rate_ranking"] },
+    { key: "conversion_rate_ranking", label: "Conversion", type: "rank", get: (a) => a.cats["conversion_rate_ranking"] },
+  ]},
+  { key: "clicks", label: "Clicks", cols: [
+    { key: "clicks", label: "Clicks (all)", type: "int", get: gClicks },
+    { key: "ctr", label: "CTR", type: "pct", get: (a) => divS(gClicks(a), gImpr(a)) * 100 },
+    { key: "cpc", label: "CPC", type: "money2", get: (a) => divS(a.spend, gClicks(a)) },
+    { key: "linkclicks", label: "Link clicks", type: "int", get: gLinkClicks },
+    { key: "linkctr", label: "Link CTR", type: "pct", get: (a) => divS(gLinkClicks(a), gImpr(a)) * 100 },
+    { key: "cplc", label: "Cost / link", type: "money2", get: (a) => divS(a.spend, gLinkClicks(a)) },
+    { key: "outbound", label: "Outbound", type: "int", get: gOutbound },
+    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
+    { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
+  ]},
+  { key: "video", label: "Video", cols: [
+    { key: "plays", label: "Plays", type: "int", get: gVideoPlays },
+    { key: "thru", label: "ThruPlays", type: "int", get: gThru },
+    { key: "cpt", label: "Cost / ThruPlay", type: "money2", get: (a) => divS(a.spend, gThru(a)) },
+    { key: "p25", label: "25%", type: "int", get: (a) => a.sums["video_p25"] || 0 },
+    { key: "p50", label: "50%", type: "int", get: (a) => a.sums["video_p50"] || 0 },
+    { key: "p75", label: "75%", type: "int", get: (a) => a.sums["video_p75"] || 0 },
+    { key: "p100", label: "100%", type: "int", get: (a) => a.sums["video_p100"] || 0 },
+    { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
+  ]},
+  { key: "conversions", label: "Conversions", cols: [
+    { key: "linkclicks", label: "Link clicks", type: "int", get: gLinkClicks },
+    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
+    { key: "vc", label: "View content", type: "int", get: gViewContent },
+    { key: "ic", label: "Init. checkout", type: "int", get: gIC },
+    { key: "leads", label: "Leads", type: "int", get: gLeads },
+    { key: "cpl", label: "Cost / lead", type: "money2", get: (a) => divS(a.spend, gLeads(a)) },
+    { key: "purch", label: "Purchases", type: "int", get: gPurch },
+    { key: "roas", label: "ROAS", type: "num", get: (a) => divS(gPurchVal(a), a.spend) },
+    { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
+  ]},
+];
+// Rate/cost/ratio metrics are recomputed from summed bases, so they must NOT be
+// naively summed across days.
+const NON_SUM = new Set(["ctr", "cpc", "cpm", "frequency", "inline_link_click_ctr", "cost_per_inline_link_click", "outbound_clicks_ctr", "cost_per_outbound_click", "website_ctr", "cost_per_inline_post_engagement", "cost_per_thruplay", "video_avg_secs"]);
+
+function aggregateAds(rows: SnapRow[], breakdown: string) {
+  const map = new Map<string, Agg>();
+  const perDay = new Map<string, { spend: number; leads: number; impressions: number; linkClicks: number }>();
+  for (const r of rows) {
+    const key = breakdown === "none" ? r.entityId : r.breakdownValue;
+    const name = breakdown === "none" ? r.entityName : r.breakdownValue;
+    let a = map.get(key);
+    if (!a) { a = { key, name, spend: 0, sums: {}, cats: {} }; map.set(key, a); }
+    a.spend += r.spend || 0;
+    for (const [k, v] of Object.entries(r.metrics || {})) {
+      if (typeof v === "number") { if (!NON_SUM.has(k)) a.sums[k] = (a.sums[k] || 0) + v; }
+      else if (typeof v === "string" && v) a.cats[k] = v; // categorical (rankings) — last day wins
+    }
+    const pd = perDay.get(r.date) || perDay.set(r.date, { spend: 0, leads: 0, impressions: 0, linkClicks: 0 }).get(r.date);
+    if (pd) {
+      pd.spend += r.spend || 0;
+      pd.leads += Number(r.metrics?.["action.lead"]) || 0;
+      pd.impressions += Number(r.metrics?.["impressions"]) || 0;
+      pd.linkClicks += Number(r.metrics?.["inline_link_clicks"]) || 0;
+    }
+  }
+  const aggs = [...map.values()];
+  return { aggs, perDay };
+}
+
+function windowForRange(range: RangeState): { since: string; until: string } {
+  const iso = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+  if (range.preset === "custom" && range.dateFrom && range.dateTo) return { since: range.dateFrom, until: range.dateTo };
+  const d = presetDates(range.preset);
+  if (d.dateFrom && d.dateTo) return { since: d.dateFrom, until: d.dateTo };
+  const to = new Date();
+  return { since: iso(new Date(to.getTime() - 364 * 86_400_000)), until: iso(to) };
+}
+
+const RANK_STYLE: Record<string, string> = {
+  above_average: "bg-green-50 text-green-700",
+  average: "bg-slate-100 text-slate-600",
+  below_average_10: "bg-red-50 text-red-700",
+  below_average_20: "bg-red-50 text-red-700",
+  below_average_35: "bg-red-50 text-red-700",
+};
+function fmtCell(type: ColType, v: number | string | undefined): ReactNode {
+  if (v === undefined || v === null || v === "") return "—";
+  if (type === "rank") {
+    const s = String(v);
+    const label = s.replace(/_/g, " ").replace("below average", "below avg");
+    return <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${RANK_STYLE[s] || "bg-slate-100 text-slate-500"}`}>{label}</span>;
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  if (type === "money") return money(n);
+  if (type === "money2") return money2(n);
+  if (type === "pct") return `${n.toFixed(2)}%`;
+  if (type === "num") return n.toFixed(2);
+  return Math.round(n).toLocaleString("en-CA"); // int
+}
+
+function AdsTab({ range }: { range: RangeState }) {
+  const [level, setLevel] = useState("campaign");
+  const [breakdown, setBreakdown] = useState("none");
+  const [presetKey, setPresetKey] = useState("performance");
+  const [rows, setRows] = useState<SnapRow[] | null>(null);
+  const [meta, setMeta] = useState<{ configured: boolean; source: string; error?: string }>({ configured: true, source: "" });
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [sortKey, setSortKey] = useState("spend");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [trendMetric, setTrendMetric] = useState<"spend" | "leads" | "impressions" | "cpl">("spend");
+
+  const { since, until } = useMemo(() => windowForRange(range), [range]);
+  const bdOptions = AD_BREAKDOWNS[level] || [{ key: "none", label: "None" }];
+
+  useEffect(() => {
+    if (!bdOptions.some((b) => b.key === breakdown)) setBreakdown("none");
+  }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/meta-insights?level=${level}&breakdown=${breakdown}&since=${since}&until=${until}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) { setRows(d.rows || []); setMeta({ configured: d.configured !== false, source: d.source || "", error: d.error }); } })
+      .catch(() => { if (!cancelled) { setRows([]); setMeta({ configured: true, source: "" }); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [level, breakdown, since, until, reloadKey]);
+
+  async function sync() {
+    setSyncing(true); setSyncMsg("");
+    try {
+      const r = await fetch(`/api/admin/meta-insights`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ since, until }) });
+      const d = await r.json();
+      setSyncMsg(d.configured === false ? "Meta not connected." : `Synced ${d.written} rows${d.errors?.length ? ` · ${d.errors.length} slice error(s)` : ""}.`);
+      setReloadKey((k) => k + 1);
+    } catch { setSyncMsg("Sync failed."); }
+    finally { setSyncing(false); }
+  }
+
+  const preset = COLUMN_PRESETS.find((p) => p.key === presetKey) || COLUMN_PRESETS[0];
+  const { aggs, perDay } = useMemo(() => aggregateAds(rows || [], breakdown), [rows, breakdown]);
+  const totals = useMemo(() => ({
+    spend: aggs.reduce((s, a) => s + a.spend, 0),
+    impressions: aggs.reduce((s, a) => s + gImpr(a), 0),
+    reach: aggs.reduce((s, a) => s + gReach(a), 0),
+    leads: aggs.reduce((s, a) => s + gLeads(a), 0),
+    linkClicks: aggs.reduce((s, a) => s + gLinkClicks(a), 0),
+    lpv: aggs.reduce((s, a) => s + gLPV(a), 0),
+  }), [aggs]);
+
+  const sorted = useMemo(() => {
+    const col = preset.cols.find((c) => c.key === sortKey);
+    const num = (a: Agg) => (sortKey === "name" ? a.name : col ? col.get(a) : a.spend);
+    return [...aggs].sort((x, y) => {
+      const vx = num(x), vy = num(y);
+      if (typeof vx === "string" || typeof vy === "string") return sortDir === "asc" ? String(vx ?? "").localeCompare(String(vy ?? "")) : String(vy ?? "").localeCompare(String(vx ?? ""));
+      return sortDir === "asc" ? (Number(vx) || 0) - (Number(vy) || 0) : (Number(vy) || 0) - (Number(vx) || 0);
+    });
+  }, [aggs, preset, sortKey, sortDir]);
+
+  const trendDays = useMemo(() => {
+    const arr = [...perDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    return arr.map(([date, d]) => ({ date, value: trendMetric === "spend" ? d.spend : trendMetric === "leads" ? d.leads : trendMetric === "impressions" ? d.impressions : d.leads ? d.spend / d.leads : 0 }));
+  }, [perDay, trendMetric]);
+  const trendMax = Math.max(1, ...trendDays.map((d) => d.value));
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  const btn = (active: boolean) => `rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
+
+  return (
+    <div className="space-y-4">
+      {!meta.configured && (
+        <div className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <span className="font-semibold">Meta not connected.</span> Set <code className="rounded bg-white/70 px-1">META_MARKETING_TOKEN</code> + <code className="rounded bg-white/70 px-1">META_AD_ACCOUNT_ID</code> in Amplify to populate this tab.
+        </div>
+      )}
+
+      {/* controls */}
+      <div className="card space-y-3 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">Level</span>
+          {AD_LEVELS.map((l) => <button key={l.key} className={btn(level === l.key)} onClick={() => setLevel(l.key)}>{l.label}</button>)}
+        </div>
+        {bdOptions.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Break down by</span>
+            {bdOptions.map((b) => <button key={b.key} className={btn(breakdown === b.key)} onClick={() => setBreakdown(b.key)}>{b.label}</button>)}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">Columns</span>
+          {COLUMN_PRESETS.map((p) => <button key={p.key} className={btn(presetKey === p.key)} onClick={() => { setPresetKey(p.key); setSortKey("spend"); }}>{p.label}</button>)}
+          <div className="ml-auto flex items-center gap-2">
+            {syncMsg && <span className="text-xs text-muted">{syncMsg}</span>}
+            <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+              {syncing ? "Syncing…" : "Sync from Meta now"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* summary tiles */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <StatCard label="Spend" value={money(totals.spend)} />
+        <StatCard label="Impressions" value={Math.round(totals.impressions).toLocaleString("en-CA")} />
+        <StatCard label="Link clicks" value={Math.round(totals.linkClicks).toLocaleString("en-CA")} />
+        <StatCard label="Landing views" value={Math.round(totals.lpv).toLocaleString("en-CA")} />
+        <StatCard label="Leads" value={Math.round(totals.leads).toLocaleString("en-CA")} />
+        <StatCard label="Cost / lead" value={money2(totals.leads ? totals.spend / totals.leads : 0)} />
+      </div>
+
+      {/* per-day trend */}
+      <div className="card p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-navy">Daily trend</h3>
+          <div className="ml-auto flex gap-1">
+            {(["spend", "leads", "impressions", "cpl"] as const).map((m) => (
+              <button key={m} className={`rounded px-2 py-1 text-xs font-semibold ${trendMetric === m ? "bg-brand text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`} onClick={() => setTrendMetric(m)}>
+                {m === "cpl" ? "Cost/lead" : m[0].toUpperCase() + m.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {trendDays.length === 0 ? (
+          <p className="text-sm text-muted">{loading ? "Loading…" : "No data in this window yet — try “Sync from Meta now”."}</p>
+        ) : (
+          <div className="flex items-end gap-0.5 overflow-x-auto" style={{ height: 120 }}>
+            {trendDays.map((d) => (
+              <div key={d.date} className="flex min-w-[8px] flex-1 flex-col items-center justify-end" title={`${d.date}: ${trendMetric === "spend" || trendMetric === "cpl" ? money2(d.value) : Math.round(d.value).toLocaleString("en-CA")}`}>
+                <div className="w-full rounded-t bg-brand" style={{ height: `${Math.max(2, (d.value / trendMax) * 108)}px` }} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-1 flex justify-between text-[10px] text-muted">
+          <span>{trendDays[0]?.date}</span><span>{trendDays[trendDays.length - 1]?.date}</span>
+        </div>
+      </div>
+
+      {/* table */}
+      <div className="card overflow-x-auto p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-navy">{AD_LEVELS.find((l) => l.key === level)?.label} · {preset.label}</h3>
+          <span className="text-xs text-muted">
+            {meta.source === "live" ? "live (store warming)" : meta.source === "store" ? "stored history" : ""} · {since} → {until}
+          </span>
+        </div>
+        {meta.error && <p className="mb-2 text-xs text-red-600">Meta: {meta.error}</p>}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
+              <th className="cursor-pointer py-2 pr-2" onClick={() => toggleSort("name")}>{breakdown === "none" ? "Name" : bdOptions.find((b) => b.key === breakdown)?.label}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</th>
+              {preset.cols.map((c) => (
+                <th key={c.key} className="cursor-pointer py-2 pl-2 text-right" onClick={() => toggleSort(c.key)} title={c.tip}>
+                  {c.label}{c.tip ? <InfoDot tip={c.tip} /> : ""}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">{loading ? "Loading…" : "No rows. Use “Sync from Meta now” to pull your data."}</td></tr>
+            ) : sorted.map((a) => (
+              <tr key={a.key} className="border-b border-slate-50 hover:bg-slate-50/60">
+                <td className="py-2 pr-2 font-medium text-navy">{a.name}</td>
+                {preset.cols.map((c) => <td key={c.key} className="py-2 pl-2 text-right tabular-nums">{fmtCell(c.type, c.get(a))}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-3 text-[11px] text-muted">
+          Daily figures summed across the window; rates (CTR, CPC, CPM, cost-per-lead) are recomputed from the sums. <span className="font-semibold">Reach*</span> / <span className="font-semibold">Freq*</span> are summed across days (an over-count vs Meta’s de-duplicated whole-window reach). History is snapshotted nightly; “Sync from Meta now” refreshes on demand.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "people";
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const events = data.events;
@@ -2257,6 +2618,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     { key: "overview", label: "Overview" },
     { key: "acquisition", label: "Acquisition" },
     { key: "funnel", label: "Funnel" },
+    { key: "ads", label: "Ads" },
     { key: "people", label: "People" },
   ];
 
@@ -2442,6 +2804,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </Section>
         </>
       )}
+
+      {/* ---- TAB: ADS (comprehensive Meta ad analytics, persisted daily) ---- */}
+      {tab === "ads" && <AdsTab range={range} />}
 
       {/* ---- TAB 4: PEOPLE ---- */}
       {tab === "people" && (

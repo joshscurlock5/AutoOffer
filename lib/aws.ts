@@ -28,4 +28,7 @@ export const REFERRALS_TABLE =
   process.env.REFERRALS_TABLE || "AutoOfferReferrals";
 export const CHATS_TABLE = process.env.CHATS_TABLE || "AutoOfferChats";
 export const LOOKUPS_TABLE = process.env.LOOKUPS_TABLE || "AutoOfferLookups";
+// Daily Meta ad-insight snapshots — the persisted time-series that powers the
+// historical ad-analytics dashboard (Meta's own API only keeps rolling windows).
+export const META_INSIGHTS_TABLE = process.env.META_INSIGHTS_TABLE || "AutoOfferMetaInsights";
 export const PHOTOS_BUCKET = process.env.PHOTOS_BUCKET || "";

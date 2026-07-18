@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeads, updateLead, getConversations, updateConversation } from "@/lib/store";
+import { getLeads, updateLead, getConversations, updateConversation, putMetaSnapshots } from "@/lib/store";
+import { buildDailySnapshots, metaInsightsConfigured } from "@/lib/metaInsights";
 import { notifyOwner, leadLine } from "@/lib/notify";
 import { resolveGeo } from "@/lib/geo";
 import {
@@ -64,6 +65,8 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     geoResolved: 0,
     digestSent: false,
     scoreboardSent: false,
+    metaSynced: false,
+    metaRows: 0,
   };
 
   // Business-local (Mountain Time) helpers for the daily digest + "today" checks.
@@ -334,6 +337,26 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
       ].join("\n"),
     );
     summary.scoreboardSent = true;
+  }
+
+  // --- Meta ad-insight daily snapshot — once a day (~6am MT), pull a trailing
+  //     30-day daily time-series (Meta keeps re-stating the last 28 days) across
+  //     every level + breakdown and upsert it, building the historical
+  //     ad-analytics store the live Meta API can't provide. Idempotent (same
+  //     pk/sk overwrites). Best-effort: never blocks or fails the cron. ---
+  if (metaInsightsConfigured() && mtHour === 6) {
+    try {
+      const since = mtDate(now - 30 * DAY);
+      const { rows, errors, slices } = await buildDailySnapshots(since, todayMT, nowISO);
+      if (rows.length) {
+        const { written } = await putMetaSnapshots(rows);
+        summary.metaRows = written;
+      }
+      summary.metaSynced = true;
+      if (errors.length) console.error(`[cron] meta sync: ${slices} slices, ${errors.length} error(s):`, errors.join(" | "));
+    } catch (e) {
+      console.error("[cron] meta sync failed", e);
+    }
   }
 
   return NextResponse.json({ ok: true, ...summary });

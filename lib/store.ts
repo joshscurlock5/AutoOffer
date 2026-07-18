@@ -4,6 +4,7 @@ import {
   PutCommand,
   GetCommand,
   ScanCommand,
+  QueryCommand,
   DeleteCommand,
   UpdateCommand,
   BatchWriteCommand,
@@ -13,8 +14,8 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
-import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent } from "./types";
+import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, META_INSIGHTS_TABLE, PHOTOS_BUCKET } from "./aws";
+import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent, MetaSnapshot } from "./types";
 import { toE164 } from "./sms";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
@@ -643,6 +644,80 @@ export async function getAllEvents(): Promise<SiteEvent[]> {
     } while (lastKey && out.length < 100_000);
   } catch {
     /* table not created yet (or transient) — the dashboard just shows no events */
+  }
+  return out;
+}
+
+// ---- Meta ad-insight snapshots (DynamoDB daily time-series) ----------------
+
+/** Batch-write daily Meta insight rows (idempotent upsert — same pk/sk overwrites).
+ * 25/batch (DynamoDB BatchWrite cap), one retry on unprocessed items. Best-effort:
+ * a sync failure must never crash the cron. Returns a written/dropped tally. */
+export async function putMetaSnapshots(rows: MetaSnapshot[]): Promise<{ written: number; dropped: number }> {
+  let written = 0;
+  let dropped = 0;
+  try {
+    for (let i = 0; i < rows.length; i += 25) {
+      const chunk = rows.slice(i, i + 25);
+      const res = await ddb.send(
+        new BatchWriteCommand({
+          RequestItems: { [META_INSIGHTS_TABLE]: chunk.map((Item) => ({ PutRequest: { Item } })) },
+        }),
+      );
+      let unprocessed = res.UnprocessedItems?.[META_INSIGHTS_TABLE];
+      written += chunk.length - (unprocessed?.length || 0);
+      if (unprocessed && unprocessed.length) {
+        await new Promise((r) => setTimeout(r, 250));
+        const retry = await ddb.send(
+          new BatchWriteCommand({ RequestItems: { [META_INSIGHTS_TABLE]: unprocessed } }),
+        );
+        const stillLeft = retry.UnprocessedItems?.[META_INSIGHTS_TABLE]?.length || 0;
+        written += unprocessed.length - stillLeft;
+        dropped += stillLeft;
+        if (stillLeft) console.error(`[meta-insights] ${stillLeft} rows dropped after retry`);
+      }
+    }
+  } catch (e) {
+    console.error("[meta-insights] write failed:", e);
+  }
+  return { written, dropped };
+}
+
+/** Query stored daily snapshots for one level + breakdown across an inclusive
+ * date window (YYYY-MM-DD). Efficient single-partition Query (pk = `${level}#${breakdownKey}`,
+ * sk range over dates). Returns [] until the table exists — the dashboard then
+ * falls back to a live Meta fetch. */
+export async function queryMetaSnapshots(
+  level: string,
+  breakdownKey: string,
+  sinceDate: string,
+  untilDate: string,
+): Promise<MetaSnapshot[]> {
+  const out: MetaSnapshot[] = [];
+  try {
+    const pk = `${level}#${breakdownKey}`;
+    let lastKey: Record<string, unknown> | undefined;
+    do {
+      const res = await ddb.send(
+        new QueryCommand({
+          TableName: META_INSIGHTS_TABLE,
+          KeyConditionExpression: "pk = :pk AND sk BETWEEN :lo AND :hi",
+          ExpressionAttributeValues: {
+            ":pk": pk,
+            // sk = `${date}#${entityId}#${bdValue}`; "$" (0x24) sorts just after
+            // the "#" (0x23) separator, so `${until}$` is a clean ASCII ceiling
+            // above every `${until}#…` row — inclusive of the whole `until` day.
+            ":lo": `${sinceDate}#`,
+            ":hi": `${untilDate}$`,
+          },
+          ExclusiveStartKey: lastKey,
+        }),
+      );
+      out.push(...((res.Items || []) as MetaSnapshot[]));
+      lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (lastKey && out.length < 200_000);
+  } catch {
+    /* table not created yet (or transient) — dashboard falls back to live fetch */
   }
   return out;
 }

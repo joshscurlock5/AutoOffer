@@ -620,6 +620,46 @@ export interface AdInsightAd {
   holdRate?: number; // percent: thruplay / video3s — did viewers stick around after the hook
 }
 
+/** One persisted daily Meta ad-insight row — the atom of the historical
+ * ad-analytics time-series (table AutoOfferMetaInsights). One row per
+ * day × level × entity × breakdown-value, with the FULL metric set kept as a
+ * flexible `metrics` map so adding/removing Meta columns never needs a schema
+ * migration. Keys:
+ *   pk = `${level}#${breakdownKey}`  (e.g. "ad#none", "campaign#age")
+ *   sk = `${date}#${entityId}#${breakdownValue}`  (date = YYYY-MM-DD, MT-day of Meta's date_start)
+ * so a single Query(pk, sk between dateA..dateB) returns every entity for that
+ * level+breakdown across a date window. */
+export interface MetaSnapshot {
+  pk: string;
+  sk: string;
+  /** account | campaign | adset | ad */
+  level: string;
+  /** Meta's reporting day (date_start), YYYY-MM-DD. */
+  date: string;
+  /** Entity id for this level ("" / account id for account-level). */
+  entityId: string;
+  /** Human-readable name for this level's entity. */
+  entityName: string;
+  /** Parent ids kept for joins/rollups (empty where not applicable). */
+  campaignId?: string;
+  campaignName?: string;
+  adsetId?: string;
+  adsetName?: string;
+  /** Breakdown dimension: "none" | "age" | "gender" | "region" | "publisher_platform" | "impression_device" … */
+  breakdownKey: string;
+  /** The breakdown value for this row ("none" when breakdownKey === "none"). */
+  breakdownValue: string;
+  /** Spend hoisted out of `metrics` for cheap sorting/rollups. */
+  spend: number;
+  /** Every fetched + derived metric, flattened. Container actions are expanded
+   * into keyed columns (e.g. action_lead, cost_per_action_lead, value_purchase). */
+  metrics: Record<string, number | string | null>;
+  /** ISO time this row was written by the sync. */
+  syncedAt: string;
+  /** Epoch-seconds TTL (long — ~3y — so the table is bounded but keeps real history). */
+  ttl: number;
+}
+
 /** Aggregate site traffic pulled from the GA4 Data API. */
 export interface Ga4Traffic {
   totals: { users: number; newUsers: number; sessions: number; pageviews: number; engagementRate: number };
