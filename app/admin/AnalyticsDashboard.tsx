@@ -1241,10 +1241,12 @@ function BreakdownTable({
   title,
   tip,
   rows,
+  leadsTip,
 }: {
   title: string;
   tip?: string;
   rows: { label: string; spend: number; leads?: number }[];
+  leadsTip?: string;
 }) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.spend - a.spend), [rows]);
   return (
@@ -1255,7 +1257,7 @@ function BreakdownTable({
           <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
             <th className="py-2 pr-2"></th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-            <th className="px-2 text-right" title="Meta Pixel leads attributed here.">Leads</th>
+            <th className="px-2 text-right" title={leadsTip || "Meta Pixel leads attributed here."}>Leads</th>
             <th className="pl-2 text-right" title="Spend ÷ leads.">Cost/lead</th>
           </tr>
         </thead>
@@ -2580,6 +2582,20 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const view = useMemo(() => computeView(filtered, dateBounds), [filtered, dateBounds]);
   const segments = useMemo(() => segmentTable(filtered, dim), [filtered, dim]);
 
+  // First-party real leads bucketed by province (geo region, lowercased for a
+  // tolerant match to Meta's region label). Meta's regional breakdown returns NO
+  // `lead` action — website conversions can't be attributed by region — so the
+  // "By region" panel joins Meta's per-region SPEND to YOUR own leads instead.
+  const leadsByRegion = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of filtered) {
+      if (!p.hasRealLead) continue;
+      const r = (p.geo?.region || "").trim().toLowerCase();
+      if (r) m.set(r, (m.get(r) || 0) + 1);
+    }
+    return m;
+  }, [filtered]);
+
   // Previous equal-length period (preset ranges only) — for KPI deltas.
   const prevView = useMemo(() => {
     const days = presetDays(range.preset);
@@ -2737,8 +2753,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <BreakdownTable
                       title="By region"
-                      tip="Meta Ads API — campaign spend/leads broken down by region."
-                      rows={adLevel.regions.map((r) => ({ label: r.region, spend: r.spend, leads: r.leads }))}
+                      tip="Spend is Meta's per-region delivery. Leads are YOUR first-party leads located in that province — Meta doesn't report website leads by region, so this joins your own data instead. (Cost/lead = Meta region spend ÷ your leads in the current view.)"
+                      leadsTip="Your first-party leads whose visitor location falls in this province."
+                      rows={adLevel.regions.map((r) => ({ label: r.region, spend: r.spend, leads: leadsByRegion.get(r.region.trim().toLowerCase()) }))}
                     />
                     <BreakdownTable
                       title="By placement"
