@@ -1002,7 +1002,7 @@ function ControlBar({
   ];
   return (
     <>
-      <div className="sticky top-0 z-40 mb-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+      <div className="sticky top-20 z-40 mb-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
             {presets.map((p) => (
@@ -2838,7 +2838,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
   return (
     <div className="container-x py-8">
-      <div className="mb-4 flex items-center justify-between">
+      {/* Mobile/tablet title row — on lg+ the title lives inside the sticky
+          sidebar instead, so it scrolls down with the nav. */}
+      <div className="mb-4 flex items-center justify-between lg:hidden">
         <div>
           <h1 className="text-2xl font-bold text-navy">Customer Analytics</h1>
           <p className="text-sm text-muted">One profile per person — ad → visit → form → replies → close.</p>
@@ -2847,20 +2849,28 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       </div>
 
       <div className="flex items-start gap-6">
-        {/* Left nav — collapses to the horizontal strip below lg */}
-        <nav className="sticky top-4 hidden w-52 shrink-0 flex-col gap-1 lg:flex">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${tab === t.key ? "bg-brand-50 text-brand-700" : "text-navy hover:bg-slate-100"}`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        {/* Left sidebar — page title + nav, pinned together as one unit.
+            sticky top-20 clears the 72px site header (a shorter offset would
+            tuck it behind the header). Internal scroll guard for short
+            viewports. Hidden below lg, where the strip + title row take over. */}
+        <div className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto lg:block">
+          <Link href="/admin" className="mb-3 inline-block text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
+          <h1 className="text-xl font-bold text-navy">Customer Analytics</h1>
+          <p className="mb-4 text-xs text-muted">One profile per person — ad → visit → form → replies → close.</p>
+          <nav className="flex flex-col gap-1">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${tab === t.key ? "bg-brand-50 text-brand-700" : "text-navy hover:bg-slate-100"}`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
         <div className="min-w-0 flex-1">
           {/* Mobile/tablet nav strip */}
