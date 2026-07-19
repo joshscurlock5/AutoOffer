@@ -142,13 +142,25 @@ function topCounts(labels: (string | undefined)[], limit = 12): Count[] {
     .slice(0, limit);
 }
 
+/** Provinces DriveOffer actually operates in — always offered in the
+ * Province/Region filter (listed first, even before a lead from one arrives) so
+ * the operator can always select them. Full province names, matching what IP geo
+ * (lib/geo.ts) stores, so they exact-match filterProfiles' string compare. */
+const OPERATING_PROVINCES = ["Alberta", "British Columbia", "Saskatchewan"];
+
 /** Distinct filter values across ALL profiles (so any value is selectable). */
 export function computeFilterOptions(profiles: Profile[]): FilterOptions {
   const uniq = (xs: (string | undefined)[]) =>
     [...new Set(xs.map((x) => (x || "").trim()).filter(Boolean))].sort();
+  // Operating provinces pinned first; any other geolocated region follows, so a
+  // lead outside the service area stays filterable too (chosen: three + others).
+  const regions = [
+    ...OPERATING_PROVINCES,
+    ...uniq(profiles.map((p) => p.geo?.region)).filter((r) => !OPERATING_PROVINCES.includes(r)),
+  ];
   return {
     countries: uniq(profiles.map((p) => p.geo?.country)),
-    regions: uniq(profiles.map((p) => p.geo?.region)),
+    regions,
     sources: uniq(profiles.map((p) => p.source)),
     devices: uniq(profiles.map((p) => p.device?.type)),
     stages: uniq(profiles.map((p) => p.stage)),

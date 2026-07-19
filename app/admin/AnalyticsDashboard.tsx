@@ -99,16 +99,16 @@ function EstBadge() {
 // Provenance strings for the "where's this from?" info dots (an audit aid).
 const SRC = {
   site: "Your website's own database — form submissions, merged into one record per person.",
-  siteGrouped: "Your website's database, grouped by the source saved on each lead (UTM tag or referrer).",
-  behavior: "First-party tracking on your site — pages viewed, device, and time on site.",
+  siteGrouped: "Your website's database, grouped by the source saved on each lead (the tracking tag on the ad link, or the website that sent them here).",
+  behavior: "Tracking built into your own website — pages viewed, device, and time on site.",
   geo: "IP-address location lookup (ipwho.is), added shortly after each lead arrives.",
   ga4: "Google Analytics 4 — every site visitor, including anonymous ones who never filled a form.",
   comms: "Delivery receipts from Resend (email) and Twilio (SMS) — whether messages we sent arrived, were opened, or had a link clicked.",
   clarity: "Microsoft Clarity session recordings. In Clarity, add the filter Custom user ID = this session ID to watch this person's visits.",
-  events: "Your own events database (first-party) — every visitor session, anonymous ones included; nothing sent to third parties. Reflects the event window selected in the control bar above.",
-  journey: "Your website's database — every marketing source this person arrived from, oldest to newest. First chip = first touch.",
-  score: "Computed from this person's own activity — recency, engagement, funnel depth, vehicle value, and source. Not machine learning; every point is explained in the breakdown inside the profile. A prioritization aid, not a prediction.",
-  enrich: "Derived from data the customer already gave us — email provider type, phone area-code region, and a vehicle value tier. No extra questions asked, no outside services.",
+  events: "Your own website's activity log — every visit, anonymous ones included; nothing sent to third parties. Covers the activity date range selected in the control bar above.",
+  journey: "Your website's database — every place this person arrived from, oldest to newest. First chip = where they first found you.",
+  score: "Computed from this person's own activity — how recently they visited, how much they did on the site, how far they got in the form, vehicle value, and where they came from. Not machine learning; every point is explained in the breakdown inside the profile. A guide to who to call first, not a prediction.",
+  enrich: "Worked out from data the customer already gave us — email provider type, phone area-code region, and a vehicle value tier. No extra questions asked, no outside services.",
 };
 
 const BAND_STYLE: Record<string, string> = {
@@ -247,7 +247,7 @@ function DayBarChart({
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="text-[10px] text-muted">{showAvg ? "— 7-day avg" : ""}</span>
+        <span className="text-[10px] text-muted">{showAvg ? "— trend line (7-day average)" : ""}</span>
         <span className="text-right text-xs tabular-nums text-muted">
           {hoveredRow ? (
             <>
@@ -344,7 +344,7 @@ function HBars({ title, rows, tip, share = true }: { title: string; rows: Count[
   );
 }
 
-function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip?: string; title?: string }) {
+function Funnel({ rows, tip, title = "Funnel — how many reach each step" }: { rows: Count[]; tip?: string; title?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   const top = rows[0]?.count ?? 0;
   return (
@@ -372,7 +372,7 @@ function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip
               </div>
               <div className="w-20 shrink-0 text-right text-xs text-muted">
                 <div>{i === 0 ? "100%" : pct != null ? `${pct}%` : ""}</div>
-                {i > 0 && ofTop != null && <div className="text-[10px] text-muted">{ofTop}% of all</div>}
+                {i > 0 && ofTop != null && <div className="text-[10px] text-muted">{ofTop}% of first step</div>}
               </div>
             </div>
           );
@@ -475,27 +475,52 @@ function Heatmap({
   );
 }
 
-function Sel({
+/** Stroke-icon wrapper for the left nav (feather-style paths). */
+function NavIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+
+/** Display-only prettifier for raw enum-ish values ("offer_sent" → "Offer sent").
+ * Matching still uses the raw value — this never changes what gets filtered. */
+function prettyValue(s: string): string {
+  const t = s.replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** One filter as a row of pill buttons (same style as the Ads tab) — "All" plus
+ * every value. Click to select; click the active pill again to clear. */
+function PillRow({
   label,
   value,
   onChange,
   opts,
+  pretty,
 }: {
   label: string;
   value?: string;
   onChange: (v?: string) => void;
   opts: string[];
+  pretty?: boolean;
 }) {
+  if (opts.length === 0) return null;
+  const pill = (active: boolean) =>
+    `rounded-lg px-3 py-1 text-sm font-semibold transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
   return (
-    <label className="flex min-w-[120px] flex-col text-xs">
-      <span className="mb-0.5 font-semibold text-muted">{label}</span>
-      <select className="field py-1.5 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value || undefined)}>
-        <option value="">All</option>
-        {opts.map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
-      </select>
-    </label>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="w-24 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted">{label}</span>
+      <button type="button" className={pill(!value)} onClick={() => onChange(undefined)}>
+        All
+      </button>
+      {opts.map((o) => (
+        <button key={o} type="button" className={pill(value === o)} onClick={() => onChange(value === o ? undefined : o)}>
+          {pretty ? prettyValue(o) : o}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -513,7 +538,7 @@ function SegmentView({
   return (
     <div className="card overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-navy">Segment performance — how each group responds{tip && <InfoDot tip={tip} />}</h3>
+        <h3 className="text-sm font-bold text-navy">How each group of leads performs{tip && <InfoDot tip={tip} />}</h3>
         <label className="flex items-center gap-2 text-xs text-muted">
           Compare by
           <select className="field py-1 text-sm" value={dim} onChange={(e) => setDim(e.target.value as SegmentDimension)}>
@@ -534,7 +559,7 @@ function SegmentView({
             <th className="px-2 text-right">Avg offer</th>
             <th className="px-2 text-right" title="Margin = sale price (actual, or expected if not sold yet) minus what you paid for the car, summed over the group's closed deals.">Margin</th>
             <th className="px-2 text-right" title="Average lead score (0-100) across the group">Avg score</th>
-            <th className="pl-2 text-right">Median resp</th>
+            <th className="pl-2 text-right">Typical response time</th>
           </tr>
         </thead>
         <tbody>
@@ -593,7 +618,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
         </div>
         <div className="shrink-0 text-right text-xs text-muted">
           <div>{timeAgo(p.lastActivityAt)}</div>
-          <div>{p.touchCount} touch{p.touchCount === 1 ? "" : "es"}</div>
+          <div>{p.touchCount} interaction{p.touchCount === 1 ? "" : "s"}</div>
           {p.purchasePrice ? <div className="font-semibold text-emerald-700">{money(p.purchasePrice)}</div> : null}
         </div>
       </button>
@@ -604,17 +629,17 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             <div className="text-xs font-bold uppercase tracking-wide text-muted">Where they came from</div>
             <Row k="Source" v={p.source} />
             {a?.utmCampaign && <Row k="Campaign" v={a.utmCampaign} />}
-            {a?.utmMedium && <Row k="Medium" v={a.utmMedium} />}
-            {a?.utmContent && <Row k="Ad / content" v={a.utmContent} />}
-            {a?.utmTerm && <Row k="Term" v={a.utmTerm} />}
-            {a?.matchType && <Row k="Match type" v={a.matchType} />}
-            {a?.placement && <Row k="Placement" v={a.placement} />}
-            {a?.referrer && <Row k="Referrer" v={a.referrer} />}
+            {a?.utmMedium && <Row k="Traffic type" v={a.utmMedium} />}
+            {a?.utmContent && <Row k="Which ad / ad set" v={a.utmContent} />}
+            {a?.utmTerm && <Row k="Search keyword" v={a.utmTerm} />}
+            {a?.matchType && <Row k="Keyword match (Google Ads)" v={a.matchType} />}
+            {a?.placement && <Row k="Where it showed" v={a.placement} />}
+            {a?.referrer && <Row k="Previous website" v={a.referrer} />}
             {a?.landingPath && <Row k="Landed on" v={a.landingPath} />}
             {loc && <Row k="Location" v={loc} />}
             {p.geo?.postal && <Row k="Postal" v={p.geo.postal} />}
             {(p.geo?.isp || p.geo?.org) && (
-              <Row k="Network" v={[...new Set([p.geo.isp, p.geo.org].filter(Boolean) as string[])].join(" · ")} />
+              <Row k="Internet provider" v={[...new Set([p.geo.isp, p.geo.org].filter(Boolean) as string[])].join(" · ")} />
             )}
             {p.geo?.timezone && <Row k="Timezone" v={p.geo.timezone} />}
             {p.geo?.latitude != null && p.geo?.longitude != null && (
@@ -624,7 +649,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {p.touchHistory && p.touchHistory.length > 0 && (
               <>
                 <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
-                  Journey<InfoDot tip={SRC.journey} />
+                  How they got here, step by step<InfoDot tip={SRC.journey} />
                 </div>
                 <div className="flex flex-wrap items-center gap-1 pt-1">
                   {p.touchHistory.map((t, i) => (
@@ -641,15 +666,15 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                 </div>
               </>
             )}
-            <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">On-site behavior</div>
+            <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">What they did on the site</div>
             <Row k="Time on site" v={fmtDur(p.behavior?.timeOnSiteMs)} />
-            <Row k="Pageviews" v={String(p.behavior?.pageviews ?? "—")} />
-            <Row k="Furthest step" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
-            {p.behavior?.maxScrollPct != null && <Row k="Scroll depth" v={`${p.behavior.maxScrollPct}%`} />}
+            <Row k="Pages viewed" v={String(p.behavior?.pageviews ?? "—")} />
+            <Row k="Form step reached" v={p.behavior?.maxFunnelStep ? `Step ${p.behavior.maxFunnelStep}` : "—"} />
+            {p.behavior?.maxScrollPct != null && <Row k="How far they scrolled" v={`${p.behavior.maxScrollPct}%`} />}
             {p.behavior?.viewport && <Row k="Screen" v={p.behavior.viewport} />}
             {(p.behavior?.tabSwitches ?? 0) > 0 && <Row k="Tab switches" v={String(p.behavior?.tabSwitches ?? 0)} />}
             {p.behavior?.contactInput && p.behavior.contactInput !== "typed" && (
-              <Row k="Contact input" v={p.behavior.contactInput} />
+              <Row k="How contact info was entered" v={p.behavior.contactInput} />
             )}
             <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
               Lead score — {p.score}/100<InfoDot tip={SRC.score} />
@@ -665,7 +690,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {p.enrichment && (
               <>
                 <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
-                  Derived<InfoDot tip={SRC.enrich} />
+                  Worked out from their info<InfoDot tip={SRC.enrich} />
                 </div>
                 {p.enrichment.emailType && <Row k="Email type" v={p.enrichment.emailType} />}
                 {p.enrichment.phoneRegion && <Row k="Phone region" v={p.enrichment.phoneRegion} />}
@@ -682,18 +707,18 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                       className="min-w-0 text-amber-700"
                       title="The IP location and the phone's area code point to different provinces (or the IP is outside Canada while the phone is Canadian). Could be travel, a VPN, a recent move, or a lower-quality lead — a soft signal, not a reject."
                     >
-                      ⚠ IP vs phone region differ
+                      ⚠ Internet location and phone area code do not match
                     </span>
                   </div>
                 )}
                 {p.enrichment.foreignNumber && (
                   <div className="flex gap-2">
-                    <span className="w-28 shrink-0 text-muted">Foreign network</span>
+                    <span className="w-28 shrink-0 text-muted">Foreign connection</span>
                     <span
                       className="min-w-0 text-amber-700"
-                      title="A cheap offshore-submission tell computed from the IP's geo — not an auto-reject."
+                      title="Suggests the form may have been filled out from overseas, based on where their internet connection is — not an automatic reject."
                     >
-                      ⚠ The IP&apos;s calling code isn&apos;t +1
+                      ⚠ Their internet connection is from a country outside the +1 calling area (Canada/US)
                     </span>
                   </div>
                 )}
@@ -704,7 +729,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                       className="min-w-0 text-amber-700"
                       title="Could be travel, a VPN, or an out-of-province lead — a soft signal, not a reject."
                     >
-                      ⚠ The IP&apos;s timezone is outside Canada
+                      ⚠ Their internet connection points to a time zone outside Canada
                     </span>
                   </div>
                 )}
@@ -721,23 +746,23 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                 )}
                 {p.enrichment.conditionFlags && p.enrichment.conditionFlags.length > 0 && (
                   <div className="flex gap-2">
-                    <span className="w-28 shrink-0 text-muted">Condition flags</span>
+                    <span className="w-28 shrink-0 text-muted">Condition warnings</span>
                     <span className="min-w-0 text-amber-700" title="Parsed from the seller's condition chips + note — worth a look before driving out.">
                       {p.enrichment.conditionFlags.join(", ")}
                     </span>
                   </div>
                 )}
                 {p.enrichment.mileageVsMarket && <Row k="Mileage" v={`${p.enrichment.mileageVsMarket} for its age`} />}
-                {p.enrichment.referrerQuality && <Row k="Channel" v={p.enrichment.referrerQuality} />}
+                {p.enrichment.referrerQuality && <Row k="Traffic type (best guess)" v={p.enrichment.referrerQuality} />}
               </>
             )}
             {(p.bestTime || (p.returnVisits ?? 0) > 1 || p.timeToConvMs != null || p.referrerIsSeller || p.selfReferral) && (
               <>
-                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">Signals</div>
-                {p.bestTime && <Row k="Best time" v={p.bestTime} />}
-                {(p.returnVisits ?? 0) > 1 && <Row k="Return visits" v={`${p.returnVisits} sessions`} />}
-                {p.timeToConvMs != null && <Row k="Time to convert" v={fmtDur(p.timeToConvMs)} />}
-                {p.referrerIsSeller && <Row k="Referrer" v="Also a seller (repeat)" />}
+                <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">Other clues</div>
+                {p.bestTime && <Row k="Best time to reach them" v={p.bestTime} />}
+                {(p.returnVisits ?? 0) > 1 && <Row k="Return visits" v={`${p.returnVisits} visits`} />}
+                {p.timeToConvMs != null && <Row k="Time from first visit to lead" v={fmtDur(p.timeToConvMs)} />}
+                {p.referrerIsSeller && <Row k="Referred by" v="Also a seller (repeat)" />}
                 {p.selfReferral && (
                   <div className="flex gap-2">
                     <span className="w-28 shrink-0 text-muted">Referral</span>
@@ -754,7 +779,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             {(p.emailEngagement || p.smsEngagement) && (
               <>
                 <div className="pt-2 text-xs font-bold uppercase tracking-wide text-muted">
-                  Engagement<InfoDot tip={SRC.comms} />
+                  Email & text activity<InfoDot tip={SRC.comms} />
                 </div>
                 {p.emailEngagement && (
                   <Row
@@ -762,18 +787,18 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
                     v={`${p.emailEngagement.deliveredCount ?? 0} delivered · ${p.emailEngagement.opensCount ?? 0} opened · ${p.emailEngagement.clicksCount ?? 0} clicked`}
                   />
                 )}
-                {p.emailEngagement?.lastClickedUrl && <Row k="Last click" v={p.emailEngagement.lastClickedUrl} />}
+                {p.emailEngagement?.lastClickedUrl && <Row k="Last link clicked" v={p.emailEngagement.lastClickedUrl} />}
                 {p.emailOpenLatencyMins != null && <Row k="Opened after" v={fmtMins(p.emailOpenLatencyMins)} />}
                 {p.emailEngagement?.lastBounceReason && (
                   <div className="flex gap-2">
-                    <span className="w-28 shrink-0 text-muted">Bounce reason</span>
+                    <span className="w-28 shrink-0 text-muted">Why the email failed</span>
                     <span className="min-w-0 truncate text-red-600" title={p.emailEngagement.lastBounceReason}>{p.emailEngagement.lastBounceReason}</span>
                   </div>
                 )}
                 {p.emailEngagement?.lastDelayedAt && (
                   <div className="flex gap-2">
                     <span className="w-28 shrink-0 text-muted">Delivery delayed</span>
-                    <span className="min-w-0 text-amber-700" title="A soft/greylist delay (delivery_delayed) — a stuck-in-retry signal, not a bounce.">
+                    <span className="min-w-0 text-amber-700" title="Their mail provider was slow to accept the email — it is stuck retrying, not failed.">
                       {timeAgo(p.emailEngagement.lastDelayedAt)}
                     </span>
                   </div>
@@ -968,7 +993,7 @@ function ControlBar({
   clearFilters: () => void;
   countLabel: string;
 }) {
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const presets: { key: Preset; label: string }[] = [
     { key: "7d", label: "7d" },
     { key: "30d", label: "30d" },
@@ -976,64 +1001,68 @@ function ControlBar({
     { key: "all", label: "All" },
   ];
   return (
-    <div className="sticky top-0 z-40 -mx-4 mb-6 border-b border-slate-200 bg-bg/95 px-4 py-3 backdrop-blur">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
-          {presets.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => setRange({ preset: p.key })}
-              className={`px-3 py-1.5 text-sm font-semibold ${range.preset === p.key ? "bg-brand-600 text-white" : "bg-white text-navy hover:bg-slate-50"}`}
-            >
-              {p.label}
-            </button>
-          ))}
+    <>
+      <div className="sticky top-0 z-40 mb-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setRange({ preset: p.key })}
+                className={`px-3 py-1.5 text-sm font-semibold ${range.preset === p.key ? "bg-brand-600 text-white" : "bg-white text-navy hover:bg-slate-50"}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <label className="flex items-center gap-1 text-xs text-muted">
+            From
+            <input
+              type="date"
+              className="field py-1 text-sm"
+              value={range.preset === "custom" ? range.dateFrom || "" : ""}
+              onChange={(e) => setRange({ preset: "custom", dateFrom: e.target.value || undefined, dateTo: range.dateTo })}
+            />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-muted">
+            To
+            <input
+              type="date"
+              className="field py-1 text-sm"
+              value={range.preset === "custom" ? range.dateTo || "" : ""}
+              onChange={(e) => setRange({ preset: "custom", dateFrom: range.dateFrom, dateTo: e.target.value || undefined })}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className={`rounded-full px-3 py-1.5 text-sm font-semibold ${activeFilters > 0 ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-navy hover:bg-slate-200"}`}
+          >
+            {showFilters ? "Hide filters" : `Filters${activeFilters > 0 ? ` (${activeFilters})` : ""}`}
+          </button>
+          <span className="ml-auto self-center text-sm text-muted">{countLabel}</span>
         </div>
-        <label className="flex items-center gap-1 text-xs text-muted">
-          From
-          <input
-            type="date"
-            className="field py-1 text-sm"
-            value={range.preset === "custom" ? range.dateFrom || "" : ""}
-            onChange={(e) => setRange({ preset: "custom", dateFrom: e.target.value || undefined, dateTo: range.dateTo })}
-          />
-        </label>
-        <label className="flex items-center gap-1 text-xs text-muted">
-          To
-          <input
-            type="date"
-            className="field py-1 text-sm"
-            value={range.preset === "custom" ? range.dateTo || "" : ""}
-            onChange={(e) => setRange({ preset: "custom", dateFrom: range.dateFrom, dateTo: e.target.value || undefined })}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => setShowFilters((v) => !v)}
-          className={`rounded-full px-3 py-1.5 text-sm font-semibold ${activeFilters > 0 ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-navy hover:bg-slate-200"}`}
-        >
-          Filters{activeFilters > 0 ? ` (${activeFilters})` : ""} {showFilters ? "▲" : "▼"}
-        </button>
-        <span className="ml-auto self-center text-sm text-muted">{countLabel}</span>
       </div>
       {showFilters && (
-        <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
-          <Sel label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
-          <Sel label="Province/Region" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
-          <Sel label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} />
-          <Sel label="Ad set" value={filters.adset} onChange={(v) => set({ adset: v })} opts={options.adsets} />
-          <Sel label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} />
-          <Sel label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} />
-          <Sel label="Score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} />
+        <div className="mb-6 space-y-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <PillRow label="Province" value={filters.region} onChange={(v) => set({ region: v })} opts={options.regions} />
+          <PillRow label="Source" value={filters.source} onChange={(v) => set({ source: v })} opts={options.sources} pretty />
+          <PillRow label="Stage" value={filters.stage} onChange={(v) => set({ stage: v })} opts={options.stages} pretty />
+          <PillRow label="Lead score" value={filters.scoreBand} onChange={(v) => set({ scoreBand: v })} opts={options.scoreBands} pretty />
+          <PillRow label="Ad set" value={filters.adset} onChange={(v) => set({ adset: v })} opts={options.adsets} />
+          <PillRow label="Device" value={filters.device} onChange={(v) => set({ device: v })} opts={options.devices} pretty />
+          <PillRow label="Country" value={filters.country} onChange={(v) => set({ country: v })} opts={options.countries} />
           {activeFilters > 0 && (
-            <button type="button" onClick={clearFilters} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
-              Clear ({activeFilters})
-            </button>
+            <div className="border-t border-slate-100 pt-2.5">
+              <button type="button" onClick={clearFilters} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-navy hover:bg-slate-200">
+                Clear all filters ({activeFilters})
+              </button>
+            </div>
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1165,7 +1194,7 @@ function FunnelEconomics({
 
     // Organic / untagged remainder — profiles matching no known campaign.
     const organic = profiles.filter((p) => !profileHasAnyCampaign(p, campaignNames));
-    out.push(build("(untagged / organic)", 0, 0, 0, organic));
+    out.push(build("(untagged — no ad campaign matched)", 0, 0, 0, organic));
     return out;
   }, [profiles, ads, dateBounds]);
 
@@ -1173,15 +1202,15 @@ function FunnelEconomics({
     <div className="card overflow-x-auto p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-navy">
-          Funnel economics — per campaign
-          <InfoDot tip="Spend / impressions / link clicks come from Meta (level=ad rows, grouped by campaign). Leads, qualified, booked, closed & margin come from YOUR database, matched to the campaign by any UTM touch (utm_campaign={{campaign.name}}). Untagged / organic = leads matching no Meta campaign." />
+          From ad spend to margin — per campaign
+          <InfoDot tip="Spend, times shown and link clicks come from Meta, grouped by campaign. Leads, qualified, booked, closed & margin come from YOUR database, matched to the campaign by the tracking tag on the ad link (utm_campaign={{campaign.name}}). Untagged = leads matching no Meta campaign." />
         </h3>
       </div>
       {loading ? (
         <p className="mb-3 text-xs text-muted">Loading Meta spend…</p>
       ) : !configured ? (
         <p className="mb-3 text-xs text-muted">
-          <span className="font-semibold text-navy">Meta not connected</span> — spend columns read zero. DB-side columns (leads/qualified/booked/closed/margin) still populate.
+          <span className="font-semibold text-navy">Meta not connected</span> — spend columns show zero. Your own numbers (leads, qualified, booked, closed, margin) still fill in.
         </p>
       ) : null}
       <table className="w-full min-w-[980px] text-sm">
@@ -1189,17 +1218,17 @@ function FunnelEconomics({
           <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
             <th className="py-2 pr-2" title="Meta campaign name.">Campaign</th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-            <th className="px-2 text-right" title="Meta Ads API — times shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — times shown.">Times shown</th>
             <th className="px-2 text-right" title="Meta Ads API — inline link clicks.">Link clicks</th>
-            <th className="px-2 text-right" title="Your database — people who created a real lead in range, matched to this campaign by any UTM touch.">Leads</th>
-            <th className="px-2 text-right" title="Spend ÷ DB leads.">CPL</th>
+            <th className="px-2 text-right" title="Your database — people who created a real lead in range, matched to this campaign by the tracking tag on the ad link.">Leads</th>
+            <th className="px-2 text-right" title="Spend ÷ leads in your database.">Cost/lead</th>
             <th className="px-2 text-right" title="Your database — matched leads with a lead score of 70 or higher.">Qualified</th>
-            <th className="px-2 text-right" title="Spend ÷ qualified leads.">CPQL</th>
+            <th className="px-2 text-right" title="Spend ÷ qualified leads.">Cost/qualified</th>
             <th className="px-2 text-right" title="Your database — matched leads that reached booked/closed.">Booked</th>
             <th className="px-2 text-right" title="Spend ÷ booked.">Cost/booked</th>
             <th className="px-2 text-right" title="Your database — matched closed deals.">Closed</th>
             <th className="px-2 text-right" title="Margin from matched deals closed in range = sale price (actual, or expected) minus cost.">Margin</th>
-            <th className="pl-2 text-right" title="Margin ÷ spend.">mROAS</th>
+            <th className="pl-2 text-right" title="Margin ÷ spend.">Margin per $1 of ads</th>
           </tr>
         </thead>
         <tbody>
@@ -1227,7 +1256,7 @@ function FunnelEconomics({
         </tbody>
       </table>
       <p className="mt-2 text-xs text-muted">
-        Spend/impressions/link-clicks from Meta (grouped from level=ad rows). Leads, qualified (score ≥ 70), booked, closed &amp; margin come from your own database, matched to the campaign by any UTM touch — ads must carry <code className="rounded bg-slate-100 px-1">utm_campaign={"{{campaign.name}}"}</code> for the join to work. Untagged / organic collects leads that match no Meta campaign.
+        Spend, times shown and link clicks come from Meta. Leads, qualified (score ≥ 70), booked, closed &amp; margin come from your own database, matched to the campaign by the tracking tag on the ad link — ads must carry <code className="rounded bg-slate-100 px-1">utm_campaign={"{{campaign.name}}"}</code> for the match to work. Untagged collects leads that match no Meta campaign.
       </p>
       {allCampaignNames.size > 0 && organicProfiles.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-3 text-xs">
@@ -1287,13 +1316,13 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
           <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
             <th className="py-2 pr-2" title="Campaign name from Meta.">Campaign</th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-            <th className="px-2 text-right" title="Meta Ads API — times your ad was shown.">Impr.</th>
+            <th className="px-2 text-right" title="Meta Ads API — times your ad was shown.">Times shown</th>
             <th className="px-2 text-right" title="Meta Ads API — link clicks.">Link clicks</th>
-            <th className="px-2 text-right" title="Meta Ads API — link click-through rate.">CTR</th>
-            <th className="px-2 text-right" title="Meta Pixel — leads Meta attributes to the ad.">Leads</th>
+            <th className="px-2 text-right" title="Meta Ads API — of the times the ad was shown, the % that clicked the link.">Link click rate</th>
+            <th className="px-2 text-right" title="Meta's own count of leads it credits to this ad.">Leads</th>
             <th className="px-2 text-right" title="Meta ad spend ÷ Meta Pixel leads.">Cost/lead</th>
-            <th className="px-2 text-right" title="Margin from deals CLOSED in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={campaign.name}).">Margin</th>
-            <th className="pl-2 text-right" title="Margin ÷ spend.">ROAS</th>
+            <th className="px-2 text-right" title="Margin from deals CLOSED in the selected window, matched to this campaign by the tracking tag on any of their visits (ads must carry utm_campaign={campaign.name}).">Margin</th>
+            <th className="pl-2 text-right" title="Margin ÷ spend.">Margin per $1 of ads</th>
           </tr>
         </thead>
         <tbody>
@@ -1316,7 +1345,7 @@ function MetaCampaignTable({ profiles, insights, days }: { profiles: Profile[]; 
           )}
         </tbody>
       </table>
-      <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by any UTM touch (ads must carry utm_campaign={"{campaign.name}"}). An <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">est</span> tag means the figure includes a car you&apos;ve bought but not sold yet — it uses your expected resale until you record the actual sold price.</p>
+      <p className="mt-2 text-xs text-muted">Spend, leads &amp; cost-per-lead come straight from Meta (matches Ads Manager). Margin from deals closed in the selected window, matched to this campaign by the tracking tag on any of their visits (ads must carry utm_campaign={"{campaign.name}"}). An <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">est</span> tag means the figure includes a car you&apos;ve bought but not sold yet — it uses your expected resale until you record the actual sold price.</p>
     </div>
   );
 }
@@ -1345,8 +1374,8 @@ function CreativeTable({ ads }: { ads: AdInsightAdRanked[] }) {
   return (
     <div className="card overflow-x-auto p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">
-        Creative performance — per ad
-        <InfoDot tip="Meta Ads API (level=ad). Hook % = 3-second plays ÷ impressions; Hold % = ThruPlays ÷ 3-second plays. Image ads have no video metrics — shown as —." />
+        How each ad is doing
+        <InfoDot tip="From Meta, one row per ad. Watched 3s+ = share of times shown where the video played at least 3 seconds; Kept watching = share of 3-second viewers who watched to the end (or 15 seconds). Image ads have no video numbers — shown as —." />
       </h3>
       <table className="w-full min-w-[860px] text-sm">
         <thead>
@@ -1354,14 +1383,14 @@ function CreativeTable({ ads }: { ads: AdInsightAdRanked[] }) {
             <th className="py-2 pr-2" title="Ad (creative) name.">Ad</th>
             <th className="px-2" title="Ad set name.">Ad set</th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-            <th className="px-2 text-right" title="Meta Ads API — times shown.">Impr.</th>
-            <th className="px-2 text-right" title="Meta Ads API — average times each person saw this ad (impressions ÷ reach). 4+ often signals ad fatigue — refresh the creative.">Freq</th>
-            <th className="px-2 text-right" title="Meta Ads API — link click-through rate.">Link CTR</th>
-            <th className="px-2 text-right" title="3-second video plays ÷ impressions.">Hook %</th>
-            <th className="px-2 text-right" title="ThruPlays ÷ 3-second video plays.">Hold %</th>
-            <th className="px-2 text-right" title="Meta Pixel leads attributed to this ad.">Leads</th>
-            <th className="px-2 text-right" title="Meta spend ÷ Meta leads.">CPL</th>
-            <th className="pl-2" title="Meta's per-ad diagnostic rankings vs other advertisers competing for the same audience.">Rankings</th>
+            <th className="px-2 text-right" title="Meta Ads API — times shown.">Times shown</th>
+            <th className="px-2 text-right" title="Meta Ads API — average times each person has seen this ad. At 4+, people are often getting tired of it — usually time for a fresh ad.">Times seen per person</th>
+            <th className="px-2 text-right" title="Meta Ads API — of the times the ad was shown, the % that clicked the link.">Link click rate</th>
+            <th className="px-2 text-right" title="Of all the times the ad was shown, the % where the video played at least 3 seconds.">Watched 3s+</th>
+            <th className="px-2 text-right" title="Of viewers who watched 3 seconds, the % who kept watching to the end (or at least 15 seconds).">Kept watching</th>
+            <th className="px-2 text-right" title="Meta's own count of leads it credits to this ad.">Leads</th>
+            <th className="px-2 text-right" title="Meta spend ÷ Meta leads.">Cost/lead</th>
+            <th className="pl-2" title="Meta's grades for this ad compared with other advertisers trying to reach the same people.">Rankings</th>
           </tr>
         </thead>
         <tbody>
@@ -1388,9 +1417,9 @@ function CreativeTable({ ads }: { ads: AdInsightAdRanked[] }) {
                 <td className="px-2 text-right font-semibold">{money2(r.costPerLead ?? (r.leads ? r.spend / r.leads : null))}</td>
                 <td className="pl-2">
                   <div className="flex flex-wrap gap-1">
-                    <RankingPill label="Qual" value={r.qualityRanking} />
-                    <RankingPill label="Eng" value={r.engagementRateRanking} />
-                    <RankingPill label="Conv" value={r.conversionRateRanking} />
+                    <RankingPill label="Quality" value={r.qualityRanking} />
+                    <RankingPill label="Interactions" value={r.engagementRateRanking} />
+                    <RankingPill label="Results" value={r.conversionRateRanking} />
                   </div>
                 </td>
               </tr>
@@ -1424,7 +1453,7 @@ function BreakdownTable({
           <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
             <th className="py-2 pr-2"></th>
             <th className="px-2 text-right" title="Meta Ads API — amount spent.">Spend</th>
-            <th className="px-2 text-right" title={leadsTip || "Meta Pixel leads attributed here."}>Leads</th>
+            <th className="px-2 text-right" title={leadsTip || "Meta's own count of leads credited here."}>Leads</th>
             <th className="pl-2 text-right" title="Spend ÷ leads.">Cost/lead</th>
           </tr>
         </thead>
@@ -1460,7 +1489,7 @@ function CampaignVehicleCard({ profiles }: { profiles: Profile[] }) {
               <th className="py-2 pr-2">Campaign / source</th>
               <th className="px-2 text-right">Leads</th>
               <th className="px-2">Top make</th>
-              <th className="pl-2 text-right" title="Share of this channel's leads whose vehicle is high value (from the derived vehicle tier) — high = it sends buyable cars, not just clicks.">High-value %</th>
+              <th className="pl-2 text-right" title="Of this source's leads, the share whose car falls in the high-value group — high means it sends buyable cars, not just clicks.">High-value %</th>
             </tr>
           </thead>
           <tbody>
@@ -1548,9 +1577,9 @@ function MetaExport({ profiles }: { profiles: Profile[] }) {
       </div>
       <p className="mt-3 text-xs text-muted">
         Downloads a CSV in Meta&apos;s customer-list template, built from the currently filtered people. Upload at
-        business.facebook.com → Audiences → Create → Customer list — Ads Manager hashes every field in your browser
+        business.facebook.com → Audiences → Create → Customer list — Ads Manager scrambles every field in your browser
         before anything reaches Meta. Heads-up: audiences under ~100 matched people won&apos;t deliver ads, and
-        lookalikes need a 100+ seed — set them up now so they fill as you grow. Full walkthrough:{" "}
+        Lookalike audiences need at least 100 people to start from — set them up now so they fill as you grow. Full walkthrough:{" "}
         <code className="rounded bg-slate-100 px-1">docs/meta-audiences.md</code>.
       </p>
     </div>
@@ -1618,7 +1647,7 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
   return (
     <div className="space-y-4">
       {approx && (
-        <p className="text-xs text-amber-700">Approximated to the nearest GA4 window ({days} days) — GA4 here supports 7/30/90-day ranges only.</p>
+        <p className="text-xs text-amber-700">Showing the closest range Google Analytics offers ({days} days) — Google Analytics only offers 7, 30, or 90-day views here.</p>
       )}
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-xs font-semibold text-muted">Country</label>
@@ -1634,38 +1663,38 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Visitors" value={n(t.totals.users)} tip={SRC.ga4} />
         <StatCard label="New visitors" value={n(t.totals.newUsers)} tip={SRC.ga4} />
-        <StatCard label="Sessions" value={n(t.totals.sessions)} tip={SRC.ga4} />
-        <StatCard label="Pageviews" value={n(t.totals.pageviews)} tip={SRC.ga4} />
-        <StatCard label="Engagement" value={`${Math.round(t.totals.engagementRate * 100)}%`} tip="Google Analytics 4 — share of engaged sessions (GA4's engagement rate)." />
+        <StatCard label="Visits" value={n(t.totals.sessions)} tip={SRC.ga4} />
+        <StatCard label="Pages viewed" value={n(t.totals.pageviews)} tip={SRC.ga4} />
+        <StatCard label="Stuck around" value={`${Math.round(t.totals.engagementRate * 100)}%`} tip="Google Analytics — share of visits where the person actually stuck around (stayed 10+ seconds, viewed more pages, or took an action)." />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <VBars title="Visitors over time" rows={t.overTime.map((o) => ({ date: o.date, leads: o.users }))} tip={SRC.ga4} />
-        <HBars title={country ? `Traffic sources — sessions (${country})` : "Traffic sources — sessions"} rows={t.bySource.map((s) => ({ label: s.label, count: s.sessions }))} tip={SRC.ga4} />
-        <HBars title={country ? `Traffic sources — visitors (${country})` : "Traffic sources — visitors"} rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
+        <HBars title={country ? `Where visits come from (${country})` : "Where visits come from"} rows={t.bySource.map((s) => ({ label: s.label, count: s.sessions }))} tip={SRC.ga4} />
+        <HBars title={country ? `Where visitors come from (${country})` : "Where visitors come from"} rows={t.bySource.map((s) => ({ label: s.label, count: s.users }))} tip={SRC.ga4} />
         <HBars title="By country" rows={full.byCountry.map((c) => ({ label: c.label, count: c.users }))} tip={SRC.ga4} />
         <HBars title={country ? `By device (${country})` : "By device"} rows={t.byDevice.map((d) => ({ label: d.label, count: d.users }))} tip={SRC.ga4} />
         {t.byChannel && t.byChannel.length > 0 && (
-          <HBars title="By channel group" rows={t.byChannel.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — default channel grouping (Organic Search, Paid Social, Direct, Referral…)." />
+          <HBars title="By traffic type" rows={t.byChannel.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — default channel grouping (Organic Search, Paid Social, Direct, Referral…)." />
         )}
         {t.byNewReturning && t.byNewReturning.length > 0 && (
           <HBars title="New vs returning" rows={t.byNewReturning.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — first-time vs returning visitors." />
         )}
         {t.byCity && t.byCity.length > 0 && (
-          <HBars title={country ? `By city (${country})` : "By city"} rows={t.byCity.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — visitors by city (IP-derived; sparse cities are withheld)." />
+          <HBars title={country ? `By city (${country})` : "By city"} rows={t.byCity.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — visitors by city (estimated from the visitor's internet connection; Google hides cities with very few visitors)." />
         )}
         {t.byLanding && t.byLanding.length > 0 && (
-          <HBars title="Top landing pages" rows={t.byLanding.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — the pages visitors entered the site on." />
+          <HBars title="First pages people land on" rows={t.byLanding.map((c) => ({ label: c.label, count: c.users }))} tip="Google Analytics 4 — the pages visitors entered the site on." />
         )}
         {t.leadsBySource && (
           t.leadsBySource.some((s) => s.keyEvents > 0) ? (
             <HBars
-              title="Leads by source (GA4)"
+              title="Leads by source (Google's count)"
               rows={t.leadsBySource.map((s) => ({ label: s.label, count: s.keyEvents }))}
-              tip="Google Analytics 4 — key events (conversions) crossed with session source/medium, GA4's own leads-per-source view."
+              tip="Google Analytics' own count of leads, split by where each visit came from."
             />
           ) : (
             <div className="card p-4">
-              <h3 className="mb-3 text-sm font-bold text-navy">Leads by source (GA4)</h3>
+              <h3 className="mb-3 text-sm font-bold text-navy">Leads by source (Google's count)</h3>
               <p className="text-sm text-muted">No key events yet — mark generate_lead as a Key event in GA4 Admin → Events.</p>
             </div>
           )
@@ -1674,9 +1703,9 @@ function TrafficGa4({ days, approx }: { days: number; approx: boolean }) {
       {t.visitHeat && t.visitHeat.length > 0 && (
         <Heatmap
           grid={ga4HeatGrid(t.visitHeat)}
-          title="When visitors browse (day × hour, GA4 property time)"
+          title="When visitors browse (day × hour, in your Google Analytics timezone)"
           unit="session"
-          tip="Google Analytics 4 — session volume by day of week × hour, in the GA4 property's configured timezone (dow 0 = Sunday)."
+          tip="Google Analytics — number of visits by day of the week and hour of the day, in the timezone your Analytics account uses."
         />
       )}
     </div>
@@ -1699,7 +1728,7 @@ function GeoSplit({ profiles }: { profiles: Profile[] }) {
     <div className="card p-4">
       <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
         Canada vs foreign
-        <InfoDot tip="Where your people resolved to by IP address. Foreign visitors usually can't sell you a car (often you, or organic browsers) — worth watching as you plan a US expansion. Unknown = no location resolved yet (partials, or leads the hourly geo lookup hasn't reached)." />
+        <InfoDot tip="Where each person appears to be, based on their internet address. Foreign visitors usually can't sell you a car (often it's you, or people just browsing) — worth watching as you plan a US expansion. Unknown = no location yet (unfinished forms, or new leads the hourly location check hasn't reached)." />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-4">
         <div>
@@ -1746,15 +1775,15 @@ function DataHealth({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <MiniBars title={`Events per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.events }))} tip={SRC.events} />
-        <MiniBars title={`Sessions per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.sessions }))} tip={SRC.events} />
+        <MiniBars title={`Tracked actions per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.events }))} tip={SRC.events} />
+        <MiniBars title={`Visits per day (${windowLabel})`} rows={ev.eventsPerDay.map((d) => ({ day: d.day, value: d.sessions }))} tip={SRC.events} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span
           className={`rounded-full px-3 py-1 font-semibold ${diverge ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-navy"}`}
-          title="DB leads = people who created a real lead in range. Site generate_lead = distinct sessions that reached the Submitted stage in the selected event window. A >25% gap flags a tracking/attribution mismatch."
+          title="Leads in your database = people who actually submitted in this date range. Website count = visits where the site's own tracking saw the form submitted. If the two differ by more than 25%, the tracking is missing something — worth a look."
         >
-          {diverge ? "⚠ " : ""}DB leads {dbLeads} vs site generate_lead {siteLeads}
+          {diverge ? "⚠ " : ""}Leads in your database {dbLeads} vs leads the website counted {siteLeads}
         </span>
         <span className={`rounded-full px-3 py-1 font-semibold ${metaConfigured ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
           Meta {metaConfigured ? "✓" : "—"}
@@ -1777,19 +1806,19 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
   const vinFailPct = ev.vin.submitted ? Math.round((ev.vin.failed / ev.vin.submitted) * 100) : null;
   return (
     <>
-      <p className="mb-3 text-xs text-muted">Event window: {windowLabel}.<InfoDot tip={SRC.events} /></p>
+      <p className="mb-3 text-xs text-muted">Activity date range: {windowLabel}.<InfoDot tip={SRC.events} /></p>
       <div className="grid gap-4 lg:grid-cols-2">
         <Funnel
           rows={ev.funnel}
           tip={SRC.events}
-          title={`Every session, step by step (${ev.totalSessions.toLocaleString("en-CA")} sessions)`}
+          title={`Every visit, step by step (${ev.totalSessions.toLocaleString("en-CA")} visits)`}
         />
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            Median time between steps<InfoDot tip={SRC.events} />
+            Typical time between steps<InfoDot tip={SRC.events} />
           </h3>
           {ev.stepMedianMins.length === 0 ? (
-            <p className="text-sm text-muted">Not enough sessions yet.</p>
+            <p className="text-sm text-muted">Not enough visits yet.</p>
           ) : (
             <div className="space-y-1.5 text-sm">
               {ev.stepMedianMins.map((s) => (
@@ -1807,7 +1836,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="card overflow-x-auto p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            Form friction — where people stop<InfoDot tip={SRC.events} />
+            Where people give up on the form<InfoDot tip={SRC.events} />
           </h3>
           {ev.friction.length === 0 ? (
             <p className="text-sm text-muted">No field interactions recorded yet.</p>
@@ -1816,7 +1845,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
                   <th className="py-2 pr-2">Field</th>
-                  <th className="px-2 text-right" title="Sessions that focused this field">Touched by</th>
+                  <th className="px-2 text-right" title="Visits that clicked into this field">How many clicked in</th>
                   <th className="pl-2 text-right" title="Abandoning sessions whose LAST touched field was this one">Abandoned here</th>
                 </tr>
               </thead>
@@ -1837,7 +1866,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="card overflow-x-auto p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            Field behavior — time, retyping, autofill<InfoDot tip={SRC.events} />
+            How people fill each field — time, retyping, autofill<InfoDot tip={SRC.events} />
           </h3>
           {ev.fieldTiming.length === 0 ? (
             <p className="text-sm text-muted">No field-timing signals yet.</p>
@@ -1848,7 +1877,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
                   <th className="py-2 pr-2">Field</th>
                   <th className="px-2 text-right" title="Average seconds spent in the field before moving on">Avg time</th>
                   <th className="px-2 text-right" title="Total backspaces / deletes across sessions — high = a confusing or mis-validated field">Retypes</th>
-                  <th className="pl-2 text-right" title="Share filled by paste or browser autofill vs typed — an unusually high rate can flag bots or returning devices">Paste/AF</th>
+                  <th className="pl-2 text-right" title="Share filled by paste or browser autofill vs typed — an unusually high rate can flag bots or returning devices">Pasted/autofilled</th>
                 </tr>
               </thead>
               <tbody>
@@ -1866,14 +1895,14 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
         </div>
         <div className="space-y-4">
           <HBars
-            title="Scroll depth — how far people get"
+            title="How far down the page people scroll"
             rows={ev.scrollDepth.map((s) => ({ label: `Scrolled ${s.bucket}%+`, count: s.count }))}
             tip={SRC.events}
             share={false} // buckets are cumulative — a %-of-total would be nonsense
           />
           <div className="card p-4">
             <h3 className="mb-3 text-sm font-bold text-navy">
-              Engagement &amp; frustration<InfoDot tip={SRC.events} />
+              Signs of interest &amp; frustration<InfoDot tip={SRC.events} />
             </h3>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between gap-2">
@@ -1881,26 +1910,26 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
                 <span className={`font-semibold ${ev.frustration.rageClicks > 0 ? "text-red-600" : "text-navy"}`}>{ev.frustration.rageClicks}</span>
               </div>
               <div className="flex justify-between gap-2"><span className="text-muted" title="Times a visitor switched away from the tab mid-flow (distraction / comparison-shopping)">Tab switches</span><span className="font-semibold text-navy">{ev.frustration.tabSwitches}</span></div>
-              <div className="flex justify-between gap-2"><span className="text-muted" title="Copy actions on the page — often copying the offer amount or phone number">Copies</span><span className="font-semibold text-navy">{ev.frustration.copies}</span></div>
+              <div className="flex justify-between gap-2"><span className="text-muted" title="Copy actions on the page — often copying the offer amount or phone number">Text copied</span><span className="font-semibold text-navy">{ev.frustration.copies}</span></div>
             </div>
           </div>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <HBars title="Phone clicks by placement" rows={ev.phoneClicks} tip={SRC.events} />
+        <HBars title="Phone clicks — by spot on the page" rows={ev.phoneClicks} tip={SRC.events} />
         <div className="card overflow-x-auto p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            CTA → form drop-off, by placement<InfoDot tip={SRC.events} />
+            Get-offer button clicks vs form opens — by spot on the page<InfoDot tip={SRC.events} />
           </h3>
           {ev.ctaPairs.length === 0 ? (
-            <p className="text-sm text-muted">No CTA clicks recorded yet.</p>
+            <p className="text-sm text-muted">No button clicks recorded yet.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-2">Placement</th>
-                  <th className="px-2 text-right" title="cta_click events at this placement">Clicks</th>
-                  <th className="px-2 text-right" title="offer_flow_start events crediting this placement">Form loads</th>
+                  <th className="py-2 pr-2">Spot on the page</th>
+                  <th className="px-2 text-right" title="Clicks on a get-offer button in this spot">Clicks</th>
+                  <th className="px-2 text-right" title="How many of those clicks actually opened the offer form">Form loads</th>
                   <th className="pl-2 text-right" title="Share of clicks that never loaded the form">Drop-off %</th>
                 </tr>
               </thead>
@@ -1924,19 +1953,19 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            Recovery features<InfoDot tip={SRC.events} />
+            Tools that bring people back<InfoDot tip={SRC.events} />
           </h3>
           <div className="space-y-1.5 text-sm">
-            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent shown</span><span className="font-semibold text-navy">{ev.exitIntent.shown}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent clicked</span><span className="font-semibold text-navy">{ev.exitIntent.clicked}{exitClickRate != null ? ` (${exitClickRate}%)` : ""}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-muted">Exit-intent email captured</span><span className="font-semibold text-navy">{ev.exitIntent.emailCaptured}</span></div>
-            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5"><span className="text-muted">Resume banner shown</span><span className="font-semibold text-navy">{ev.resume.shown}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-muted">Resume banner clicked</span><span className="font-semibold text-navy">{ev.resume.clicked}{resumeClickRate != null ? ` (${resumeClickRate}%)` : ""}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">About-to-leave popup shown</span><span className="font-semibold text-navy">{ev.exitIntent.shown}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">About-to-leave popup clicked</span><span className="font-semibold text-navy">{ev.exitIntent.clicked}{exitClickRate != null ? ` (${exitClickRate}%)` : ""}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">About-to-leave popup got an email</span><span className="font-semibold text-navy">{ev.exitIntent.emailCaptured}</span></div>
+            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5"><span className="text-muted">"Resume your form" banner shown</span><span className="font-semibold text-navy">{ev.resume.shown}</span></div>
+            <div className="flex justify-between gap-2"><span className="text-muted">"Resume your form" banner clicked</span><span className="font-semibold text-navy">{ev.resume.clicked}{resumeClickRate != null ? ` (${resumeClickRate}%)` : ""}</span></div>
           </div>
         </div>
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-bold text-navy">
-            VIN health<InfoDot tip={SRC.events} />
+            VIN lookup results<InfoDot tip={SRC.events} />
           </h3>
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between gap-2"><span className="text-muted">Submitted</span><span className="font-semibold text-navy">{ev.vin.submitted}</span></div>
@@ -1947,7 +1976,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
         </div>
       </div>
       <div className="mt-4">
-        <HBars title="Top events — what's being captured" rows={ev.topEvents} tip={SRC.events} />
+        <HBars title="Most-tracked actions — what's being recorded" rows={ev.topEvents} tip={SRC.events} />
       </div>
     </>
   );
@@ -2001,9 +2030,9 @@ function TagMarks({ sourceId, label }: { sourceId: string; label: string }) {
 
 const GROUP_ORDER: SourceCategory[] = ["firstParty", "connector", "tracker", "comms"];
 const GROUP_HEADING: Record<SourceCategory, string> = {
-  firstParty: "First-party — data you collect directly",
-  connector: "Connected platforms — data we read via API",
-  tracker: "Trackers — third-party analytics",
+  firstParty: "Your own site — data you collect directly",
+  connector: "Connected platforms — data pulled in automatically",
+  tracker: "Trackers — outside tools that measure your site",
   comms: "Messaging & delivery",
 };
 
@@ -2035,7 +2064,7 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
         <span className="font-semibold text-emerald-700">Active</span> = fresh,{" "}
         <span className="font-semibold text-amber-700">Quiet</span> = nothing lately,{" "}
         <span className="font-semibold text-red-700">Check it</span> = likely broken. Mostly passive — it reads data
-        you already have; the connected platforms also report whether their last API call succeeded. Click a source
+        you already have; the connected platforms also report whether the last automatic data pull worked. Click a source
         to see exactly what it collects.
       </p>
       <div className="card mb-5 p-3">
@@ -2081,14 +2110,14 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
                         <span className="text-red-700">{h.error}</span>
                       ) : (
                         <span className="text-muted">
-                          {h?.status === "unconfigured" ? "Not connected" : h?.note || (h?.status === "quiet" ? "Connected — no data in range" : "Connected")}
+                          {h?.status === "unconfigured" ? "Not connected" : h?.note || (h?.status === "quiet" ? "Connected — nothing in this date range" : "Connected")}
                           {h?.lastAt && <span className="text-slate-400"> · checked {timeAgo(h.lastAt)}</span>}
                         </span>
                       )}
                     </div>
                   ) : external ? (
                     <div className="mt-2 text-xs text-muted">
-                      {h?.note || (h?.status === "unconfigured" ? "Not set up" : "Installed — verify in the dashboard")}
+                      {h?.note || (h?.status === "unconfigured" ? "Not set up" : "Installed — check on that platform's own site")}
                     </div>
                   ) : (
                     <>
@@ -2152,19 +2181,19 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
                     {health?.error ? (
                       <div className="rounded-lg bg-red-50 p-2 text-red-700">{health.error}</div>
                     ) : (
-                      <div>{health?.status === "unconfigured" ? "Not connected — env vars not set." : health?.note || "Connected and returning data."}</div>
+                      <div>{health?.status === "unconfigured" ? "Not connected — its setup keys haven't been added." : health?.note || "Connected and returning data."}</div>
                     )}
-                    {health?.lastAt && <div className="text-muted">Last successful call: {timeAgo(health.lastAt)}</div>}
+                    {health?.lastAt && <div className="text-muted">Last successful check: {timeAgo(health.lastAt)}</div>}
                   </>
                 ) : isExternal ? (
                   <>
-                    <div>{health?.status === "unconfigured" ? "Not set up — env var not set." : "Installed and gated only by visitor consent — no server signal."}</div>
+                    <div>{health?.status === "unconfigured" ? "Not set up — its setup key hasn't been added." : "Installed — it only runs for visitors who accept cookies, so we can't confirm it from our side."}</div>
                     {health?.note && <div className="text-muted">{health.note}</div>}
                   </>
                 ) : (
                   <>
                     <div>
-                      Last datapoint: <span className="font-semibold">{timeAgo(health?.lastAt ?? undefined)}</span>
+                      Last data: <span className="font-semibold">{timeAgo(health?.lastAt ?? undefined)}</span>
                       {health?.lastAt && <span className="text-muted"> · {new Date(health.lastAt).toLocaleString("en-CA")}</span>}
                     </div>
                     <div>
@@ -2194,10 +2223,10 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
                 <InfoDot tip="Pulled from Microsoft Clarity's Data Export API. Clarity caps this at 3 days of history and 10 pulls/day, so it refreshes every few hours." />
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <ClarityTile label="Sessions" value={clarity.sessions.toLocaleString("en-CA")} sub={clarity.bots ? `${clarity.bots.toLocaleString("en-CA")} bots excluded` : undefined} />
-                <ClarityTile label="Distinct users" value={clarity.distinctUsers.toLocaleString("en-CA")} />
-                <ClarityTile label="Pages / session" value={clarity.pagesPerSession ? clarity.pagesPerSession.toFixed(1) : "—"} />
-                <ClarityTile label="Avg scroll depth" value={clarity.avgScrollDepth ? `${Math.round(clarity.avgScrollDepth)}%` : "—"} />
+                <ClarityTile label="Visits" value={clarity.sessions.toLocaleString("en-CA")} sub={clarity.bots ? `${clarity.bots.toLocaleString("en-CA")} bots excluded` : undefined} />
+                <ClarityTile label="Different visitors" value={clarity.distinctUsers.toLocaleString("en-CA")} />
+                <ClarityTile label="Pages per visit" value={clarity.pagesPerSession ? clarity.pagesPerSession.toFixed(1) : "—"} />
+                <ClarityTile label="How far down people scroll (avg)" value={clarity.avgScrollDepth ? `${Math.round(clarity.avgScrollDepth)}%` : "—"} />
               </div>
               {clarity.behaviors.length > 0 && (
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -2206,13 +2235,13 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
                       key={b.key}
                       label={b.label}
                       value={b.sessions.toLocaleString("en-CA")}
-                      sub={b.pct != null ? `${b.pct.toFixed(1)}% of sessions` : "sessions"}
+                      sub={b.pct != null ? `${b.pct.toFixed(1)}% of visits` : "visits"}
                     />
                   ))}
                 </div>
               )}
               <div className="mt-2 text-[11px] text-muted">
-                Refreshed {timeAgo(clarity.fetchedAt)} · recordings + heatmaps live in the{" "}
+                Refreshed {timeAgo(clarity.fetchedAt)} · screen recordings + click maps are in the{" "}
                 <a href="https://clarity.microsoft.com/" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 hover:underline">
                   Clarity dashboard
                 </a>
@@ -2239,8 +2268,8 @@ function SourcesPanel({ sources, clarity }: { sources: SourceHealth[] | null; cl
           {def.buildNext && def.buildNext.length > 0 && (
             <div className="mt-4 border-t border-slate-100 pt-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                Worth building — zero-friction upgrades
-                <InfoDot tip="The to-do list: data or views this source could have WITHOUT asking the seller for anything extra. The pill shows how far along each is — Partly used = partially set up; Not built yet = not set up at all; Needs a setting = just a toggle in the vendor's dashboard; Waiting = wired but idle until an upstream feature (the instant estimate, or SMS) is switched on." />
+                Worth building — asks the seller for nothing extra
+                <InfoDot tip="The to-do list: data or views this source could have WITHOUT asking the seller for anything extra. The pill shows how far along each is — Partly used = partially set up; Not built yet = not set up at all; Needs a setting = just a toggle in the vendor's dashboard; Waiting = built but paused until a related feature (the instant estimate, or SMS) is switched on." />
               </div>
               <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {def.buildNext.map((it) => (
@@ -2306,7 +2335,7 @@ const AD_BREAKDOWNS: Record<string, { key: string; label: string }[]> = {
     { key: "age", label: "Age" },
     { key: "gender", label: "Gender" },
     { key: "region", label: "Region" },
-    { key: "placement", label: "Placement" },
+    { key: "placement", label: "Where it showed" },
     { key: "device", label: "Device" },
   ],
 };
@@ -2341,52 +2370,52 @@ const COLUMN_PRESETS: { key: string; label: string; cols: Col[] }[] = [
   { key: "performance", label: "Performance", cols: [
     { key: "leads", label: "Leads", type: "int", get: gLeads },
     { key: "cpl", label: "Cost / lead", type: "money2", get: (a) => divS(a.spend, gLeads(a)) },
-    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
-    { key: "reach", label: "Reach*", type: "int", get: gReach, tip: "Summed across days — an over-count vs Meta's de-duplicated reach for the whole window." },
-    { key: "impr", label: "Impressions", type: "int", get: gImpr },
-    { key: "freq", label: "Freq*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
+    { key: "lpv", label: "Reached your site", type: "int", get: gLPV },
+    { key: "reach", label: "People reached*", type: "int", get: gReach, tip: "Added up day by day, so the same person can be counted more than once — Meta's own total for the full period will be lower." },
+    { key: "impr", label: "Times shown", type: "int", get: gImpr },
+    { key: "freq", label: "Times seen per person*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
     { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
   ]},
-  { key: "delivery", label: "Delivery", cols: [
-    { key: "reach", label: "Reach*", type: "int", get: gReach },
-    { key: "impr", label: "Impressions", type: "int", get: gImpr },
-    { key: "freq", label: "Freq*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
-    { key: "cpm", label: "CPM", type: "money2", get: (a) => divS(a.spend, gImpr(a)) * 1000 },
+  { key: "delivery", label: "How often ads showed", cols: [
+    { key: "reach", label: "People reached*", type: "int", get: gReach },
+    { key: "impr", label: "Times shown", type: "int", get: gImpr },
+    { key: "freq", label: "Times seen per person*", type: "num", get: (a) => divS(gImpr(a), gReach(a)) },
+    { key: "cpm", label: "Cost per 1,000 times shown", type: "money2", get: (a) => divS(a.spend, gImpr(a)) * 1000 },
     { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
-    { key: "quality_ranking", label: "Quality", type: "rank", get: (a) => a.cats["quality_ranking"] },
-    { key: "engagement_rate_ranking", label: "Engagement", type: "rank", get: (a) => a.cats["engagement_rate_ranking"] },
-    { key: "conversion_rate_ranking", label: "Conversion", type: "rank", get: (a) => a.cats["conversion_rate_ranking"] },
+    { key: "quality_ranking", label: "Quality vs similar ads", type: "rank", get: (a) => a.cats["quality_ranking"] },
+    { key: "engagement_rate_ranking", label: "Interactions vs similar ads", type: "rank", get: (a) => a.cats["engagement_rate_ranking"] },
+    { key: "conversion_rate_ranking", label: "Results vs similar ads", type: "rank", get: (a) => a.cats["conversion_rate_ranking"] },
   ]},
   { key: "clicks", label: "Clicks", cols: [
     { key: "clicks", label: "Clicks (all)", type: "int", get: gClicks },
-    { key: "ctr", label: "CTR", type: "pct", get: (a) => divS(gClicks(a), gImpr(a)) * 100 },
-    { key: "cpc", label: "CPC", type: "money2", get: (a) => divS(a.spend, gClicks(a)) },
+    { key: "ctr", label: "Click rate", type: "pct", get: (a) => divS(gClicks(a), gImpr(a)) * 100 },
+    { key: "cpc", label: "Cost per click", type: "money2", get: (a) => divS(a.spend, gClicks(a)) },
     { key: "linkclicks", label: "Link clicks", type: "int", get: gLinkClicks },
-    { key: "linkctr", label: "Link CTR", type: "pct", get: (a) => divS(gLinkClicks(a), gImpr(a)) * 100 },
-    { key: "cplc", label: "Cost / link", type: "money2", get: (a) => divS(a.spend, gLinkClicks(a)) },
-    { key: "outbound", label: "Outbound", type: "int", get: gOutbound },
-    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
+    { key: "linkctr", label: "Link click rate", type: "pct", get: (a) => divS(gLinkClicks(a), gImpr(a)) * 100 },
+    { key: "cplc", label: "Cost per link click", type: "money2", get: (a) => divS(a.spend, gLinkClicks(a)) },
+    { key: "outbound", label: "Clicks off Meta", type: "int", get: gOutbound },
+    { key: "lpv", label: "Reached your site", type: "int", get: gLPV },
     { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
   ]},
   { key: "video", label: "Video", cols: [
     { key: "plays", label: "Plays", type: "int", get: gVideoPlays },
-    { key: "thru", label: "ThruPlays", type: "int", get: gThru },
-    { key: "cpt", label: "Cost / ThruPlay", type: "money2", get: (a) => divS(a.spend, gThru(a)) },
-    { key: "p25", label: "25%", type: "int", get: (a) => a.sums["video_p25"] || 0 },
-    { key: "p50", label: "50%", type: "int", get: (a) => a.sums["video_p50"] || 0 },
-    { key: "p75", label: "75%", type: "int", get: (a) => a.sums["video_p75"] || 0 },
-    { key: "p100", label: "100%", type: "int", get: (a) => a.sums["video_p100"] || 0 },
+    { key: "thru", label: "Watched 15s or to end", type: "int", get: gThru },
+    { key: "cpt", label: "Cost per 15s/full watch", type: "money2", get: (a) => divS(a.spend, gThru(a)) },
+    { key: "p25", label: "Watched 25%", type: "int", get: (a) => a.sums["video_p25"] || 0 },
+    { key: "p50", label: "Watched 50%", type: "int", get: (a) => a.sums["video_p50"] || 0 },
+    { key: "p75", label: "Watched 75%", type: "int", get: (a) => a.sums["video_p75"] || 0 },
+    { key: "p100", label: "Watched 100%", type: "int", get: (a) => a.sums["video_p100"] || 0 },
     { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
   ]},
-  { key: "conversions", label: "Conversions", cols: [
+  { key: "conversions", label: "Leads & sales", cols: [
     { key: "linkclicks", label: "Link clicks", type: "int", get: gLinkClicks },
-    { key: "lpv", label: "Landing views", type: "int", get: gLPV },
-    { key: "vc", label: "View content", type: "int", get: gViewContent },
-    { key: "ic", label: "Init. checkout", type: "int", get: gIC },
+    { key: "lpv", label: "Reached your site", type: "int", get: gLPV },
+    { key: "vc", label: "Entered car details", type: "int", get: gViewContent },
+    { key: "ic", label: "Started contact form", type: "int", get: gIC },
     { key: "leads", label: "Leads", type: "int", get: gLeads },
     { key: "cpl", label: "Cost / lead", type: "money2", get: (a) => divS(a.spend, gLeads(a)) },
     { key: "purch", label: "Purchases", type: "int", get: gPurch },
-    { key: "roas", label: "ROAS", type: "num", get: (a) => divS(gPurchVal(a), a.spend) },
+    { key: "roas", label: "$ back per $1 of ads", type: "num", get: (a) => divS(gPurchVal(a), a.spend) },
     { key: "spend", label: "Spend", type: "money", get: (a) => a.spend },
   ]},
 ];
@@ -2488,7 +2517,7 @@ function AdsTab({ range }: { range: RangeState }) {
     try {
       const r = await fetch(`/api/admin/meta-insights`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ since, until }) });
       const d = await r.json();
-      setSyncMsg(d.configured === false ? "Meta not connected." : `Synced ${d.written} rows${d.errors?.length ? ` · ${d.errors.length} slice error(s)` : ""}.`);
+      setSyncMsg(d.configured === false ? "Meta not connected." : `Synced ${d.written} rows${d.errors?.length ? ` · ${d.errors.length} part(s) couldn't be updated` : ""}.`);
       setReloadKey((k) => k + 1);
     } catch { setSyncMsg("Sync failed."); }
     finally { setSyncing(false); }
@@ -2531,14 +2560,14 @@ function AdsTab({ range }: { range: RangeState }) {
     <div className="space-y-4">
       {!meta.configured && (
         <div className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <span className="font-semibold">Meta not connected.</span> Set <code className="rounded bg-white/70 px-1">META_MARKETING_TOKEN</code> + <code className="rounded bg-white/70 px-1">META_AD_ACCOUNT_ID</code> in Amplify to populate this tab.
+          <span className="font-semibold">Meta not connected.</span> Set <code className="rounded bg-white/70 px-1">META_MARKETING_TOKEN</code> + <code className="rounded bg-white/70 px-1">META_AD_ACCOUNT_ID</code> in Amplify to show data here.
         </div>
       )}
 
       {/* controls */}
       <div className="card space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted">Level</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">View by</span>
           {AD_LEVELS.map((l) => <button key={l.key} className={btn(level === l.key)} onClick={() => setLevel(l.key)}>{l.label}</button>)}
         </div>
         {bdOptions.length > 1 && (
@@ -2562,9 +2591,9 @@ function AdsTab({ range }: { range: RangeState }) {
       {/* summary tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <StatCard label="Spend" value={money(totals.spend)} />
-        <StatCard label="Impressions" value={Math.round(totals.impressions).toLocaleString("en-CA")} />
+        <StatCard label="Times shown" value={Math.round(totals.impressions).toLocaleString("en-CA")} />
         <StatCard label="Link clicks" value={Math.round(totals.linkClicks).toLocaleString("en-CA")} />
-        <StatCard label="Landing views" value={Math.round(totals.lpv).toLocaleString("en-CA")} />
+        <StatCard label="Reached your site" value={Math.round(totals.lpv).toLocaleString("en-CA")} />
         <StatCard label="Leads" value={Math.round(totals.leads).toLocaleString("en-CA")} />
         <StatCard label="Cost / lead" value={money2(totals.leads ? totals.spend / totals.leads : 0)} />
       </div>
@@ -2576,19 +2605,19 @@ function AdsTab({ range }: { range: RangeState }) {
           <div className="ml-auto flex gap-1">
             {(["spend", "leads", "impressions", "cpl"] as const).map((m) => (
               <button key={m} className={`rounded px-2 py-1 text-xs font-semibold ${trendMetric === m ? "bg-brand text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`} onClick={() => setTrendMetric(m)}>
-                {m === "cpl" ? "Cost/lead" : m[0].toUpperCase() + m.slice(1)}
+                {m === "cpl" ? "Cost/lead" : m === "impressions" ? "Times shown" : m[0].toUpperCase() + m.slice(1)}
               </button>
             ))}
           </div>
         </div>
         {trendDays.length === 0 ? (
-          <p className="text-sm text-muted">{loading ? "Loading…" : "No data in this window yet — try “Sync from Meta now”."}</p>
+          <p className="text-sm text-muted">{loading ? "Loading…" : "No data for this date range yet — try “Sync from Meta now”."}</p>
         ) : (
           <DayBarChart
             rows={trendDays.map((d) => ({ label: d.date, value: d.value }))}
             height={120}
             format={trendMetric === "spend" || trendMetric === "cpl" ? (n) => money2(n) : (n) => Math.round(n).toLocaleString("en-CA")}
-            unit={trendMetric === "leads" ? "leads" : trendMetric === "impressions" ? "impressions" : ""}
+            unit={trendMetric === "leads" ? "leads" : trendMetric === "impressions" ? "times shown" : ""}
             accent="bg-brand"
           />
         )}
@@ -2599,7 +2628,7 @@ function AdsTab({ range }: { range: RangeState }) {
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-bold text-navy">{AD_LEVELS.find((l) => l.key === level)?.label} · {preset.label}</h3>
           <span className="text-xs text-muted">
-            {meta.source === "live" ? "live (store warming)" : meta.source === "store" ? "stored history" : ""} · {since} → {until}
+            {meta.source === "live" ? "live from Meta (saved history still building)" : meta.source === "store" ? "stored history" : ""} · {since} → {until}
           </span>
         </div>
         {meta.error && <p className="mb-2 text-xs text-red-600">Meta: {meta.error}</p>}
@@ -2616,7 +2645,7 @@ function AdsTab({ range }: { range: RangeState }) {
           </thead>
           <tbody>
             {sorted.length === 0 ? (
-              <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">{loading ? "Loading…" : "No rows. Use “Sync from Meta now” to pull your data."}</td></tr>
+              <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">{loading ? "Loading…" : "Nothing here yet. Use “Sync from Meta now” to pull your data."}</td></tr>
             ) : sorted.map((a) => (
               <tr key={a.key} className="border-b border-slate-50 hover:bg-slate-50/60">
                 <td className="py-2 pr-2 font-medium text-navy">{a.name}</td>
@@ -2626,7 +2655,7 @@ function AdsTab({ range }: { range: RangeState }) {
           </tbody>
         </table>
         <p className="mt-3 text-[11px] text-muted">
-          Daily figures summed across the window; rates (CTR, CPC, CPM, cost-per-lead) are recomputed from the sums. <span className="font-semibold">Reach*</span> / <span className="font-semibold">Freq*</span> are summed across days (an over-count vs Meta’s de-duplicated whole-window reach). History is snapshotted nightly; “Sync from Meta now” refreshes on demand.
+          Daily numbers are added up over the date range; rates (click rate, cost per click, cost per 1,000 shown, cost per lead) are then recalculated from those totals. <span className="font-semibold">People reached*</span> / <span className="font-semibold">Times seen per person*</span> add each day together, so the same person can be counted more than once (Meta’s own reach counts each person only once). History is saved automatically every night; “Sync from Meta now” updates it right away.
         </p>
       </div>
     </div>
@@ -2795,14 +2824,16 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const activeFilters = [filters.country, filters.region, filters.source, filters.adset, filters.device, filters.stage, filters.scoreBand].filter(Boolean).length;
 
   const booked = view.funnelByRank.booked;
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "sources", label: "Sources" },
-    { key: "overview", label: "Overview" },
-    { key: "acquisition", label: "Acquisition" },
-    { key: "funnel", label: "Funnel" },
-    { key: "ads", label: "Ads" },
-    { key: "emails", label: "Emails" },
-    { key: "people", label: "People" },
+  // Sidebar entries — keys are unchanged (only the display labels went plain):
+  // "sources" shows tracking health, "acquisition" shows where visitors come from.
+  const tabs: { key: Tab; label: string; icon: ReactNode }[] = [
+    { key: "overview", label: "Overview", icon: <NavIcon><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></NavIcon> },
+    { key: "acquisition", label: "Traffic", icon: <NavIcon><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></NavIcon> },
+    { key: "funnel", label: "Funnel", icon: <NavIcon><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></NavIcon> },
+    { key: "ads", label: "Ads", icon: <NavIcon><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" /></NavIcon> },
+    { key: "emails", label: "Emails", icon: <NavIcon><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></NavIcon> },
+    { key: "people", label: "People", icon: <NavIcon><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></NavIcon> },
+    { key: "sources", label: "Data health", icon: <NavIcon><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></NavIcon> },
   ];
 
   return (
@@ -2815,30 +2846,47 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Link href="/admin" className="text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
       </div>
 
-      <ControlBar
-        range={range}
-        setRange={setRange}
-        filters={filters}
-        set={set}
-        options={options}
-        activeFilters={activeFilters}
-        clearFilters={() => setFilters({})}
-        countLabel={`${filtered.length} of ${profiles.length} people`}
-      />
+      <div className="flex items-start gap-6">
+        {/* Left nav — collapses to the horizontal strip below lg */}
+        <nav className="sticky top-4 hidden w-52 shrink-0 flex-col gap-1 lg:flex">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${tab === t.key ? "bg-brand-50 text-brand-700" : "text-navy hover:bg-slate-100"}`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </nav>
 
-      {/* Tab strip */}
-      <div className="mb-6 flex gap-1 border-b border-slate-200">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-navy"}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <div className="min-w-0 flex-1">
+          {/* Mobile/tablet nav strip */}
+          <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 lg:hidden">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-semibold ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-navy"}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <ControlBar
+            range={range}
+            setRange={setRange}
+            filters={filters}
+            set={set}
+            options={options}
+            activeFilters={activeFilters}
+            clearFilters={() => setFilters({})}
+            countLabel={`${filtered.length} of ${profiles.length} people`}
+          />
 
       {/* ---- TAB: SOURCES ---- */}
       {tab === "sources" && <SourcesPanel sources={sources} clarity={clarityInsights} />}
@@ -2851,18 +2899,18 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             <StatCard label="Booked" value={String(booked)} tip="Your website's database — leads that reached a booked inspection (scheduled or closed)." delta={prevView ? <Delta now={booked} prev={prevView.funnelByRank.booked} /> : undefined} />
             <StatCard label="Closed" value={String(view.totals.closed)} sub={`${money(view.totals.margin)} margin${view.totals.marginIsEstimate ? " · est" : ""}`} tip="Deals marked closed. Margin = sale price (actual, or expected if not sold yet) minus your all-in cost (logged all-in expenses when present, else the bought-for price). “est” means it still includes a car you've bought but not sold yet." delta={prevView ? <Delta now={view.totals.closed} prev={prevView.totals.closed} /> : undefined} />
             <StatCard
-              label="Speed to lead"
+              label="How fast you respond"
               value={fmtMins(view.totals.medianResponseMins)}
               sub={view.totals.pctUnder5Min != null ? `${view.totals.pctUnder5Min}% under 5 min` : undefined}
-              tip="Median time from lead submitted to your first real contact (offer sent or marked contacted). Industry research: responding inside 5 minutes multiplies qualification rates ~21x."
+              tip="Typical time from when a lead comes in to your first real contact (offer sent or marked contacted). Research shows replying within 5 minutes makes a lead about 21x more likely to turn into a real conversation."
             />
             <StatCard label="People" value={String(view.totals.people)} tip={SRC.site} delta={prevView ? <Delta now={view.totals.people} prev={prevView.totals.people} /> : undefined} />
-            <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, no submit" tip="Your website's database — visitors who started the form but never submitted (partial beacon)." delta={prevView ? <Delta now={view.totals.partials} prev={prevView.totals.partials} /> : undefined} />
+            <StatCard label="Abandoned" value={String(view.totals.partials)} sub="started, didn't finish" tip="Your website's database — visitors who started the form but never finished (their partly-filled answers are still captured)." delta={prevView ? <Delta now={view.totals.partials} prev={prevView.totals.partials} /> : undefined} />
           </div>
 
-          <Section title="Funnel economics — spend to margin, per campaign">
+          <Section title="From ad spend to margin — per campaign">
             {meta.approx && (
-              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta here supports 7/30/90-day windows only.</p>
+              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta can only report 7, 30, or 90 days at a time.</p>
             )}
             <FunnelEconomics profiles={filtered} ads={adLevel?.ads || []} configured={Boolean(adLevel?.configured)} loading={adLevel === null} dateBounds={dateBounds} />
           </Section>
@@ -2872,7 +2920,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               <div className="card p-4 text-sm text-muted">
                 <span className="font-semibold text-navy">No events collected yet.</span> Data starts flowing
                 automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
-                exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
+                exists in DynamoDB (one-time setup) — every visit after that is recorded automatically by your own site.
               </div>
             ) : (
               <DataHealth
@@ -2890,9 +2938,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       {/* ---- TAB 2: ACQUISITION ---- */}
       {tab === "acquisition" && (
         <>
-          <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend/impressions/link-clicks from Meta Ads API; leads & cost-per-lead from the Meta Pixel; margin & ROAS from your own closed deals.">
+          <Section title="Ad performance (Meta) — spend & cost-per-lead" tip="Spend, times shown, and link clicks come straight from Meta; leads & cost per lead from Meta’s tracking code on your site; margin & return per $1 of ads from your own closed deals.">
             {meta.approx && (
-              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta here supports 7/30/90-day windows only.</p>
+              <p className="mb-2 text-xs text-amber-700">Meta spend approximated to {meta.range.replace("last_", "").replace("d", " days")} — Meta can only report 7, 30, or 90 days at a time.</p>
             )}
             {ads === null ? (
               <div className="card p-4 text-sm text-muted">Loading ad performance…</div>
@@ -2900,18 +2948,18 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               <div className="card p-4 text-sm text-muted">
                 <span className="font-semibold text-navy">Meta ads not connected yet.</span> Add{" "}
                 <code className="rounded bg-slate-100 px-1">META_MARKETING_TOKEN</code> and{" "}
-                <code className="rounded bg-slate-100 px-1">META_AD_ACCOUNT_ID</code> in Amplify to see spend, cost-per-lead, and ROAS here.
+                <code className="rounded bg-slate-100 px-1">META_AD_ACCOUNT_ID</code> in Amplify to see spend, cost per lead, and return on ad spend here.
               </div>
             ) : (
               <MetaCampaignTable profiles={profiles} insights={ads.insights} days={ga4.days} />
             )}
           </Section>
 
-          <Section title="Creative — ad-level performance & hook/hold" tip="Meta Ads API (level=ad).">
+          <Section title="Ad-by-ad results — which ads grab & keep attention" tip="From Meta's ad system — one row per individual ad.">
             {adLevel === null ? (
-              <div className="card p-4 text-sm text-muted">Loading creative…</div>
+              <div className="card p-4 text-sm text-muted">Loading ads…</div>
             ) : !adLevel.configured ? (
-              <div className="card p-4 text-sm text-muted">Meta ads not connected — creative metrics appear once the Marketing API is configured.</div>
+              <div className="card p-4 text-sm text-muted">Meta ads not connected — per-ad numbers appear once the Meta connection is set up.</div>
             ) : (
               <>
                 <CreativeTable ads={adLevel.ads} />
@@ -2919,13 +2967,13 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <BreakdownTable
                       title="By region"
-                      tip="Spend is Meta's per-region delivery. Leads are YOUR first-party leads located in that province — Meta doesn't report website leads by region, so this joins your own data instead. (Cost/lead = Meta region spend ÷ your leads in the current view.)"
-                      leadsTip="Your first-party leads whose visitor location falls in this province."
+                      tip="Spend is what Meta spent showing ads in each province. Leads are leads from your own website located in that province — Meta doesn't report website leads by region, so this matches them up from your own data instead. (Cost/lead = Meta spend in that province ÷ your leads in the current view.)"
+                      leadsTip="Leads from your own website whose location falls in this province."
                       rows={adLevel.regions.map((r) => ({ label: r.region, spend: r.spend, leads: leadsByRegion.get(r.region.trim().toLowerCase()) }))}
                     />
                     <BreakdownTable
-                      title="By placement"
-                      tip="Meta Ads API — campaign spend/leads broken down by publisher platform + placement position."
+                      title="Where your ads showed"
+                      tip="From Meta — spend and leads split by where your ads showed (Facebook vs Instagram, feed vs stories, etc.)."
                       rows={adLevel.placements.map((p) => ({ label: `${p.platform} · ${p.position}`, spend: p.spend, leads: p.leads }))}
                     />
                   </div>
@@ -2934,30 +2982,30 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             )}
           </Section>
 
-          <Section title="Traffic (GA4) — everyone who visited" tip={SRC.ga4}>
+          <Section title="Website visitors (Google Analytics) — everyone who visited" tip={SRC.ga4}>
             <TrafficGa4 days={ga4.days} approx={ga4.approx} />
           </Section>
 
-          <Section title="Acquisition">
+          <Section title="Where people come from">
             <div className="grid gap-4 lg:grid-cols-2">
               <HBars title="By source" rows={view.bySource} tip={SRC.siteGrouped} />
               <HBars title="By campaign" rows={view.byCampaign} tip={SRC.siteGrouped} />
-              <HBars title="Top landing pages" rows={byLandingPath(filtered)} tip="The first page each person entered your site on — shows which SEO pages / ad links actually pull people in." />
-              <HBars title="Abandoners by source" rows={abandonersBySource(filtered)} tip="Which channels send people who START the form but don't finish — high-intent starts worth winning back." />
+              <HBars title="First pages people land on" rows={byLandingPath(filtered)} tip="The first page each person entered your site on — shows which SEO pages / ad links actually pull people in." />
+              <HBars title="Started the form but quit — by source" rows={abandonersBySource(filtered)} tip="Which sources send people who START the form but don't finish — interested people worth following up with." />
             </div>
           </Section>
 
-          <Section title="What each channel brings — vehicle mix" tip="Real leads only: the most common vehicle make per campaign/source and the share that are high-value, so you can judge channels on buyable cars, not just clicks.">
+          <Section title="What kinds of cars each source brings in" tip="Real leads only: the most common vehicle make per campaign/source and the share that are high-value, so you can judge channels on buyable cars, not just clicks.">
             <CampaignVehicleCard profiles={filtered} />
           </Section>
 
-          <Section title="Warm abandoners — call these now" tip="People who started the form and left a phone number but never submitted. Newest first — call or text while they're warm.">
+          <Section title="Left mid-form with a phone number — call these now" tip="People who started the form and left a phone number but never submitted. Newest first — call or text while they're warm.">
             <WarmAbandonersCard profiles={filtered} />
           </Section>
 
           <Section
-            title="Retargeting — export audiences for Meta"
-            tip="Your website's database (respects the filter bar). Meta hashes the uploaded file in your browser; only hashed values reach Meta, used solely for ad matching."
+            title="Show ads to these people again — export lists for Meta"
+            tip="Your website's database (follows the filter bar above). Meta scrambles the uploaded file in your browser before anything is sent; Meta only ever receives the scrambled version, used solely to match people to ads."
           >
             <MetaExport profiles={filtered} />
           </Section>
@@ -2975,12 +3023,12 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             <Heatmap grid={view.heatmap} tip="Your website's database — the timestamp each lead arrived (Mountain time)." />
           </div>
 
-          <Section title="Site funnel & form friction — every visitor" tip={SRC.events}>
+          <Section title="Website funnel & where the form loses people — every visitor" tip={SRC.events}>
             {!evWindow.data || evWindow.data.totalEvents === 0 ? (
               <div className="card p-4 text-sm text-muted">
-                <span className="font-semibold text-navy">No events in this window.</span> Data starts flowing
+                <span className="font-semibold text-navy">No visitor activity recorded for this time range.</span> Data starts flowing
                 automatically once the <code className="rounded bg-slate-100 px-1">AutoOfferEvents</code> table
-                exists in DynamoDB (one-time setup) — every visit after that is captured first-party.
+                exists in DynamoDB (one-time setup) — every visit after that is recorded automatically by your own site.
               </div>
             ) : (
               <EventDetails ev={evWindow.data} windowLabel={evWindow.label} />
@@ -2998,7 +3046,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       {/* ---- TAB 4: PEOPLE ---- */}
       {tab === "people" && (
         <>
-          <Section title="Segments — how different groups respond">
+          <Section title="Compare groups — how different groups respond">
             <SegmentView rows={segments} dim={dim} setDim={setDim} tip={SRC.siteGrouped} />
           </Section>
 
@@ -3012,7 +3060,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </div>
           </Section>
 
-          <Section title="Behavior & mix">
+          <Section title="Devices, vehicles & other breakdowns">
             <div className="grid gap-4 lg:grid-cols-2">
               <HBars title="By device" rows={view.byDevice} tip={SRC.behavior} />
               <HBars title="By vehicle make" rows={view.byMake} tip={SRC.site} />
@@ -3026,7 +3074,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               <input className="field max-w-xs" placeholder="Search name, phone, email, campaign, city…" value={q} onChange={(e) => setQ(e.target.value)} />
               <label className="flex items-center gap-1.5 text-sm text-muted">
                 <input type="checkbox" checked={sortByScore} onChange={(e) => setSortByScore(e.target.checked)} />
-                Sort by score
+                Sort best leads first
               </label>
             </div>
             <div className="space-y-3">
@@ -3050,6 +3098,8 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </Section>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }

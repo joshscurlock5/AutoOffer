@@ -154,64 +154,64 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
     if (hist && hist.count > 0) parts.push(`~${fmt(hist.count)} sent · ${hist.method}`);
     if (pk) {
       parts.push(
-        `this window: ${fmt(pk.sent)} sent · ${fmt(pk.delivered)} delivered · ${fmt(pk.opened)} opened` +
+        `in the selected date range: ${fmt(pk.sent)} sent · ${fmt(pk.delivered)} delivered · ${fmt(pk.opened)} opened` +
           (pk.clicked > 0 ? ` · ${fmt(pk.clicked)} clicked` : ""),
       );
     }
-    return parts.length ? parts.join(" — ") : "Send tracking starts now — stats will appear here.";
+    return parts.length ? parts.join(" — ") : "We just started counting this email — numbers will appear here.";
   }
 
   return (
     <div>
       {/* (a) all-time performance — lead-level stamps, so it answers "what % of
           my leads actually receive / read our email" regardless of the window. */}
-      <Section title="Email performance" tip="All-time, from delivery receipts stamped on each lead by the Resend webhook.">
+      <Section title="Email performance" tip="All-time totals, based on delivery reports from our email service.">
         {!a ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <StatCard
-              label="Emailable leads"
+              label="Leads we can email"
               value={fmt(a.emailableLeads)}
               sub={`of ${fmt(a.leads)} leads`}
-              tip="Leads whose address passes a basic email-shape check — the pool every send targets."
+              tip="Leads whose email address looks valid — these are the people we can send email to."
             />
             <StatCard
               label="Reached"
               value={fmt(a.reached)}
-              sub={`${pctOf(a.reached, a.emailableLeads)} of emailable`}
-              tip="Leads with ≥1 delivery receipt. Receipts only exist since the Resend webhook went live, so this undercounts older leads."
+              sub={`${pctOf(a.reached, a.emailableLeads)} of leads we can email`}
+              tip="Leads who had at least one email confirmed as delivered. We only started getting delivery confirmations recently, so older leads are undercounted."
             />
             <StatCard
               label="Opened"
               value={fmt(a.opened)}
               sub={`${pctOf(a.opened, a.reached)} of reached`}
-              tip="Leads with ≥1 open receipt. Opens rely on a tracking image — Apple/Gmail image proxying and blocking make this an undercount."
+              tip="Leads who opened at least one email. Opens are detected with a hidden image that Apple and Gmail often block, so the true number is higher."
             />
             <StatCard
               label="Clicked"
               value={fmt(a.clicked)}
               sub={`${pctOf(a.clicked, a.reached)} of reached`}
-              tip="Leads who clicked a link in any email — the strongest engagement signal we get."
+              tip="Leads who clicked a link in any email — the clearest sign of real interest we get."
             />
             <StatCard
               label="Bounced"
               value={fmt(a.bounced)}
-              sub={`${pctOf(a.bounced, a.emailableLeads)} of emailable`}
-              tip="Hard bounce — address dead. All further sends to these leads are skipped automatically."
+              sub={`${pctOf(a.bounced, a.emailableLeads)} of leads we can email`}
+              tip="The email address doesn't work. We automatically stop sending to these leads."
             />
             <StatCard
               label="Opted out"
               value={fmt(a.optedOut)}
-              sub={`${pctOf(a.optedOut, a.emailableLeads)} of emailable`}
-              tip="Marked-as-spam + unsubscribe clicks. Stops nurture emails only — transactional still sends."
+              sub={`${pctOf(a.optedOut, a.emailableLeads)} of leads we can email`}
+              tip="People who unsubscribed or marked an email as spam. Follow-up emails stop for them — essential emails still send."
             />
           </div>
         )}
       </Section>
 
       {/* (b) window activity — commsEvents receipts inside the selected range. */}
-      <Section title="Activity in this window" tip="Email receipts (from the Resend webhook + our send log) dated inside the selected range.">
+      <Section title="Activity in the selected date range" tip="Email activity (sends, deliveries, opens, clicks, unsubscribes) recorded during the selected dates.">
         {!r ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
@@ -231,7 +231,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
             </div>
             {r.sent === 0 && (
               <p className="mt-3 text-xs text-muted">
-                Send logging is new — every email sent from now on is counted here.
+                We just started counting sends — every email from now on will show up here.
               </p>
             )}
             {stats && stats.perKind.length > 0 && (
@@ -239,7 +239,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
-                      <th className="py-2 pr-2">Template</th>
+                      <th className="py-2 pr-2">Email type</th>
                       <th className="py-2 pl-2 text-right">Sent</th>
                       <th className="py-2 pl-2 text-right">Delivered</th>
                       <th className="py-2 pl-2 text-right">Opened</th>
@@ -259,7 +259,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
                   </tbody>
                 </table>
                 {stats.trackingSince && (
-                  <p className="mt-2 text-[11px] text-muted">tracking since {stats.trackingSince.slice(0, 10)}</p>
+                  <p className="mt-2 text-[11px] text-muted">counting since {stats.trackingSince.slice(0, 10)}</p>
                 )}
               </div>
             )}
@@ -268,7 +268,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
       </Section>
 
       {/* (c) the gallery — every real template, grouped along the journey. */}
-      <Section title="Every email we send" tip="Rendered from the live templates against a sample lead — exactly what a customer receives.">
+      <Section title="Every email we send" tip="These are the real emails, filled in with a sample customer — exactly what a customer receives.">
         {previews === null ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : previews.length === 0 ? (
@@ -283,7 +283,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
                     <div className="flex items-start justify-between gap-2">
                       <div className="text-sm font-bold text-navy">{p.title}</div>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${AUDIENCE_CHIP[p.audience]}`}>
-                        {p.audience}
+                        {p.audience === "transactional" ? "always sends" : "stops on opt-out"}
                       </span>
                     </div>
                     <div className="mt-0.5 text-xs text-muted">{p.trigger}</div>
@@ -320,11 +320,11 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
 
       {/* (e) data-honesty footnote — so nobody misreads partial data as truth. */}
       <div className="card mt-6 p-4 text-xs leading-relaxed text-muted">
-        <span className="font-semibold text-navy">About these numbers.</span> Delivery/open/click receipts began when the
-        Resend webhook went live — leads emailed before that show no engagement even if they read everything. Opens are an
-        undercount (Apple and Gmail proxy or block tracking images). Per-template tracking (the send log + kind-tagged
-        receipts) collects from today forward, so template-level stats build up over time; the &ldquo;~sent&rdquo; figures
-        are reconstructed from lifecycle stamps and are estimates, not receipts.
+        <span className="font-semibold text-navy">About these numbers.</span> We only started getting delivery, open, and click reports when
+        our email tracking was switched on — leads emailed before that show no opens or clicks even if they read everything. Opens are an
+        undercount (Apple and Gmail often block the hidden image that detects opens). Counting for each email type started
+        today, so per-email numbers build up over time; the &ldquo;~sent&rdquo; figures
+        are estimates worked out from each lead&apos;s history, not exact counts.
       </div>
 
       {/* (d) full-size viewer — one at a time, click-outside or ✕ to close. */}
