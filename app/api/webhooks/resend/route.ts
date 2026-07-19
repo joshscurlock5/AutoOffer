@@ -92,6 +92,10 @@ interface ResendEvent {
     subject?: string;
     click?: { link?: string };
     bounce?: { type?: string; subType?: string; message?: string };
+    /** The tags we attach at send time (lib/email.ts emailTags): kind + lead id.
+     * Resend has shipped these both as an array of {name, value} pairs and as a
+     * plain {kind: "..."} object depending on payload vintage — handle both. */
+    tags?: { name?: string; value?: string }[] | Record<string, string>;
     // email.received (inbound) — metadata only; the body is fetched separately.
     email_id?: string;
     from?: string | string[];
@@ -246,7 +250,18 @@ export async function POST(req: NextRequest) {
 
     const at = new Date().toISOString();
     const url = type === "clicked" ? (event.data?.click?.link || "").slice(0, 500) || undefined : undefined;
-    const entry: CommsEvent = { at, channel: "email", type, ...(url ? { url } : {}) };
+    // Which template this receipt is about — from the `kind` tag every send
+    // carries (lib/email.ts emailTags). Defensive on shape (array vs object)
+    // and clamped; only stamped when actually present so old payloads/owner
+    // mail without tags keep writing the exact same entry as before.
+    const tags = event.data?.tags;
+    const kindRaw = Array.isArray(tags)
+      ? tags.find((t) => t?.name === "kind")?.value
+      : tags && typeof tags === "object"
+        ? (tags as Record<string, string>).kind
+        : undefined;
+    const kind = typeof kindRaw === "string" && kindRaw ? kindRaw.slice(0, 60) : undefined;
+    const entry: CommsEvent = { at, channel: "email", type, ...(url ? { url } : {}), ...(kind ? { kind } : {}) };
 
     // Atomic write — concurrent webhook deliveries for the same lead (e.g. a
     // near-simultaneous open + click) must not clobber each other's counters.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyUnsubToken } from "@/lib/unsubscribe";
-import { getLeadByShortId, updateLead } from "@/lib/store";
+import { getLeadByShortId, updateLead, atomicLeadEngagement } from "@/lib/store";
 import { notifyOwner, leadLine } from "@/lib/notify";
 
 export const runtime = "nodejs";
@@ -23,6 +23,16 @@ async function optOut(token: string): Promise<void> {
   const { lead } = await getLeadByShortId(leadId);
   if (!lead || lead.emailOptOut) return;
   await updateLead(lead.id, { emailOptOut: true });
+  // Timestamped receipt alongside the flag: emailOptOut alone says "opted out
+  // ever", but the Emails analytics tab needs opt-outs it can put in a DATE
+  // RANGE. Best-effort — the opt-out itself already stuck above.
+  try {
+    await atomicLeadEngagement(lead.id, {
+      appendCommsEvent: { at: new Date().toISOString(), channel: "email", type: "unsubscribed" },
+    });
+  } catch {
+    /* best-effort */
+  }
   await notifyOwner(`🚫 Unsubscribed from emails\n${leadLine(lead)}`, "updates");
 }
 

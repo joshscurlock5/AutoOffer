@@ -198,14 +198,23 @@ export interface DeviceInfo {
 export interface CommsEvent {
   at: string;
   channel: "email" | "sms";
-  /** delivered | opened | clicked | bounced | complained | failed | undelivered */
+  /** sent | delivered | opened | clicked | bounced | complained | failed | undelivered | unsubscribed */
   type: string;
   /** The link that was clicked (email.clicked only). */
   url?: string;
+  /** Which email template this receipt is about (the Resend `kind` tag —
+   * "confirmation", "offer", "winback", …). Stamped on webhook receipts and
+   * local send logs going forward; absent on rows written before it existed. */
+  kind?: string;
 }
 
 /** Aggregated email receipts from the Resend webhook. */
 export interface EmailEngagement {
+  /** Emails WE logged sending to this lead (lib/email.ts logEmailSent) — the
+   * local-send side of the ledger, so delivery rate has a real denominator.
+   * Only counts sends made after send-logging shipped. */
+  sentCount?: number;
+  lastSentAt?: string;
   deliveredCount?: number;
   opensCount?: number;
   clicksCount?: number;

@@ -2,6 +2,8 @@ import "server-only";
 import type { Lead, Referral } from "./types";
 import { site, amvicLicence, carsBoughtDisplay, amountPaidDisplay } from "./site-config";
 import { makeUnsubToken } from "./unsubscribe";
+// No cycle: store.ts imports only aws/types/sms — never this module.
+import { atomicLeadEngagement } from "./store";
 
 // ===========================================================================
 //  Customer emails via Resend's REST API (no SDK, like notify.ts):
@@ -621,6 +623,27 @@ function contentKey(s: string): string {
   return (h >>> 0).toString(36);
 }
 
+/**
+ * Log a successful lead-keyed send locally — the SEND side of the receipts
+ * ledger. The Resend webhook stamps deliveries/opens/clicks onto the lead, but
+ * until now nothing recorded that we SENT an email, so "delivery rate" had no
+ * denominator and per-template stats were impossible. Called right after every
+ * postEmail that returned a real id, with the same `kind` the Resend tags carry.
+ *
+ * AWAITED (but never throws): the Telegram/cron callers follow a send with
+ * updateLead(), whose get→merge→put would clobber an in-flight append — so the
+ * log must land BEFORE the send helper resolves. A DynamoDB hiccup while
+ * bookkeeping still must never break the send that already succeeded.
+ */
+async function logEmailSent(leadId: string, kind: string): Promise<void> {
+  const now = new Date().toISOString();
+  await atomicLeadEngagement(leadId, {
+    increment: { "emailEngagement.sentCount": 1 },
+    set: { "emailEngagement.lastSentAt": now },
+    appendCommsEvent: { at: now, channel: "email", type: "sent", kind },
+  }).catch(() => {});
+}
+
 /** POST one email (optionally scheduled). Returns its id, or "" on any failure.
  * `opts.idempotencyKey` rides Resend's `Idempotency-Key` header (24h dedupe
  * window) so a cron retry or webhook double-fire can't double-send; `opts.tags`
@@ -672,10 +695,11 @@ export async function sendLeadConfirmation(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, confirmationEmail(lead), undefined, {
+  const id = await postEmail(to, confirmationEmail(lead), undefined, {
     idempotencyKey: `confirmation:${lead.id}`,
     tags: emailTags("confirmation", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "confirmation");
 }
 
 /** Thank-you confirmation to the referrer. Best-effort; no-op without a config/email. */
@@ -708,6 +732,7 @@ export async function sendOfferEmail(
     idempotencyKey: `offer:${lead.id}:${low}-${high}`,
     tags: emailTags("offer", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "offer");
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -721,10 +746,11 @@ export async function sendPostOfferFollowup(lead: Lead, step: number): Promise<v
   const to = nurtureEmail(lead);
   if (!to) return;
   const kind = `post_offer_followup_${step}`;
-  await postEmail(to, postOfferFollowupEmail(lead, step), undefined, {
+  const id = await postEmail(to, postOfferFollowupEmail(lead, step), undefined, {
     idempotencyKey: `${kind}:${lead.id}`,
     tags: emailTags(kind, lead.id),
   });
+  if (id) await logEmailSent(lead.id, kind);
 }
 
 /** Day-21 win-back for a lead marked "lost". */
@@ -732,10 +758,11 @@ export async function sendWinback(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = nurtureEmail(lead);
   if (!to) return;
-  await postEmail(to, winbackEmail(lead), undefined, {
+  const id = await postEmail(to, winbackEmail(lead), undefined, {
     idempotencyKey: `winback:${lead.id}`,
     tags: emailTags("winback", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "winback");
 }
 
 /** Pre-offer nudge while awaiting the customer's info (cron, after /moreinfo or /ask). step 0=+2d, 1=+5d, 2=+10d. */
@@ -744,10 +771,11 @@ export async function sendAwaitingInfoReminder(lead: Lead, step: number): Promis
   const to = nurtureEmail(lead);
   if (!to) return;
   const kind = `awaiting_info_reminder_${step}`;
-  await postEmail(to, awaitingInfoReminderEmail(lead, step), undefined, {
+  const id = await postEmail(to, awaitingInfoReminderEmail(lead, step), undefined, {
     idempotencyKey: `${kind}:${lead.id}`,
     tags: emailTags(kind, lead.id),
   });
+  if (id) await logEmailSent(lead.id, kind);
 }
 
 /** /moreinfo — email the customer the questions we need answered before quoting.
@@ -762,6 +790,7 @@ export async function sendMoreInfo(lead: Lead, questions: string[]): Promise<{ o
     idempotencyKey: `more_info:${lead.id}:${contentKey(questions.join("|"))}`,
     tags: emailTags("more_info", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "more_info");
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -779,6 +808,7 @@ export async function sendMessageEmail(lead: Lead, message: string): Promise<{ o
     idempotencyKey: `message:${lead.id}:${contentKey(message)}`,
     tags: emailTags("message", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "message");
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -805,6 +835,7 @@ export async function sendPhotoMessageEmail(
     tags: emailTags("photo", lead.id),
     attachments: [{ filename: photo.filename, content: photo.base64 }],
   });
+  if (id) await logEmailSent(lead.id, "photo");
   return id ? { ok: true } : { ok: false, reason: "the email provider rejected the send" };
 }
 
@@ -813,10 +844,11 @@ export async function sendBookingDayOf(lead: Lead): Promise<void> {
   if (!RESEND_API_KEY) return;
   const to = validEmail(lead);
   if (!to) return;
-  await postEmail(to, bookingDayOfEmail(lead), undefined, {
+  const id = await postEmail(to, bookingDayOfEmail(lead), undefined, {
     idempotencyKey: `booking_day_of:${lead.id}:${lead.appointmentAt || ""}`,
     tags: emailTags("booking_day_of", lead.id),
   });
+  if (id) await logEmailSent(lead.id, "booking_day_of");
 }
 
 /** Cancel scheduled emails by id. Best-effort; never throws. */
@@ -830,4 +862,106 @@ export async function cancelScheduledEmails(ids: string[]): Promise<void> {
       }).catch(() => undefined),
     ),
   );
+}
+
+// ---- Preview registry (admin "Emails" tab) --------------------------------
+// Renders every customer-facing template against ONE realistic sample lead so
+// the owner can see exactly what each email looks like, when it goes out, and
+// who gets it — without ever emailing anyone. Lives here (not in the admin
+// route) so it can call the private template functions directly: previews can
+// never drift from the real sends because they ARE the real renderers.
+
+export type EmailPreview = {
+  /** Template key — matches the Resend `kind` tag / logEmailSent, so the tab
+   * can join a preview card to its live stats. */
+  kind: string;
+  title: string;
+  /** Journey grouping for the gallery: First contact / Sent by you / Automatic follow-ups / Booking. */
+  group: string;
+  /** Plain-English "when does this go out" line. */
+  trigger: string;
+  /** transactional = always sends (validEmail); nurture = respects emailOptOut (nurtureEmail). */
+  audience: "transactional" | "nurture";
+  subject: string;
+  html: string;
+};
+
+/** One believable lead every preview renders against — a real-looking Edmonton
+ * seller with an offer, a booking, and open info questions, so EVERY template
+ * has the data it wants (booking button, questions box, offer amount, …). */
+const SAMPLE_LEAD: Lead = {
+  id: "8f3a1c2b-4d21-4e6a-9c3f-1a2b3c4d5e6f",
+  kind: "vehicle",
+  createdAt: "2026-07-18T15:00:00.000Z",
+  status: "new",
+  contact: { name: "Sarah Mitchell", email: "sarah.mitchell@example.ca", phone: "780-555-0142" },
+  vehicle: { year: 2019, make: "Honda", model: "Civic", trim: "EX", mileageKm: 96000 },
+  offer: { low: 8500, high: 9000, sentAt: "2026-07-18T16:00:00.000Z" },
+  appointmentAt: "2026-07-24T20:30:00.000Z", // 2:30 pm MT — renders in the day-of email
+  appointmentLocation: "8923 137 Ave NW, Edmonton",
+  bookingToken: "b7c9d1e3f5a7b9",
+  infoQuestions: ["Are the tires the originals?", "Any accident history we should know about?"],
+  photos: [],
+  source: "website",
+};
+
+/** Matching referral fixture for the one non-lead template (the thank-you). */
+const SAMPLE_REFERRAL: Referral = {
+  id: "r-1",
+  createdAt: "2026-07-18T15:00:00.000Z",
+  status: "new",
+  referrer: { name: "Sarah Mitchell", email: "sarah.mitchell@example.ca" },
+  friend: { name: "Mike Chen" },
+  code: "SARAH100",
+};
+
+/** Sample body for the free-text /message template — previews the chrome, not
+ * any particular real message. */
+const SAMPLE_MESSAGE =
+  "Hi Sarah — just tried giving you a call about your Civic. Whenever you have a minute, give us a shout or reply here and we'll get everything sorted for you.";
+
+/**
+ * Every email the system can send, rendered fresh with the fixtures above, in
+ * customer-journey order. Server-side only (makeUnsubToken needs env — fine,
+ * the admin API route is the only caller).
+ */
+export function renderAllEmailPreviews(): EmailPreview[] {
+  const lead = SAMPLE_LEAD;
+  const wrap = (
+    kind: string,
+    title: string,
+    group: string,
+    trigger: string,
+    audience: "transactional" | "nurture",
+    email: Email,
+  ): EmailPreview => ({ kind, title, group, trigger, audience, subject: email.subject, html: email.html });
+
+  return [
+    // -- First contact ------------------------------------------------------
+    wrap("confirmation", "Lead confirmation", "First contact", "Instantly when a lead submits the form", "transactional", confirmationEmail(lead)),
+    // -- Sent by you (Telegram-driven, one at a time) ------------------------
+    wrap("offer", "Your offer", "Sent by you", "When you send /offer → ✅ from Telegram", "transactional", offerEmail(lead, 8500, 9000)),
+    wrap("more_info", "Ask for details", "Sent by you", "When you ask for details via /moreinfo", "transactional", moreInfoEmail(lead, lead.infoQuestions || [])),
+    wrap("message", "Message from you", "Sent by you", "Free-text /message from Telegram", "transactional", messageEmail(lead, SAMPLE_MESSAGE)),
+    wrap(
+      "photo",
+      "Photo message",
+      "Sent by you",
+      "When you send a photo in a lead's Telegram topic — image rides as an attachment",
+      "transactional",
+      messageEmail(lead, "Here's a photo for you — it's attached to this email."),
+    ),
+    // -- Automatic follow-ups (cron-driven nurture) --------------------------
+    wrap("post_offer_followup_0", "Offer follow-up · 1st", "Automatic follow-ups", "+2 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 0)),
+    wrap("post_offer_followup_1", "Offer follow-up · 2nd", "Automatic follow-ups", "+5 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 1)),
+    wrap("post_offer_followup_2", "Offer follow-up · last", "Automatic follow-ups", "+10 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 2)),
+    wrap("awaiting_info_reminder_0", "Info reminder · 1st", "Automatic follow-ups", "+2 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 0)),
+    wrap("awaiting_info_reminder_1", "Info reminder · 2nd", "Automatic follow-ups", "+5 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 1)),
+    wrap("awaiting_info_reminder_2", "Info reminder · last", "Automatic follow-ups", "+10 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 2)),
+    // -- Booking -------------------------------------------------------------
+    wrap("booking_day_of", "Day-of pickup reminder", "Booking", "Morning of a booked pickup", "transactional", bookingDayOfEmail(lead)),
+    // -- Late-journey nurture + referrals ------------------------------------
+    wrap("winback", "Day-21 win-back", "Automatic follow-ups", "Day 21, still-open leads", "nurture", winbackEmail(lead)),
+    wrap("referral_confirmation", "Referral thank-you", "First contact", "When someone refers a friend", "transactional", referralConfirmationEmail(SAMPLE_REFERRAL)),
+  ];
 }

@@ -25,6 +25,7 @@ import {
   type Count,
 } from "@/lib/analyticsView";
 import { META_SEGMENTS, segmentProfiles, buildMetaCsv, type MetaSegment } from "@/lib/metaExport";
+import EmailsTab from "./EmailsTab";
 
 // ---------------------------------------------------------------------------
 //  Customer-360 analytics dashboard. All data is computed server-side (profiles)
@@ -179,48 +180,129 @@ function Delta({ now, prev }: { now: number; prev: number }) {
   );
 }
 
-function HBars({ title, rows, tip }: { title: string; rows: Count[]; tip?: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  return (
-    <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted">No data.</p>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r) => (
-            <div key={r.label} className="flex items-center gap-2 text-sm">
-              <div className="w-28 shrink-0 truncate text-muted" title={r.label}>{r.label}</div>
-              <div className="h-4 flex-1 rounded bg-slate-100">
-                <div className="h-4 rounded bg-brand-600" style={{ width: `${(r.count / max) * 100}%` }} />
-              </div>
-              <div className="w-8 shrink-0 text-right font-semibold text-navy">{r.count}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// "2026-07-12" -> "Jul 12". Split the string — never Date.parse an ISO day
+// (parses as UTC midnight, which shifts the day in Mountain time).
+function dayLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${MONTHS_SHORT[m - 1]} ${d}`;
 }
 
-function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip?: string; title?: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
+// "2026-07-12" -> "Sun, Jul 12" — for the hover readout.
+function dayLabelFull(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${WEEKDAYS_SHORT[new Date(y, m - 1, d).getDay()]}, ${MONTHS_SHORT[m - 1]} ${d}`;
+}
+
+// Smallest "nice" axis max ({1,2,2.5,5}×10^k) at or above the data max.
+function niceCeil(max: number): number {
+  if (max <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * pow >= max) return m * pow;
+  return 10 * pow;
+}
+
+/**
+ * Shared per-day bar chart: labeled Y axis, date labels under the bars, an
+ * always-visible summary line that becomes a per-day readout on hover, and a
+ * 7-day moving-average overlay once there are 2+ weeks of days. Div-based so
+ * it stays responsive with zero measurement code.
+ */
+function DayBarChart({
+  rows,
+  height = 112,
+  format,
+  unit = "",
+  accent = "bg-brand-600/80",
+}: {
+  rows: { label: string; value: number }[];
+  height?: number;
+  format?: (n: number) => string;
+  unit?: string;
+  accent?: string;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  if (rows.length === 0) return null;
+  const fmt = format ?? ((n: number) => n.toLocaleString("en-CA"));
+  const values = rows.map((r) => r.value);
+  const niceMax = niceCeil(Math.max(0, ...values));
+  const total = values.reduce((s, v) => s + v, 0);
+  const peak = Math.max(0, ...values);
+  const avg = total / rows.length;
+  const avgLabel = format ? format(avg) : avg.toFixed(1);
+  const showAvg = rows.length >= 14;
+  const avgPts = showAvg
+    ? values.map((_, i) => {
+        const win = values.slice(Math.max(0, i - 6), i + 1);
+        return win.reduce((s, v) => s + v, 0) / win.length;
+      })
+    : [];
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 8));
+  const last = rows.length - 1;
+  const hoveredRow = hovered != null ? rows[hovered] : null;
   return (
-    <div className="card p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
-      <div className="space-y-2">
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[10px] text-muted">{showAvg ? "— 7-day avg" : ""}</span>
+        <span className="text-right text-xs tabular-nums text-muted">
+          {hoveredRow ? (
+            <>
+              <span className="font-semibold text-navy">{dayLabelFull(hoveredRow.label)}</span> · {fmt(hoveredRow.value)}{unit ? ` ${unit}` : ""}
+            </>
+          ) : (
+            <>total {fmt(total)} · peak {fmt(peak)} · avg {avgLabel}/day</>
+          )}
+        </span>
+      </div>
+      <div className="flex">
+        <div className="flex w-10 shrink-0 flex-col justify-between pr-1 text-right text-[10px] leading-none tabular-nums text-muted" style={{ height }}>
+          <span>{fmt(niceMax)}</span>
+          <span>{fmt(niceMax / 2)}</span>
+          <span>0</span>
+        </div>
+        <div className="relative flex-1" style={{ height }}>
+          <div className="absolute inset-x-0 top-0 border-t border-slate-100" />
+          <div className="absolute inset-x-0 top-1/4 border-t border-slate-100/70" />
+          <div className="absolute inset-x-0 top-1/2 border-t border-slate-100" />
+          <div className="absolute inset-x-0 top-3/4 border-t border-slate-100/70" />
+          <div className="relative flex h-full items-end gap-[2px]">
+            {rows.map((r, i) => (
+              <div
+                key={r.label}
+                className={`min-w-[3px] flex-1 rounded-t ${r.value === 0 ? "bg-slate-200" : hovered === i ? "bg-brand-700" : accent}`}
+                style={{ height: r.value === 0 ? 2 : `${(r.value / niceMax) * 100}%` }}
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
+                title={`${r.label}: ${fmt(r.value)}${unit ? ` ${unit}` : ""}`}
+              />
+            ))}
+          </div>
+          {showAvg && (
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline
+                points={avgPts.map((a, i) => `${(((i + 0.5) / rows.length) * 100).toFixed(2)},${(100 - (a / niceMax) * 100).toFixed(2)}`).join(" ")}
+                fill="none"
+                stroke="#0e1c2b"
+                strokeOpacity={0.45}
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          )}
+        </div>
+      </div>
+      <div className="flex h-4 gap-[2px] pl-10 pt-0.5">
         {rows.map((r, i) => {
-          const prev = i > 0 ? rows[i - 1].count : 0;
-          const pct = i > 0 && prev > 0 ? Math.round((r.count / prev) * 100) : null;
+          const show = i === 0 || i === last || (i % labelEvery === 0 && last - i >= labelEvery);
           return (
-            <div key={r.label} className="flex items-center gap-2 text-sm">
-              <div className="w-24 shrink-0 text-muted">{r.label}</div>
-              <div className="h-5 flex-1 rounded bg-slate-100">
-                <div className="flex h-5 items-center rounded bg-brand-600 px-2 text-xs font-semibold text-white" style={{ width: `${(r.count / max) * 100}%` }}>
-                  {r.count}
-                </div>
-              </div>
-              <div className="w-12 shrink-0 text-right text-xs text-muted">{pct != null ? `${pct}%` : ""}</div>
+            <div key={r.label} className="relative min-w-[3px] flex-1">
+              {show && (
+                <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted">{dayLabel(r.label)}</span>
+              )}
             </div>
           );
         })}
@@ -229,19 +311,85 @@ function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip
   );
 }
 
-function VBars({ title, rows, tip }: { title: string; rows: { date: string; leads: number }[]; tip?: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.leads));
+// `share` (default on) prints each row's %-of-total — turn it OFF for rows
+// that overlap (e.g. cumulative scroll-depth buckets), where a share is a lie.
+function HBars({ title, rows, tip, share = true }: { title: string; rows: Count[]; tip?: string; share?: boolean }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  return (
+    <div className="card p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">No data.</p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const pct = total > 0 ? Math.round((r.count / total) * 100) : 0;
+            return (
+              <div key={r.label} className="flex items-center gap-2 text-sm">
+                <div className="w-36 shrink-0 break-words line-clamp-2 text-muted" title={r.label}>{r.label}</div>
+                <div className="h-4 flex-1 rounded bg-slate-100">
+                  <div className="h-4 rounded bg-brand-600" style={{ width: `${(r.count / max) * 100}%` }} />
+                </div>
+                <div className={`${share ? "w-16" : "w-8"} shrink-0 whitespace-nowrap text-right tabular-nums`}>
+                  <span className="font-semibold text-navy">{r.count}</span>
+                  {share && <span className="text-[10px] text-muted"> · {pct}%</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Funnel({ rows, tip, title = "Conversion funnel" }: { rows: Count[]; tip?: string; title?: string }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  const top = rows[0]?.count ?? 0;
+  return (
+    <div className="card p-4">
+      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+      <div className="space-y-2">
+        {rows.map((r, i) => {
+          const prev = i > 0 ? rows[i - 1].count : 0;
+          const pct = i > 0 && prev > 0 ? Math.round((r.count / prev) * 100) : null;
+          const ofTop = top > 0 ? Math.round((r.count / top) * 100) : null;
+          const width = (r.count / max) * 100;
+          const narrow = width < 15; // fill too short for the white inside-count
+          return (
+            <div key={r.label} className="flex items-center gap-2 text-sm">
+              <div className="w-24 shrink-0 text-muted">{r.label}</div>
+              <div className="relative h-5 flex-1 rounded bg-slate-100">
+                <div className={`flex h-5 items-center rounded bg-brand-600 ${narrow ? "" : "px-2 text-xs font-semibold text-white"}`} style={{ width: `${width}%` }}>
+                  {!narrow && r.count}
+                </div>
+                {narrow && (
+                  <span className="absolute top-0 flex h-5 items-center pl-1.5 text-xs font-semibold text-navy" style={{ left: `${width}%` }}>
+                    {r.count}
+                  </span>
+                )}
+              </div>
+              <div className="w-20 shrink-0 text-right text-xs text-muted">
+                <div>{i === 0 ? "100%" : pct != null ? `${pct}%` : ""}</div>
+                {i > 0 && ofTop != null && <div className="text-[10px] text-muted">{ofTop}% of all</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VBars({ title, rows, tip, unit = "" }: { title: string; rows: { date: string; leads: number }[]; tip?: string; unit?: string }) {
   return (
     <div className="card p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No leads in range.</p>
       ) : (
-        <div className="flex h-28 items-end gap-0.5 overflow-x-auto">
-          {rows.map((r) => (
-            <div key={r.date} className="min-w-[4px] flex-1 rounded-t bg-brand-600/80" style={{ height: `${(r.leads / max) * 100}%` }} title={`${r.date}: ${r.leads}`} />
-          ))}
-        </div>
+        <DayBarChart rows={rows.map((r) => ({ label: r.date, value: r.leads }))} height={112} unit={unit} />
       )}
     </div>
   );
@@ -249,21 +397,24 @@ function VBars({ title, rows, tip }: { title: string; rows: { date: string; lead
 
 /** Compact per-day mini bar chart — data-health strip. Generic value key. */
 function MiniBars({ title, rows, tip }: { title: string; rows: { day: string; value: number }[]; tip?: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <div className="card p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No data.</p>
       ) : (
-        <div className="flex h-20 items-end gap-0.5 overflow-x-auto">
-          {rows.map((r) => (
-            <div key={r.day} className="min-w-[3px] flex-1 rounded-t bg-brand-600/80" style={{ height: `${(r.value / max) * 100}%` }} title={`${r.day}: ${r.value}`} />
-          ))}
-        </div>
+        <DayBarChart rows={rows.map((r) => ({ label: r.day, value: r.value }))} height={80} />
       )}
     </div>
   );
+}
+
+// 0 -> "12a", 13 -> "1p" — compact hour-of-day labels for the heatmap axis.
+function hourLabel(h: number): string {
+  if (h === 0) return "12a";
+  if (h < 12) return `${h}a`;
+  if (h === 12) return "12p";
+  return `${h - 12}p`;
 }
 
 function Heatmap({
@@ -277,11 +428,19 @@ function Heatmap({
   title?: string;
   unit?: string;
 }) {
+  const [hovered, setHovered] = useState<{ d: number; h: number; c: number } | null>(null);
   const max = Math.max(1, ...grid.flat());
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return (
     <div className="card overflow-x-auto p-4">
-      <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
+        {hovered && (
+          <span className="text-xs tabular-nums text-muted">
+            <span className="font-semibold text-navy">{days[hovered.d]} {hourLabel(hovered.h)}</span> — {hovered.c} {unit}{hovered.c === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
       <div className="min-w-[560px] space-y-0.5">
         {grid.map((row, d) => (
           <div key={d} className="flex items-center gap-0.5">
@@ -292,16 +451,24 @@ function Heatmap({
                 className="h-4 flex-1 rounded-sm"
                 style={{ backgroundColor: c ? `rgba(37,99,235,${0.18 + 0.82 * (c / max)})` : "#f1f5f9" }}
                 title={`${days[d]} ${h}:00 — ${c} ${unit}${c === 1 ? "" : "s"}`}
+                onMouseEnter={() => setHovered({ d, h, c })}
+                onMouseLeave={() => setHovered(null)}
               />
             ))}
           </div>
         ))}
-        <div className="flex gap-0.5 pl-8 pt-1 text-[10px] text-muted">
-          <span className="flex-1">12a</span>
-          <span className="flex-[6] text-center">6a</span>
-          <span className="flex-[6] text-center">12p</span>
-          <span className="flex-[6] text-center">6p</span>
-          <span className="flex-[5] text-right">11p</span>
+        <div className="flex gap-0.5 pl-8 pt-1">
+          {Array.from({ length: 24 }, (_, h) => (
+            <div key={h} className="flex-1 text-center text-[10px] text-muted">{h % 3 === 0 ? hourLabel(h) : ""}</div>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 pl-8 pt-1.5 text-[10px] text-muted">
+          <span>0</span>
+          <span className="h-3 w-4 rounded-sm" style={{ backgroundColor: "#f1f5f9" }} />
+          {[0.18, 0.45, 0.72, 1].map((a) => (
+            <span key={a} className="h-3 w-4 rounded-sm" style={{ backgroundColor: `rgba(37,99,235,${a})` }} />
+          ))}
+          <span>= {max} {unit}{max === 1 ? "" : "s"}</span>
         </div>
       </div>
     </div>
@@ -1697,23 +1864,25 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
             </table>
           )}
         </div>
-        <div className="card p-4">
-          <h3 className="mb-3 text-sm font-bold text-navy">
-            Engagement &amp; frustration<InfoDot tip={SRC.events} />
-          </h3>
-          <div className="space-y-1.5 text-sm">
-            {ev.scrollDepth.map((s) => (
-              <div key={s.bucket} className="flex justify-between gap-2">
-                <span className="text-muted">Scrolled {s.bucket}%+</span>
-                <span className="font-semibold text-navy">{s.count}</span>
+        <div className="space-y-4">
+          <HBars
+            title="Scroll depth — how far people get"
+            rows={ev.scrollDepth.map((s) => ({ label: `Scrolled ${s.bucket}%+`, count: s.count }))}
+            tip={SRC.events}
+            share={false} // buckets are cumulative — a %-of-total would be nonsense
+          />
+          <div className="card p-4">
+            <h3 className="mb-3 text-sm font-bold text-navy">
+              Engagement &amp; frustration<InfoDot tip={SRC.events} />
+            </h3>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted" title="3+ rapid clicks in the same spot — usually a broken or confusing element">Rage clicks</span>
+                <span className={`font-semibold ${ev.frustration.rageClicks > 0 ? "text-red-600" : "text-navy"}`}>{ev.frustration.rageClicks}</span>
               </div>
-            ))}
-            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5">
-              <span className="text-muted" title="3+ rapid clicks in the same spot — usually a broken or confusing element">Rage clicks</span>
-              <span className={`font-semibold ${ev.frustration.rageClicks > 0 ? "text-red-600" : "text-navy"}`}>{ev.frustration.rageClicks}</span>
+              <div className="flex justify-between gap-2"><span className="text-muted" title="Times a visitor switched away from the tab mid-flow (distraction / comparison-shopping)">Tab switches</span><span className="font-semibold text-navy">{ev.frustration.tabSwitches}</span></div>
+              <div className="flex justify-between gap-2"><span className="text-muted" title="Copy actions on the page — often copying the offer amount or phone number">Copies</span><span className="font-semibold text-navy">{ev.frustration.copies}</span></div>
             </div>
-            <div className="flex justify-between gap-2"><span className="text-muted" title="Times a visitor switched away from the tab mid-flow (distraction / comparison-shopping)">Tab switches</span><span className="font-semibold text-navy">{ev.frustration.tabSwitches}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-muted" title="Copy actions on the page — often copying the offer amount or phone number">Copies</span><span className="font-semibold text-navy">{ev.frustration.copies}</span></div>
           </div>
         </div>
       </div>
@@ -2350,7 +2519,6 @@ function AdsTab({ range }: { range: RangeState }) {
     const arr = [...perDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
     return arr.map(([date, d]) => ({ date, value: trendMetric === "spend" ? d.spend : trendMetric === "leads" ? d.leads : trendMetric === "impressions" ? d.impressions : d.leads ? d.spend / d.leads : 0 }));
   }, [perDay, trendMetric]);
-  const trendMax = Math.max(1, ...trendDays.map((d) => d.value));
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -2416,17 +2584,14 @@ function AdsTab({ range }: { range: RangeState }) {
         {trendDays.length === 0 ? (
           <p className="text-sm text-muted">{loading ? "Loading…" : "No data in this window yet — try “Sync from Meta now”."}</p>
         ) : (
-          <div className="flex items-end gap-0.5 overflow-x-auto" style={{ height: 120 }}>
-            {trendDays.map((d) => (
-              <div key={d.date} className="flex min-w-[8px] flex-1 flex-col items-center justify-end" title={`${d.date}: ${trendMetric === "spend" || trendMetric === "cpl" ? money2(d.value) : Math.round(d.value).toLocaleString("en-CA")}`}>
-                <div className="w-full rounded-t bg-brand" style={{ height: `${Math.max(2, (d.value / trendMax) * 108)}px` }} />
-              </div>
-            ))}
-          </div>
+          <DayBarChart
+            rows={trendDays.map((d) => ({ label: d.date, value: d.value }))}
+            height={120}
+            format={trendMetric === "spend" || trendMetric === "cpl" ? (n) => money2(n) : (n) => Math.round(n).toLocaleString("en-CA")}
+            unit={trendMetric === "leads" ? "leads" : trendMetric === "impressions" ? "impressions" : ""}
+            accent="bg-brand"
+          />
         )}
-        <div className="mt-1 flex justify-between text-[10px] text-muted">
-          <span>{trendDays[0]?.date}</span><span>{trendDays[trendDays.length - 1]?.date}</span>
-        </div>
       </div>
 
       {/* table */}
@@ -2468,7 +2633,7 @@ function AdsTab({ range }: { range: RangeState }) {
   );
 }
 
-type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "people";
+type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "emails" | "people";
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const events = data.events;
@@ -2636,6 +2801,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     { key: "acquisition", label: "Acquisition" },
     { key: "funnel", label: "Funnel" },
     { key: "ads", label: "Ads" },
+    { key: "emails", label: "Emails" },
     { key: "people", label: "People" },
   ];
 
@@ -2825,6 +2991,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       {/* ---- TAB: ADS (comprehensive Meta ad analytics, persisted daily) ---- */}
       {tab === "ads" && <AdsTab range={range} />}
+
+      {/* ---- TAB: EMAILS (previews + delivery analytics) ---- */}
+      {tab === "emails" && <EmailsTab {...windowForRange(range)} />}
 
       {/* ---- TAB 4: PEOPLE ---- */}
       {tab === "people" && (
