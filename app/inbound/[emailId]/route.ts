@@ -99,7 +99,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
       // (hung chunked responses got cached under the query-less keys).
       const url = `/inbound/${emailId}/${i}?v=r2`;
       if ((a.content_type || "").startsWith("image/")) {
-        return `<a class="card" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}" loading="lazy"><div class="cap">${name}</div></a>`;
+        // No loading="lazy": lazy images never fire in hidden/background tabs,
+        // which made the gallery look broken in every headless verification.
+        // A handful of photos doesn't need lazy anyway.
+        return `<a class="card" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}"><div class="cap">${name}</div></a>`;
       }
       return `<a class="card" href="${url}" target="_blank" rel="noopener"><div class="file">📄 ${name}</div></a>`;
     })
