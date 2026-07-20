@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getLeads, atomicLeadEngagement, getLeadByShortId } from "@/lib/store";
+import { getLeads, atomicLeadEngagement, getLeadByShortId, updateLead } from "@/lib/store";
 import { notifyOwner, leadLine, postLeadTopic, postLeadTopicAttachment } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
@@ -130,32 +130,39 @@ async function listInboundAttachments(emailId: string | undefined): Promise<Inbo
 }
 
 const MAX_ATTACHMENTS = 8;
+const DOWNLOAD_TIMEOUT_MS = 8000;
 
-/** Download each attachment and post it into the lead's topic — photos inline,
- * everything else as a document. Best-effort per file: a failure posts a pointer
- * note instead, so an attachment is never silently invisible. */
+/** Download + post the attachments into the lead's topic — photos inline,
+ * everything else as a document. All files run IN PARALLEL: the serverless
+ * response window is ~30s, and six phone photos done sequentially blew straight
+ * through it (observed 504). Failures collapse into one pointer note so an
+ * attachment is never silently invisible. */
 async function relayInboundAttachments(attachments: InboundAttachment[], lead: Lead): Promise<void> {
-  for (const a of attachments.slice(0, MAX_ATTACHMENTS)) {
-    const name = (a.filename || "attachment").slice(0, 120);
-    let ok = false;
-    try {
-      if (a.download_url) {
-        const dl = await fetch(a.download_url);
-        if (dl.ok) {
-          const data = await dl.arrayBuffer();
-          ok = await postLeadTopicAttachment(
-            lead,
-            { data, filename: name, contentType: a.content_type || "application/octet-stream" },
-            `📎 ${name}`,
-          );
-        }
-      }
-    } catch (e) {
-      console.error("[resend inbound] attachment relay error:", name, e);
-    }
-    if (!ok) {
-      await postLeadTopic(lead, `📎 "${name}" came attached but couldn't be posted here — open the email in Resend to view it.`);
-    }
+  const slice = attachments.slice(0, MAX_ATTACHMENTS);
+  const results = await Promise.allSettled(
+    slice.map(async (a) => {
+      const name = (a.filename || "attachment").slice(0, 120);
+      if (!a.download_url) throw new Error("no download_url");
+      const dl = await fetch(a.download_url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!dl.ok) throw new Error(`download ${dl.status}`);
+      const data = await dl.arrayBuffer();
+      const ok = await postLeadTopicAttachment(
+        lead,
+        { data, filename: name, contentType: a.content_type || "application/octet-stream" },
+        `📎 ${name}`,
+      );
+      if (!ok) throw new Error("telegram refused");
+    }),
+  );
+  const failed = results
+    .map((r, i) => (r.status === "rejected" ? (slice[i].filename || "attachment").slice(0, 60) : null))
+    .filter((n): n is string => n !== null);
+  if (failed.length) {
+    console.error("[resend inbound] attachment relay failed for:", failed.join(", "));
+    await postLeadTopic(
+      lead,
+      `📎 Couldn't post ${failed.length} attachment(s) here (${failed.join(", ")}) — open the email in Resend to view them.`,
+    );
   }
   if (attachments.length > MAX_ATTACHMENTS) {
     await postLeadTopic(lead, `📎 ${attachments.length - MAX_ATTACHMENTS} more attachment(s) — open the email in Resend to view them.`);
@@ -216,6 +223,10 @@ async function handleInbound(event: ResendEvent): Promise<void> {
     return;
   }
 
+  // Idempotency: Svix auto-retries every non-200 (and manual replays re-deliver),
+  // so the same inbound email must never post twice. Processed ids live on the lead.
+  if (emailId && (lead.processedInboundIds || []).includes(emailId)) return;
+
   const inbound = [
     `📩 ${lead.contact.name || "Customer"} (email)`,
     ...(subject ? [`Subject: ${subject}`] : []),
@@ -250,6 +261,16 @@ async function handleInbound(event: ResendEvent): Promise<void> {
   // inline in the same topic; PDFs/HEIC/etc. arrive as documents.
   const attachments = await listInboundAttachments(emailId);
   if (attachments.length) await relayInboundAttachments(attachments, lead);
+
+  // Mark this email processed (idempotency ledger, capped) — best-effort.
+  if (emailId) {
+    try {
+      const ids = [...(lead.processedInboundIds || []), emailId].slice(-20);
+      await updateLead(lead.id, { processedInboundIds: ids });
+    } catch (e) {
+      console.error("[resend inbound] processed-id stamp failed:", e);
+    }
+  }
 }
 
 /** Canonicalize an address for matching: lowercase/trim, and for Gmail/Googlemail

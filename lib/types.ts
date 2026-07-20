@@ -361,6 +361,10 @@ export interface Lead {
    * last appeared (the next ping is due 7 days after that). */
   recontactStage?: number;
   recontactLastAt?: string;
+  /** Inbound email ids (Resend email.received) already relayed to Telegram — the
+   * idempotency ledger that keeps Svix auto-retries/replays from double-posting.
+   * Capped to the most recent 20. */
+  processedInboundIds?: string[];
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
