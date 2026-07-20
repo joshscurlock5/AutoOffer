@@ -53,10 +53,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         "Content-Type": a.content_type || "application/octet-stream",
+        "Content-Length": String(buf.byteLength),
         "Content-Disposition": `inline; filename="${name}"`,
         // Same bytes for the life of the email — let the browser keep them.
         "Cache-Control": "private, max-age=86400",
         "X-Content-Type-Options": "nosniff",
+        // Deploy beacon — lets ops tell WHICH revision is answering (the wire
+        // format alone can't distinguish streamed from buffered).
+        "X-Inbound-Rev": "r2-buffered",
       },
     });
   } catch (e) {
