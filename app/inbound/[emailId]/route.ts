@@ -89,10 +89,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
     );
   }
 
+  // Images go through OUR per-file proxy (/inbound/<id>/<n>) — Resend's signed
+  // download URLs refuse browser requests (server-side-only CDN), so linking
+  // them directly renders six broken images.
   const cards = attachments
-    .map((a) => {
+    .map((a, i) => {
       const name = esc((a.filename || "attachment").slice(0, 120));
-      const url = esc(a.download_url || "#");
+      const url = `/inbound/${emailId}/${i}`;
       if ((a.content_type || "").startsWith("image/")) {
         return `<a class="card" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}" loading="lazy"><div class="cap">${name}</div></a>`;
       }
