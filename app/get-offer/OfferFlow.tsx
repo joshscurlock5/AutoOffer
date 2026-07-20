@@ -669,10 +669,17 @@ export default function OfferFlow() {
     if (submittingRef.current) return;
     setError("");
     if (phoneRequired) {
-      // Variant B: phone required, email optional (validated only if they typed one).
+      // Variant B: phone always required; email optional — EXCEPT when the seller
+      // explicitly picked email as their contact method (an email-contact lead
+      // with no email would be unreachable the way they asked for).
       if (phone.replace(/\D/g, "").length < 10) {
         track("form_error", { step: "contact", reason: "invalid_phone" });
         setError("Please add a 10-digit phone number.");
+        return;
+      }
+      if (contactMethod === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        track("form_error", { step: "contact", reason: "invalid_email" });
+        setError("You chose email contact — please add a valid email address.");
         return;
       }
       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -720,6 +727,9 @@ export default function OfferFlow() {
       fd.append("phone", phone);
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
+      // Which A/B variant THIS form actually rendered — beats the server's live
+      // setting for labeling, so a flip mid-visit can't misfile the lead.
+      fd.append("experimentVariant", formVariant);
       if (estimate) fd.append("estimateJson", JSON.stringify(estimate));
       if (lookupIdRef.current) fd.append("lookupId", lookupIdRef.current);
       fd.append("metaEventId", metaEventId);
@@ -868,9 +878,15 @@ export default function OfferFlow() {
               <p className="mt-1.5 text-xs text-muted">Only used to send your offer — no spam, no robocalls.</p>
             </div>
             <div>
-              <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
+              <label className="label" htmlFor="email">
+                Email{!(phoneRequired && contactMethod === "email") && <span className="font-normal text-muted"> (optional)</span>}
+              </label>
               <input id="email" type="email" className="field" value={email} onChange={(e) => { markContactEngaged(); if (e.target.value) once("contact_email_entered"); setEmail(e.target.value); }} onFocus={() => track("field_focus", { field: "email" })} onBlur={() => { schedulePartialBeacon(); track("field_blur", { field: "email", filled: !!email }); }} placeholder="you@email.com" autoComplete="email" />
-              <p className="mt-1.5 text-xs text-muted">For your written offer and confirmation.</p>
+              <p className="mt-1.5 text-xs text-muted">
+                {phoneRequired && contactMethod === "email"
+                  ? "You picked email contact — your written offer will land here."
+                  : "For your written offer and confirmation."}
+              </p>
             </div>
             <div>
               <label className="label" htmlFor="besttime">Best time to reach you <span className="font-normal text-muted">(optional)</span></label>

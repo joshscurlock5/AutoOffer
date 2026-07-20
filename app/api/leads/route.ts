@@ -223,8 +223,13 @@ export async function POST(req: NextRequest) {
       ...(gaClientId ? { gaClientId } : {}),
       ...(gaSessionId ? { gaSessionId } : {}),
       source: "web",
-      // Which contact-requirement variant was live when this lead came in (A/B).
-      experimentVariant: await getActiveVariant(),
+      // A/B label: the variant the FORM actually rendered (client-sent) beats the
+      // currently-active setting — a visitor mid-form during a flip stays filed
+      // under the form they really experienced. Validated; falls back to the setting.
+      experimentVariant: await (async () => {
+        const v = str(form.get("experimentVariant"));
+        return v === "choose" || v === "phone_required" ? v : await getActiveVariant();
+      })(),
     };
 
     await addLead(lead);
