@@ -15,10 +15,16 @@ import {
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKUPS_TABLE, META_INSIGHTS_TABLE, PHOTOS_BUCKET } from "./aws";
-import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent, MetaSnapshot } from "./types";
+import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent, MetaSnapshot, ExperimentVariant } from "./types";
+import { DEFAULT_VARIANT, EXPERIMENT_VARIANTS } from "./types";
 import { toE164 } from "./sms";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
+
+// The A/B "active variant" setting lives as ONE sentinel row in the leads table
+// (id = AB_CONFIG_ID) so it needs no extra table/provisioning. getLeads filters
+// it out so it never leaks into the lead set. See getActiveVariant/setActiveVariant.
+const AB_CONFIG_ID = "__ab_config__";
 
 export async function getLeads(): Promise<Lead[]> {
   const leads: Lead[] = [];
@@ -30,12 +36,45 @@ export async function getLeads(): Promise<Lead[]> {
     leads.push(...((res.Items || []) as Lead[]));
     lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastKey);
-  return leads.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  return leads
+    .filter((l) => l.id !== AB_CONFIG_ID)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 
 export async function addLead(lead: Lead): Promise<Lead> {
   await ddb.send(new PutCommand({ TableName: LEADS_TABLE, Item: lead }));
   return lead;
+}
+
+// ---- A/B experiment: active contact-requirement variant -------------------
+// getActiveVariant is read on every /api/events beacon, so it's cached in-memory
+// and refreshed at most once per AB_CACHE_MS; both the form and the lead/event
+// stamping consult it. Fails soft to the default until the row exists.
+const AB_CACHE_MS = 60_000;
+let abCache: { variant: ExperimentVariant; at: number } | null = null;
+
+export async function getActiveVariant(): Promise<ExperimentVariant> {
+  if (abCache && Date.now() - abCache.at < AB_CACHE_MS) return abCache.variant;
+  let variant: ExperimentVariant = DEFAULT_VARIANT;
+  try {
+    const res = await ddb.send(new GetCommand({ TableName: LEADS_TABLE, Key: { id: AB_CONFIG_ID } }));
+    const v = (res.Item as { activeVariant?: string } | undefined)?.activeVariant;
+    if (v && EXPERIMENT_VARIANTS.some((x) => x.key === v)) variant = v as ExperimentVariant;
+  } catch {
+    /* fail soft — default variant until the row/table is reachable */
+  }
+  abCache = { variant, at: Date.now() };
+  return variant;
+}
+
+export async function setActiveVariant(variant: ExperimentVariant): Promise<void> {
+  await ddb.send(
+    new PutCommand({
+      TableName: LEADS_TABLE,
+      Item: { id: AB_CONFIG_ID, activeVariant: variant, updatedAt: new Date().toISOString() },
+    }),
+  );
+  abCache = { variant, at: Date.now() };
 }
 
 export async function updateLead(

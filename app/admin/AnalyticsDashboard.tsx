@@ -26,6 +26,7 @@ import {
 } from "@/lib/analyticsView";
 import { META_SEGMENTS, segmentProfiles, buildMetaCsv, type MetaSegment } from "@/lib/metaExport";
 import EmailsTab from "./EmailsTab";
+import ExperimentsTab from "./ExperimentsTab";
 
 // ---------------------------------------------------------------------------
 //  Customer-360 analytics dashboard. All data is computed server-side (profiles)
@@ -2662,7 +2663,7 @@ function AdsTab({ range }: { range: RangeState }) {
   );
 }
 
-type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "emails" | "people";
+type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "emails" | "people" | "experiments";
 
 export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const events = data.events;
@@ -2834,6 +2835,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     { key: "emails", label: "Emails", icon: <NavIcon><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></NavIcon> },
     { key: "people", label: "People", icon: <NavIcon><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></NavIcon> },
     { key: "sources", label: "Data health", icon: <NavIcon><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></NavIcon> },
+    { key: "experiments", label: "A/B tests", icon: <NavIcon><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></NavIcon> },
   ];
 
   return (
@@ -3052,6 +3054,9 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       {/* ---- TAB: EMAILS (previews + delivery analytics) ---- */}
       {tab === "emails" && <EmailsTab {...windowForRange(range)} />}
+
+      {/* ---- TAB: A/B TESTS (per-variant funnel + conversion, set live variant) ---- */}
+      {tab === "experiments" && <ExperimentsTab {...windowForRange(range)} />}
 
       {/* ---- TAB 4: PEOPLE ---- */}
       {tab === "people" && (

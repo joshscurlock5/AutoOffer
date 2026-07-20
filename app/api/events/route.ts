@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addEvents, getLeads } from "@/lib/store";
+import { addEvents, getLeads, getActiveVariant } from "@/lib/store";
 import { allowRequest, clientIpFrom } from "@/lib/rateLimit";
 import type { SiteEvent } from "@/lib/types";
 
@@ -121,6 +121,9 @@ export async function POST(req: NextRequest) {
     }
 
     const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
+    // Stamp the A/B variant live right now (cached read) onto every event so the
+    // anonymous on-page funnel can be split per contact-requirement variant.
+    const variant = await getActiveVariant();
     const items: SiteEvent[] = [];
     for (const raw of rawEvents) {
       const e = raw as { n?: unknown; p?: unknown; path?: unknown; at?: unknown };
@@ -146,6 +149,7 @@ export async function POST(req: NextRequest) {
         ...(utmContent ? { utmContent } : {}),
         ...(utmCampaign ? { utmCampaign } : {}),
         ...(utmSource ? { utmSource } : {}),
+        variant,
         ttl,
       });
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { addLead, getLeads, getReferrals, markLookupConverted, updateLead, updateReferral } from "@/lib/store";
+import { addLead, getLeads, getReferrals, markLookupConverted, updateLead, updateReferral, getActiveVariant } from "@/lib/store";
 import { getEstimate } from "@/lib/valuation";
 import { notifyNewLead } from "@/lib/notify";
 import type { Lead, UploadedPhoto, VehicleInfo, OfferEstimate } from "@/lib/types";
@@ -223,6 +223,8 @@ export async function POST(req: NextRequest) {
       ...(gaClientId ? { gaClientId } : {}),
       ...(gaSessionId ? { gaSessionId } : {}),
       source: "web",
+      // Which contact-requirement variant was live when this lead came in (A/B).
+      experimentVariant: await getActiveVariant(),
     };
 
     await addLead(lead);

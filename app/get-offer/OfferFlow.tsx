@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import type { OfferEstimate, DecodedVehicle } from "@/lib/types";
+import type { OfferEstimate, DecodedVehicle, ExperimentVariant } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track, trackFunnel } from "@/lib/analytics";
 import { getAttribution, getBehavior, getTouches, markFunnelStep } from "@/lib/attribution";
@@ -86,6 +86,25 @@ export default function OfferFlow() {
   const [contactMethod, setContactMethod] = useState<"call" | "text" | "email">("call");
   const [bestTime, setBestTime] = useState("Anytime");
   const [tsToken, setTsToken] = useState("");
+
+  // A/B: which contact-requirement variant is live (server setting). "choose" =
+  // today's behavior (pick email or phone); "phone_required" makes phone required
+  // and email optional. Fetched on mount — the contact step (step 3+) is reached
+  // long after this resolves, so there's no flash on the fields that depend on it.
+  const [formVariant, setFormVariant] = useState<ExperimentVariant>("choose");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/experiment")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && (d?.activeVariant === "choose" || d?.activeVariant === "phone_required")) {
+          setFormVariant(d.activeVariant);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const phoneRequired = formVariant === "phone_required";
 
   const [estimate, setEstimate] = useState<OfferEstimate | null>(null);
   const [calculating, setCalculating] = useState(false);
@@ -649,7 +668,19 @@ export default function OfferFlow() {
     e.preventDefault();
     if (submittingRef.current) return;
     setError("");
-    if (contactMethod === "email") {
+    if (phoneRequired) {
+      // Variant B: phone required, email optional (validated only if they typed one).
+      if (phone.replace(/\D/g, "").length < 10) {
+        track("form_error", { step: "contact", reason: "invalid_phone" });
+        setError("Please add a 10-digit phone number.");
+        return;
+      }
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        track("form_error", { step: "contact", reason: "invalid_email" });
+        setError("That email looks off — double-check it, or leave it blank.");
+        return;
+      }
+    } else if (contactMethod === "email") {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
         track("form_error", { step: "contact", reason: "invalid_email" });
         setError("Please add a valid email address.");
@@ -816,7 +847,7 @@ export default function OfferFlow() {
           </p>
         </div>
 
-        {contactMethod === "email" ? (
+        {contactMethod === "email" && !phoneRequired ? (
           <>
             <div>
               <label className="label" htmlFor="email">Email</label>
