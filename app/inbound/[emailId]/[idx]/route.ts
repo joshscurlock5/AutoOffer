@@ -43,10 +43,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
     if (!a?.download_url) return new NextResponse("Not found", { status: 404 });
 
     const file = await fetch(a.download_url, { signal: AbortSignal.timeout(15000) });
-    if (!file.ok || !file.body) return new NextResponse("Gone", { status: 404 });
+    if (!file.ok) return new NextResponse("Gone", { status: 404 });
+    // BUFFERED, not streamed — a streamed binary body hangs behind Amplify's
+    // Lambda adapter (observed: curl fine, every browser stuck). This mirrors
+    // the proven /api/uploads photo route. Phone photos are a few MB — fine.
+    const buf = await file.arrayBuffer();
 
     const name = (a.filename || "attachment").replace(/[^\w.\- ]/g, "_").slice(0, 100);
-    return new NextResponse(file.body, {
+    return new NextResponse(new Uint8Array(buf), {
       headers: {
         "Content-Type": a.content_type || "application/octet-stream",
         "Content-Disposition": `inline; filename="${name}"`,
