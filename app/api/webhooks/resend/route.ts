@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getLeads, atomicLeadEngagement, getLeadByShortId } from "@/lib/store";
-import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
+import { notifyOwner, leadLine, postLeadTopic, postLeadTopicAttachment } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -102,6 +102,66 @@ interface ResendEvent {
   };
 }
 
+interface InboundAttachment {
+  filename?: string;
+  content_type?: string;
+  size?: number;
+  download_url?: string;
+}
+
+/** List an inbound email's attachments (the webhook itself carries none — only
+ * the API has them, with short-lived signed download URLs). Empty on any failure. */
+async function listInboundAttachments(emailId: string | undefined): Promise<InboundAttachment[]> {
+  if (!emailId || !RESEND_API_KEY) return [];
+  try {
+    const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}/attachments`, {
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+    });
+    if (!r.ok) {
+      console.error(`[resend inbound] attachments list ${r.status}`);
+      return [];
+    }
+    const j = (await r.json().catch(() => ({}))) as { data?: InboundAttachment[] };
+    return Array.isArray(j?.data) ? j.data : [];
+  } catch (e) {
+    console.error("[resend inbound] attachments list error:", e);
+    return [];
+  }
+}
+
+const MAX_ATTACHMENTS = 8;
+
+/** Download each attachment and post it into the lead's topic — photos inline,
+ * everything else as a document. Best-effort per file: a failure posts a pointer
+ * note instead, so an attachment is never silently invisible. */
+async function relayInboundAttachments(attachments: InboundAttachment[], lead: Lead): Promise<void> {
+  for (const a of attachments.slice(0, MAX_ATTACHMENTS)) {
+    const name = (a.filename || "attachment").slice(0, 120);
+    let ok = false;
+    try {
+      if (a.download_url) {
+        const dl = await fetch(a.download_url);
+        if (dl.ok) {
+          const data = await dl.arrayBuffer();
+          ok = await postLeadTopicAttachment(
+            lead,
+            { data, filename: name, contentType: a.content_type || "application/octet-stream" },
+            `📎 ${name}`,
+          );
+        }
+      }
+    } catch (e) {
+      console.error("[resend inbound] attachment relay error:", name, e);
+    }
+    if (!ok) {
+      await postLeadTopic(lead, `📎 "${name}" came attached but couldn't be posted here — open the email in Resend to view it.`);
+    }
+  }
+  if (attachments.length > MAX_ATTACHMENTS) {
+    await postLeadTopic(lead, `📎 ${attachments.length - MAX_ATTACHMENTS} more attachment(s) — open the email in Resend to view them.`);
+  }
+}
+
 /** Handle an inbound customer reply (Resend Inbound `email.received`). The webhook
  * carries metadata only, so we fetch the body from Resend, then route it to the
  * customer's Replies-group topic by the SENDER's email (same as the Gmail path).
@@ -146,9 +206,11 @@ async function handleInbound(event: ResendEvent): Promise<void> {
   // the sender + snippet so it always surfaces somewhere — the Reply-To now routes
   // only to us, so there is no Gmail-inbox fallback catching these.
   if (!lead) {
+    const unmatchedAtt = await listInboundAttachments(emailId);
     await notifyOwner(
       `📩 Customer reply — couldn't match it to a lead\nFrom: ${from}` +
-        `${subject ? `\nSubject: ${subject}` : ""}\n\n"${(text || "(no body)").slice(0, 700)}"`,
+        `${subject ? `\nSubject: ${subject}` : ""}\n\n"${(text || "(no body)").slice(0, 700)}"` +
+        (unmatchedAtt.length ? `\n\n📎 ${unmatchedAtt.length} attachment(s) — open the email in Resend to view them.` : ""),
       "replies",
     );
     return;
@@ -183,6 +245,11 @@ async function handleInbound(event: ResendEvent): Promise<void> {
   if (!posted) {
     await notifyOwner(`📩 New customer reply — ${leadLine(lead)}\n\n${inbound}`, "replies");
   }
+
+  // Then the attachments — text first so the thread reads naturally. Photos land
+  // inline in the same topic; PDFs/HEIC/etc. arrive as documents.
+  const attachments = await listInboundAttachments(emailId);
+  if (attachments.length) await relayInboundAttachments(attachments, lead);
 }
 
 /** Canonicalize an address for matching: lowercase/trim, and for Gmail/Googlemail

@@ -165,6 +165,81 @@ async function sendText(
   return { messageId: j?.result?.message_id, chatId: target };
 }
 
+// --- Media sends (email attachments → Telegram) ------------------------------
+
+/** Raw multipart upload (photo or document) — FormData/Blob are native on the
+ * Node runtime, and Telegram requires multipart for file uploads. */
+function postMedia(
+  chatId: string,
+  method: "sendPhoto" | "sendDocument",
+  file: { data: ArrayBuffer; filename: string; contentType: string },
+  caption?: string,
+  messageThreadId?: number,
+): Promise<Response> {
+  const fd = new FormData();
+  fd.append("chat_id", chatId);
+  if (messageThreadId != null) fd.append("message_thread_id", String(messageThreadId));
+  if (caption) fd.append("caption", caption.slice(0, 1000));
+  fd.append(
+    method === "sendPhoto" ? "photo" : "document",
+    new Blob([file.data], { type: file.contentType }),
+    file.filename || "attachment",
+  );
+  return fetch(api(method), { method: "POST", body: fd });
+}
+
+// Telegram renders these inline via sendPhoto; everything else (HEIC, PDF, …)
+// goes as a document. Oversized photos fall back to document too.
+const PHOTO_TYPES = /^image\/(jpe?g|png|webp|gif)$/i;
+const PHOTO_MAX = 9_500_000; // sendPhoto cap is 10 MB
+const DOC_MAX = 45_000_000; // sendDocument cap is 50 MB
+
+/** Send one file into a chat/topic — photo when possible, document otherwise,
+ * following a group→supergroup migration like sendText. False = Telegram said no. */
+async function sendAttachment(
+  chatId: string,
+  file: { data: ArrayBuffer; filename: string; contentType: string },
+  caption?: string,
+  messageThreadId?: number,
+): Promise<boolean> {
+  if (file.data.byteLength === 0 || file.data.byteLength > DOC_MAX) return false;
+  let target = migratedChat.get(chatId) || chatId;
+  const attempt = async (method: "sendPhoto" | "sendDocument"): Promise<boolean> => {
+    let r = await postMedia(target, method, file, caption, messageThreadId);
+    let j = (await r.json().catch(() => null)) as { parameters?: { migrate_to_chat_id?: number } } | null;
+    if (!r.ok && j?.parameters?.migrate_to_chat_id) {
+      const newId = String(j.parameters.migrate_to_chat_id);
+      migratedChat.set(chatId, newId);
+      target = newId;
+      r = await postMedia(newId, method, file, caption, messageThreadId);
+    }
+    return r.ok;
+  };
+  if (PHOTO_TYPES.test(file.contentType) && file.data.byteLength <= PHOTO_MAX && (await attempt("sendPhoto"))) {
+    return true;
+  }
+  return attempt("sendDocument");
+}
+
+/** Post an email attachment into the lead's Replies-group topic (or the flat
+ * Replies chat when topics aren't available) — the media twin of postLeadTopic. */
+export async function postLeadTopicAttachment(
+  lead: Lead,
+  file: { data: ArrayBuffer; filename: string; contentType: string },
+  caption?: string,
+): Promise<boolean> {
+  if (!BOT_TOKEN) return false;
+  try {
+    const threadId = CHAT_REPLIES ? await getOrCreateReplyTopic(lead) : undefined;
+    const chat = threadId != null ? CHAT_REPLIES : chatFor("replies");
+    if (!chat) return false;
+    return await sendAttachment(chat, file, caption, threadId ?? undefined);
+  } catch (e) {
+    console.error("[notify] postLeadTopicAttachment failed:", e);
+    return false;
+  }
+}
+
 // --- Replies-group Topics inbox: one forum topic per lead's conversation --------
 // The Replies group is a forum (Topics enabled) with the bot as an admin holding
 // "Manage Topics". Each lead gets one topic; inbound customer texts/emails post
