@@ -83,6 +83,9 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
     const v = lead.vehicle;
     const km = v.mileageKm ? ` · ${Number(v.mileageKm).toLocaleString("en-CA")} km` : "";
     lines.push(`${v.year} ${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ""}${km}`);
+    // Surface the raw VIN right in the lead message (never a separate alert) so
+    // the seller never has to re-send it. Only present on VIN-lookup-path leads.
+    if (v.vin) lines.push(`🔑 VIN: ${v.vin}`);
     const cond = v.condition;
     if (cond && (cond.tags?.length || cond.note)) {
       const tagStr = (cond.tags || []).join(", ");
