@@ -15,6 +15,7 @@ import {
   smsWinback,
   smsBookingDayOf,
 } from "@/lib/sms";
+import { runRecontactDigest } from "@/lib/recontact";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -51,6 +52,21 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Manual/preview trigger for JUST the re-contact digest: ?task=recontact
+  // (&dry=1 computes + returns the messages without sending or stamping).
+  // Runs nothing else, so an off-hour trigger can't double-run other cadences.
+  if (req.nextUrl.searchParams.get("task") === "recontact") {
+    const dry = req.nextUrl.searchParams.get("dry") === "1";
+    try {
+      const leads = (await getLeads()).filter((l) => !l.archived);
+      const r = await runRecontactDigest(leads, Date.now(), dry);
+      return NextResponse.json({ ok: true, task: "recontact", dry, ...r });
+    } catch (e) {
+      console.error("[cron] recontact trigger failed", e);
+      return NextResponse.json({ ok: false, error: "recontact failed" }, { status: 500 });
+    }
+  }
+
   const now = Date.now();
   const nowISO = new Date(now).toISOString();
   const summary = {
@@ -63,6 +79,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     dayOfReminders: 0,
     partialRecovery: 0,
     geoResolved: 0,
+    recontactListed: 0,
     digestSent: false,
     scoreboardSent: false,
     metaSynced: false,
@@ -273,6 +290,18 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     }
   } catch (e) {
     console.error("[cron] chat geo backfill failed", e);
+  }
+
+  // --- Daily re-contact list — noon MT, into the Leads channel. Phone leads due
+  //     a manual "still interested?" text at 7/14/21 days (lib/recontact.ts).
+  //     Per-lead stamps make a same-hour re-run a no-op. ---
+  if (mtHour === 12) {
+    try {
+      const r = await runRecontactDigest(leads, now, false);
+      summary.recontactListed = r.due;
+    } catch (e) {
+      console.error("[cron] recontact digest failed", e);
+    }
   }
 
   // --- Daily "Needs Action" digest — one consolidated message at ~8am MT ---

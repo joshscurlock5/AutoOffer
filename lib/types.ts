@@ -352,6 +352,15 @@ export interface Lead {
    * Kept SEPARATE from the tracked attribution.utmCampaign so it never pollutes the
    * "as-tracked / Meta" view — only the "my data" (corrected) view uses it. */
   assignedCampaign?: string;
+  /** Which contact-requirement experiment variant was live when this lead came in
+   * (ExperimentVariant). Absent on pre-experiment leads → treated as "choose" in
+   * the A/B analytics. */
+  experimentVariant?: ExperimentVariant;
+  /** Daily noon re-contact list (lib/recontact.ts): how many check-in lists this
+   * lead has appeared on (0–3; 3 = done — 7/14/21-day pings all sent) and when it
+   * last appeared (the next ping is due 7 days after that). */
+  recontactStage?: number;
+  recontactLastAt?: string;
   /** Resend ids of the scheduled reminder-drip emails (cancelled when the lead leaves "new"). */
   dripEmailIds?: string[];
   /** Lifecycle timestamps (ISO) for the follow-up cadence + back-half metrics. */
@@ -443,6 +452,16 @@ export interface Lead {
 /** One row in the first-party events table (AutoOfferEvents). Written by
  * /api/events from the client beacon (lib/events.ts); expired by DynamoDB TTL
  * after ~12 months. */
+/** A/B experiment: which contact-requirement variant the seller experiences.
+ * The active one (lib/store getActiveVariant) BOTH drives the live form and
+ * stamps new leads/events, so the funnel can be compared per variant. */
+export type ExperimentVariant = "choose" | "phone_required";
+export const DEFAULT_VARIANT: ExperimentVariant = "choose";
+export const EXPERIMENT_VARIANTS: { key: ExperimentVariant; label: string; blurb: string }[] = [
+  { key: "choose", label: "Choose either", blurb: "Seller picks how to be reached — neither email nor phone is forced. The current live form." },
+  { key: "phone_required", label: "Phone required", blurb: "Phone is required; email is optional." },
+];
+
 export interface SiteEvent {
   /** Partition key — the same behavior.sessionId stored on leads. */
   sessionId: string;
@@ -464,6 +483,9 @@ export interface SiteEvent {
   utmContent?: string;
   utmCampaign?: string;
   utmSource?: string;
+  /** Contact-requirement experiment variant live when this event fired, stamped by
+   * /api/events from the active setting. Absent on pre-experiment rows → "choose". */
+  variant?: ExperimentVariant;
   /** Epoch-seconds TTL attribute. */
   ttl: number;
 }
