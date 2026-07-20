@@ -55,8 +55,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
         "Content-Type": a.content_type || "application/octet-stream",
         "Content-Length": String(buf.byteLength),
         "Content-Disposition": `inline; filename="${name}"`,
-        // Same bytes for the life of the email — let the browser keep them.
-        "Cache-Control": "private, max-age=86400",
+        // Browser may keep the bytes; the CDN must NOT (s-maxage=0) — a cached
+        // hung response at CloudFront is exactly what broke the first rollout.
+        "Cache-Control": "private, max-age=86400, s-maxage=0",
         "X-Content-Type-Options": "nosniff",
         // Deploy beacon — lets ops tell WHICH revision is answering (the wire
         // format alone can't distinguish streamed from buffered).

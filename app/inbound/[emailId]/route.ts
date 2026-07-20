@@ -95,7 +95,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
   const cards = attachments
     .map((a, i) => {
       const name = esc((a.filename || "attachment").slice(0, 120));
-      const url = `/inbound/${emailId}/${i}`;
+      // ?v=r2 sidesteps CloudFront entries poisoned during the streamed era
+      // (hung chunked responses got cached under the query-less keys).
+      const url = `/inbound/${emailId}/${i}?v=r2`;
       if ((a.content_type || "").startsWith("image/")) {
         return `<a class="card" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}" loading="lazy"><div class="cap">${name}</div></a>`;
       }
