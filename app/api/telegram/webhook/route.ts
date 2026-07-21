@@ -262,13 +262,13 @@ async function editMessageReplyMarkup(chatId: number | string, messageId: number
 }
 
 /** Edit a message's text (+ optional buttons) in place. */
-async function editMessage(chatId: number | string, messageId: number, text: string, replyMarkup?: unknown): Promise<void> {
+async function editMessage(chatId: number | string, messageId: number, text: string, replyMarkup?: unknown, parseMode?: string): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, disable_web_page_preview: true, ...(parseMode ? { parse_mode: parseMode } : {}), ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
     });
   } catch {
     /* best-effort */
@@ -299,7 +299,7 @@ async function refreshLeadAlert(lead: Lead): Promise<void> {
   const code = lead.id.split("-")[0];
   // Keep the original header (an abandoned-form lead must not get relabeled "new").
   const header = lead.status === "partial" || lead.partialNotifiedAt ? PARTIAL_LEAD_HEADER : undefined;
-  await editMessage(lead.negChatId, lead.negMsgId, buildText(lead, header), negKeyboardFor(code));
+  await editMessage(lead.negChatId, lead.negMsgId, buildText(lead, header, { html: true }), negKeyboardFor(code), "HTML");
 }
 
 /** Download a Telegram photo/file by file_id → bytes + a filename + content-type.

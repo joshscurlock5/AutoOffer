@@ -74,23 +74,27 @@ const EMOJI_CART = String.fromCodePoint(0x1f6d2);
 export const PARTIAL_LEAD_HEADER = `${EMOJI_CART} Abandoned form — reachable (they left contact info)`;
 
 /** Human-friendly message body. Telegram auto-links phone numbers + emails. */
-export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): string {
+export function buildText(lead: Lead, header = "🚗 New DriveOffer lead", opts?: { html?: boolean }): string {
+  // In HTML mode every interpolated value is escaped and the id becomes a tap-to-copy
+  // <code> chip. Plain mode (default) is the byte-safe fallback used if Telegram ever
+  // rejects the HTML — a lead alert must never be lost to a formatting error.
+  const esc = opts?.html ? escapeHtml : (s: string) => s;
   const c = lead.contact;
   const reach = c.contactMethod ?? "call";
-  const lines: string[] = [header, "", c.name];
+  const lines: string[] = [header, "", esc(c.name || "")];
 
   if (lead.vehicle) {
     const v = lead.vehicle;
     const km = v.mileageKm ? ` · ${Number(v.mileageKm).toLocaleString("en-CA")} km` : "";
-    lines.push(`${v.year} ${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ""}${km}`);
+    lines.push(`${v.year} ${esc(String(v.make))} ${esc(String(v.model))}${v.trim ? ` ${esc(String(v.trim))}` : ""}${km}`);
     // Surface the raw VIN right in the lead message (never a separate alert) so
     // the seller never has to re-send it. Only present on VIN-lookup-path leads.
-    if (v.vin) lines.push(`🔑 VIN: ${v.vin}`);
+    if (v.vin) lines.push(`🔑 VIN: ${esc(String(v.vin))}`);
     const cond = v.condition;
     if (cond && (cond.tags?.length || cond.note)) {
       const tagStr = (cond.tags || []).join(", ");
       const noteStr = cond.note ? `${tagStr ? " — " : ""}${cond.note}` : "";
-      lines.push(`🔧 ${tagStr}${noteStr}`);
+      lines.push(`🔧 ${esc(`${tagStr}${noteStr}`)}`);
     }
   }
 
@@ -100,23 +104,46 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
     lines.push("Needs quote");
   }
 
-  lines.push("", `Prefers: ${reach}`);
-  if (c.phone) lines.push(`📞 ${c.phone}`);
-  if (c.email) lines.push(`✉️ ${c.email}`);
-  if (c.bestTime) lines.push(`🕒 Best time: ${c.bestTime}`);
-  if (lead.message) lines.push("", `"${lead.message.slice(0, 200)}"`);
+  lines.push("", `Prefers: ${esc(reach)}`);
+  if (c.phone) lines.push(`📞 ${esc(c.phone)}`);
+  if (c.email) lines.push(`✉️ ${esc(c.email)}`);
+  if (c.bestTime) lines.push(`🕒 Best time: ${esc(c.bestTime)}`);
+  if (lead.message) lines.push("", `"${esc(lead.message.slice(0, 200))}"`);
 
-  // Short ID for reference. The tap-to-act buttons under the alert (📧 Email offer /
-  // ❓ Ask for info / ✉️ Message) replace the old typed command hints.
-  const sid = lead.id.split("-")[0];
   if (lead.contactedAt) lines.push("", "✅ Contacted");
-  lines.push("", `🆔 ${sid}`);
+
+  // Short ID right under the lead so it's always on hand for /offer <id>, /confirm, etc.
+  // In HTML mode it's a one-tap-copy <code> chip (tap it to copy, like the outreach
+  // template); plain mode (fallback) shows it as text.
+  const sid = lead.id.split("-")[0];
+  lines.push("", opts?.html ? `🆔 <code>${esc(sid)}</code>` : `🆔 ${sid}`);
 
   // Fold the negotiation trail right into the lead — no separate scoreboard message.
   const trail = negTrail(lead.negotiation);
-  if (trail) lines.push("", `📊 ${trail}`);
+  if (trail) lines.push("", `📊 ${esc(trail)}`);
 
   return lines.join("\n");
+}
+
+/** The ready-to-send opening message Samir copies straight to the customer, with the
+ * lead's vehicle (year make model) filled in — falls back to a generic "vehicle" for
+ * contact-only inquiries with no car on file. */
+export function outreachTemplate(lead: Lead): string {
+  const v = lead.vehicle;
+  const vehicle = v ? `${v.year} ${v.make} ${v.model}` : "vehicle";
+  return `Hey, it's Sam with DriveOffer! Thanks for reaching out about your ${vehicle}. I'll help make this as quick and easy as possible. To get started, has the vehicle ever been in an accident or had an insurance claim?`;
+}
+
+/** Minimal HTML escape for the interpolated vehicle name, so the HTML-parsed one-tap-
+ * copy block can never be broken by a stray & < > in the text. */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** The outreach template wrapped in a <pre> block: one tap copies the whole filled-in
+ * message to the clipboard (Telegram HTML parse mode). */
+function templateBlock(lead: Lead): string {
+  return `<pre>${escapeHtml(outreachTemplate(lead))}</pre>`;
 }
 
 // A basic group becomes a SUPERGROUP (e.g. when Topics is turned on) — which
@@ -128,7 +155,7 @@ export function buildText(lead: Lead, header = "🚗 New DriveOffer lead"): stri
 // taps (allow-listed in the webhook) also target the new id.
 const migratedChat = new Map<string, string>();
 
-function postMessage(chatId: string, text: string, replyMarkup?: unknown, messageThreadId?: number) {
+function postMessage(chatId: string, text: string, replyMarkup?: unknown, messageThreadId?: number, parseMode?: string) {
   return fetch(api("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -137,6 +164,7 @@ function postMessage(chatId: string, text: string, replyMarkup?: unknown, messag
       text,
       disable_web_page_preview: true,
       ...(messageThreadId != null ? { message_thread_id: messageThreadId } : {}),
+      ...(parseMode ? { parse_mode: parseMode } : {}),
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     }),
   });
@@ -150,15 +178,16 @@ async function sendText(
   chatId: string,
   replyMarkup?: unknown,
   messageThreadId?: number,
+  parseMode?: string,
 ): Promise<{ messageId?: number; chatId: string }> {
   let target = migratedChat.get(chatId) || chatId;
-  let r = await postMessage(target, text, replyMarkup, messageThreadId);
+  let r = await postMessage(target, text, replyMarkup, messageThreadId, parseMode);
   let j = await r.json().catch(() => null);
   if (!r.ok && j?.parameters?.migrate_to_chat_id) {
     const newId = String(j.parameters.migrate_to_chat_id);
     migratedChat.set(chatId, newId);
     target = newId;
-    r = await postMessage(newId, text, replyMarkup, messageThreadId);
+    r = await postMessage(newId, text, replyMarkup, messageThreadId, parseMode);
     j = await r.json().catch(() => null);
   }
   if (!r.ok) throw new Error(`sendMessage ${r.status}`);
@@ -437,17 +466,27 @@ function negKeyboard(lead: Lead) {
 export async function notifyNewLead(lead: Lead): Promise<void> {
   const chat = chatFor("leads");
   if (!BOT_TOKEN || !chat) return;
-  const text = buildText(lead);
-  const sid = lead.id.split("-")[0];
   try {
-    const sent = await sendText(text, chat, negKeyboard(lead));
-    // Second message: the bare short ID only — no emoji, no label, nothing else —
-    // so it can be long-pressed to copy on mobile. Sent once, with the lead alert
-    // only (the /offer, /confirm, /cancel command replies never send it).
-    await sendText(sid, sent.chatId);
+    // HTML alert so the 🆔 id is a one-tap-copy chip. If Telegram ever rejects the HTML,
+    // fall back to the plain-text alert so a lead is NEVER silently dropped.
+    let sent: Awaited<ReturnType<typeof sendText>>;
+    try {
+      sent = await sendText(buildText(lead, undefined, { html: true }), chat, negKeyboard(lead), undefined, "HTML");
+    } catch (e) {
+      console.error("[notify] HTML lead alert rejected, retrying plain:", e);
+      sent = await sendText(buildText(lead), chat, negKeyboard(lead));
+    }
     // Remember this alert's message so the negotiation trail can later be edited
     // straight into it (folded in), instead of posting a separate scoreboard.
     if (sent.messageId != null) await updateLead(lead.id, { negMsgId: sent.messageId, negChatId: sent.chatId });
+    // Second message: a ready-to-send opening line with the vehicle filled in, as a
+    // ONE-TAP-COPY block so Samir can paste it straight to the customer. Best-effort
+    // and isolated — a template hiccup must never undo the alert above.
+    try {
+      await sendText(templateBlock(lead), sent.chatId, undefined, undefined, "HTML");
+    } catch (e) {
+      console.error("[notify] lead template send failed:", e);
+    }
   } catch (e) {
     // Log only — the lead is already saved; alerts must never break it.
     console.error("[notify] lead Telegram alert failed:", e);
@@ -465,12 +504,21 @@ export async function notifyNewLead(lead: Lead): Promise<void> {
 export async function notifyPartialLead(lead: Lead): Promise<void> {
   const chat = chatFor("leads");
   if (!BOT_TOKEN || !chat) return;
-  const sid = lead.id.split("-")[0];
-  const text = buildText(lead, PARTIAL_LEAD_HEADER);
   try {
-    const sent = await sendText(text, chat, negKeyboard(lead));
-    await sendText(sid, sent.chatId);
+    let sent: Awaited<ReturnType<typeof sendText>>;
+    try {
+      sent = await sendText(buildText(lead, PARTIAL_LEAD_HEADER, { html: true }), chat, negKeyboard(lead), undefined, "HTML");
+    } catch (e) {
+      console.error("[notify] HTML partial alert rejected, retrying plain:", e);
+      sent = await sendText(buildText(lead, PARTIAL_LEAD_HEADER), chat, negKeyboard(lead));
+    }
     if (sent.messageId != null) await updateLead(lead.id, { negMsgId: sent.messageId, negChatId: sent.chatId });
+    // One-tap-copy opening message (vehicle filled in) — best-effort, mirrors notifyNewLead.
+    try {
+      await sendText(templateBlock(lead), sent.chatId, undefined, undefined, "HTML");
+    } catch (e) {
+      console.error("[notify] partial template send failed:", e);
+    }
   } catch (e) {
     console.error("[notify] partial Telegram alert failed:", e);
   }
