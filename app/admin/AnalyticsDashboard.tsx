@@ -2318,10 +2318,11 @@ interface SnapRow {
   level: string; date: string; entityId: string; entityName: string;
   breakdownKey: string; breakdownValue: string; spend: number;
   metrics: Record<string, number | string | null>;
-  campaignName?: string; adsetName?: string;
+  campaignId?: string; campaignName?: string; adsetId?: string; adsetName?: string;
 }
 
 const AD_LEVELS = [
+  { key: "all", label: "All levels" },
   { key: "account", label: "Account" },
   { key: "campaign", label: "Campaign" },
   { key: "adset", label: "Ad set" },
@@ -2344,6 +2345,8 @@ const AD_BREAKDOWNS: Record<string, { key: string; label: string }[]> = {
 interface Agg {
   key: string;
   name: string;
+  /** Optional grey parent breadcrumb shown under the name (stacked "All levels" view). */
+  sub?: string;
   spend: number;
   sums: Record<string, number>;
   cats: Record<string, string>;
@@ -2449,6 +2452,44 @@ function aggregateAds(rows: SnapRow[], breakdown: string) {
   return { aggs, perDay };
 }
 
+type ColPreset = { key: string; label: string; cols: Col[] };
+
+// Fold a set of daily snapshot rows into keyed Aggs (same summation rules as
+// aggregateAds: additive bases sum; rate/cost metrics recomputed later from
+// those totals; categorical rankings keep the last non-empty value). `subOf`
+// supplies the grey parent breadcrumb under the name in the "All levels" view.
+function groupAgg(
+  rows: SnapRow[],
+  keyOf: (r: SnapRow) => string,
+  nameOf: (r: SnapRow) => string,
+  subOf?: (r: SnapRow) => string | undefined,
+): Agg[] {
+  const map = new Map<string, Agg>();
+  for (const r of rows) {
+    const key = keyOf(r) || "(none)";
+    let a = map.get(key);
+    if (!a) { a = { key, name: nameOf(r) || "(unnamed)", sub: subOf?.(r), spend: 0, sums: {}, cats: {} }; map.set(key, a); }
+    a.spend += r.spend || 0;
+    for (const [k, v] of Object.entries(r.metrics || {})) {
+      if (typeof v === "number") { if (!NON_SUM.has(k)) a.sums[k] = (a.sums[k] || 0) + v; }
+      else if (typeof v === "string" && v) a.cats[k] = v;
+    }
+  }
+  return [...map.values()];
+}
+
+// Sort a set of Aggs by a column key (or "name"); reused by the flat table and
+// each stacked "All levels" table.
+function sortAggs(aggs: Agg[], preset: ColPreset, sortKey: string, sortDir: "asc" | "desc"): Agg[] {
+  const col = preset.cols.find((c) => c.key === sortKey);
+  const val = (a: Agg) => (sortKey === "name" ? a.name : col ? col.get(a) : a.spend);
+  return [...aggs].sort((x, y) => {
+    const vx = val(x), vy = val(y);
+    if (typeof vx === "string" || typeof vy === "string") return sortDir === "asc" ? String(vx ?? "").localeCompare(String(vy ?? "")) : String(vy ?? "").localeCompare(String(vx ?? ""));
+    return sortDir === "asc" ? (Number(vx) || 0) - (Number(vy) || 0) : (Number(vy) || 0) - (Number(vx) || 0);
+  });
+}
+
 function windowForRange(range: RangeState): { since: string; until: string } {
   const iso = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
   if (range.preset === "custom" && range.dateFrom && range.dateTo) return { since: range.dateFrom, until: range.dateTo };
@@ -2481,8 +2522,56 @@ function fmtCell(type: ColType, v: number | string | undefined): ReactNode {
   return Math.round(n).toLocaleString("en-CA"); // int
 }
 
+// One stacked, independently-sortable table for the "All levels" view. Renders
+// the active column preset; the name cell shows an optional parent breadcrumb.
+function LevelTable({ title, nameHeader, aggs, preset }: { title: string; nameHeader: string; aggs: Agg[]; preset: ColPreset }) {
+  const [sortKey, setSortKey] = useState("spend");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // Reset sort when the shared column preset changes (a sorted-by column may no
+  // longer exist under the new preset).
+  useEffect(() => { setSortKey("spend"); setSortDir("desc"); }, [preset.key]);
+  const sorted = useMemo(() => sortAggs(aggs, preset, sortKey, sortDir), [aggs, preset, sortKey, sortDir]);
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+  return (
+    <div className="card overflow-x-auto p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-navy">{title}</h3>
+        <span className="text-xs text-muted">{sorted.length} {sorted.length === 1 ? "row" : "rows"}</span>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
+            <th className="cursor-pointer py-2 pr-2" onClick={() => toggleSort("name")}>{nameHeader}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</th>
+            {preset.cols.map((c) => (
+              <th key={c.key} className="cursor-pointer py-2 pl-2 text-right" onClick={() => toggleSort(c.key)} title={c.tip}>
+                {c.label}{c.tip ? <InfoDot tip={c.tip} /> : ""}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">No data in this range.</td></tr>
+          ) : sorted.map((a) => (
+            <tr key={a.key} className="border-b border-slate-50 hover:bg-slate-50/60">
+              <td className="py-2 pr-2">
+                <div className="font-medium text-navy">{a.name}</div>
+                {a.sub && <div className="text-[11px] font-normal text-muted">{a.sub}</div>}
+              </td>
+              {preset.cols.map((c) => <td key={c.key} className="py-2 pl-2 text-right tabular-nums">{fmtCell(c.type, c.get(a))}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AdsTab({ range }: { range: RangeState }) {
-  const [level, setLevel] = useState("campaign");
+  const [level, setLevel] = useState("all");
   const [breakdown, setBreakdown] = useState("none");
   const [presetKey, setPresetKey] = useState("performance");
   const [rows, setRows] = useState<SnapRow[] | null>(null);
@@ -2505,7 +2594,7 @@ function AdsTab({ range }: { range: RangeState }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/admin/meta-insights?level=${level}&breakdown=${breakdown}&since=${since}&until=${until}`)
+    fetch(`/api/admin/meta-insights?level=${level === "all" ? "ad" : level}&breakdown=${breakdown}&since=${since}&until=${until}`)
       .then((r) => r.json())
       .then((d) => { if (!cancelled) { setRows(d.rows || []); setMeta({ configured: d.configured !== false, source: d.source || "", error: d.error }); } })
       .catch(() => { if (!cancelled) { setRows([]); setMeta({ configured: true, source: "" }); } })
@@ -2535,15 +2624,19 @@ function AdsTab({ range }: { range: RangeState }) {
     lpv: aggs.reduce((s, a) => s + gLPV(a), 0),
   }), [aggs]);
 
-  const sorted = useMemo(() => {
-    const col = preset.cols.find((c) => c.key === sortKey);
-    const num = (a: Agg) => (sortKey === "name" ? a.name : col ? col.get(a) : a.spend);
-    return [...aggs].sort((x, y) => {
-      const vx = num(x), vy = num(y);
-      if (typeof vx === "string" || typeof vy === "string") return sortDir === "asc" ? String(vx ?? "").localeCompare(String(vy ?? "")) : String(vy ?? "").localeCompare(String(vx ?? ""));
-      return sortDir === "asc" ? (Number(vx) || 0) - (Number(vy) || 0) : (Number(vy) || 0) - (Number(vx) || 0);
-    });
-  }, [aggs, preset, sortKey, sortDir]);
+  const sorted = useMemo(() => sortAggs(aggs, preset, sortKey, sortDir), [aggs, preset, sortKey, sortDir]);
+
+  // Three-level rollup for the "All levels" view, built from the ad-level rows
+  // (each already carries its parent campaign + ad set ids). Parent totals are
+  // the exact sum of their children.
+  const tree = useMemo(() => {
+    if (level !== "all") return { campaigns: [] as Agg[], adsets: [] as Agg[], ads: [] as Agg[] };
+    const rws = rows || [];
+    const campaigns = groupAgg(rws, (r) => r.campaignId || "", (r) => r.campaignName || "(unnamed campaign)");
+    const adsets = groupAgg(rws, (r) => r.adsetId || "", (r) => r.adsetName || "(unnamed ad set)", (r) => r.campaignName || undefined);
+    const ads = groupAgg(rws, (r) => r.entityId, (r) => r.entityName, (r) => [r.campaignName, r.adsetName].filter(Boolean).join(" › ") || undefined);
+    return { campaigns, adsets, ads };
+  }, [rows, level]);
 
   const trendDays = useMemo(() => {
     const arr = [...perDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
@@ -2556,6 +2649,12 @@ function AdsTab({ range }: { range: RangeState }) {
   }
 
   const btn = (active: boolean) => `rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
+
+  const footnote = (
+    <p className="mt-3 text-[11px] text-muted">
+      Daily numbers are added up over the date range; rates (click rate, cost per click, cost per 1,000 shown, cost per lead) are then recalculated from those totals. <span className="font-semibold">People reached*</span> / <span className="font-semibold">Times seen per person*</span> add each day together, so the same person can be counted more than once (Meta’s own reach counts each person only once). History is saved automatically every night; “Sync from Meta now” updates it right away.
+    </p>
+  );
 
   return (
     <div className="space-y-4">
@@ -2624,41 +2723,57 @@ function AdsTab({ range }: { range: RangeState }) {
         )}
       </div>
 
-      {/* table */}
-      <div className="card overflow-x-auto p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-navy">{AD_LEVELS.find((l) => l.key === level)?.label} · {preset.label}</h3>
-          <span className="text-xs text-muted">
-            {meta.source === "live" ? "live from Meta (saved history still building)" : meta.source === "store" ? "stored history" : ""} · {since} → {until}
-          </span>
-        </div>
-        {meta.error && <p className="mb-2 text-xs text-red-600">Meta: {meta.error}</p>}
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
-              <th className="cursor-pointer py-2 pr-2" onClick={() => toggleSort("name")}>{breakdown === "none" ? "Name" : bdOptions.find((b) => b.key === breakdown)?.label}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</th>
-              {preset.cols.map((c) => (
-                <th key={c.key} className="cursor-pointer py-2 pl-2 text-right" onClick={() => toggleSort(c.key)} title={c.tip}>
-                  {c.label}{c.tip ? <InfoDot tip={c.tip} /> : ""}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.length === 0 ? (
-              <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">{loading ? "Loading…" : "Nothing here yet. Use “Sync from Meta now” to pull your data."}</td></tr>
-            ) : sorted.map((a) => (
-              <tr key={a.key} className="border-b border-slate-50 hover:bg-slate-50/60">
-                <td className="py-2 pr-2 font-medium text-navy">{a.name}</td>
-                {preset.cols.map((c) => <td key={c.key} className="py-2 pl-2 text-right tabular-nums">{fmtCell(c.type, c.get(a))}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-3 text-[11px] text-muted">
-          Daily numbers are added up over the date range; rates (click rate, cost per click, cost per 1,000 shown, cost per lead) are then recalculated from those totals. <span className="font-semibold">People reached*</span> / <span className="font-semibold">Times seen per person*</span> add each day together, so the same person can be counted more than once (Meta’s own reach counts each person only once). History is saved automatically every night; “Sync from Meta now” updates it right away.
-        </p>
+      {/* context line — shared heading + source/date for both views */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h3 className="text-sm font-bold text-navy">{level === "all" ? "All levels" : AD_LEVELS.find((l) => l.key === level)?.label} · {preset.label}</h3>
+        <span className="text-xs text-muted">
+          {meta.source === "live" ? "live from Meta (saved history still building)" : meta.source === "store" ? "stored history" : ""} · {since} → {until}
+        </span>
       </div>
+      {meta.error && <p className="px-1 text-xs text-red-600">Meta: {meta.error}</p>}
+
+      {level === "all" ? (
+        // Three stacked, independently-sortable tables — campaign → ad set → ad,
+        // each rolled up from the ad-level rows so parents = sum of children.
+        loading && !tree.campaigns.length ? (
+          <div className="card p-6 text-center text-sm text-muted">Loading…</div>
+        ) : !tree.campaigns.length ? (
+          <div className="card p-6 text-center text-sm text-muted">Nothing here yet. Use “Sync from Meta now” to pull your data.</div>
+        ) : (
+          <div className="space-y-4">
+            <LevelTable title="Campaigns" nameHeader="Campaign" aggs={tree.campaigns} preset={preset} />
+            <LevelTable title="Ad sets" nameHeader="Ad set" aggs={tree.adsets} preset={preset} />
+            <LevelTable title="Ads (individual creatives)" nameHeader="Ad" aggs={tree.ads} preset={preset} />
+            {footnote}
+          </div>
+        )
+      ) : (
+        <div className="card overflow-x-auto p-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
+                <th className="cursor-pointer py-2 pr-2" onClick={() => toggleSort("name")}>{breakdown === "none" ? "Name" : bdOptions.find((b) => b.key === breakdown)?.label}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</th>
+                {preset.cols.map((c) => (
+                  <th key={c.key} className="cursor-pointer py-2 pl-2 text-right" onClick={() => toggleSort(c.key)} title={c.tip}>
+                    {c.label}{c.tip ? <InfoDot tip={c.tip} /> : ""}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 ? (
+                <tr><td colSpan={preset.cols.length + 1} className="py-6 text-center text-sm text-muted">{loading ? "Loading…" : "Nothing here yet. Use “Sync from Meta now” to pull your data."}</td></tr>
+              ) : sorted.map((a) => (
+                <tr key={a.key} className="border-b border-slate-50 hover:bg-slate-50/60">
+                  <td className="py-2 pr-2 font-medium text-navy">{a.name}</td>
+                  {preset.cols.map((c) => <td key={c.key} className="py-2 pl-2 text-right tabular-nums">{fmtCell(c.type, c.get(a))}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {footnote}
+        </div>
+      )}
     </div>
   );
 }
