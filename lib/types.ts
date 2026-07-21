@@ -198,7 +198,7 @@ export interface DeviceInfo {
 export interface CommsEvent {
   at: string;
   channel: "email" | "sms";
-  /** sent | delivered | opened | clicked | bounced | complained | failed | undelivered | unsubscribed */
+  /** sent | delivered | opened | clicked | replied | bounced | complained | failed | undelivered | unsubscribed */
   type: string;
   /** The link that was clicked (email.clicked only). */
   url?: string;

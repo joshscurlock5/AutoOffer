@@ -185,6 +185,21 @@ export async function atomicLeadEngagement(
   }
 }
 
+/** The template kind of the most recent email we logged sending to this lead — used to
+ * attribute an inbound reply (or opt-out) to the email that most likely prompted it, so
+ * the Emails tab can show a per-template response / opt-out rate. undefined if none. */
+export function lastSentEmailKind(lead: Lead): string | undefined {
+  let bestAt = "";
+  let bestKind: string | undefined;
+  for (const e of lead.commsEvents || []) {
+    if (e.channel === "email" && e.type === "sent" && e.kind && e.at > bestAt) {
+      bestAt = e.at;
+      bestKind = e.kind;
+    }
+  }
+  return bestKind;
+}
+
 /** Read a (possibly dotted) path off an object. Used only by atomicLeadEngagement's fallback. */
 function getPath(obj: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), obj);

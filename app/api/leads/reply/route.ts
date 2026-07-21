@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeadByShortId, findLeadByEmail, atomicLeadEngagement } from "@/lib/store";
+import { getLeadByShortId, findLeadByEmail, atomicLeadEngagement, lastSentEmailKind } from "@/lib/store";
 import { postLeadTopic } from "@/lib/notify";
 import type { Lead } from "@/lib/types";
 
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
 
   // Atomic write — see lib/store.ts atomicLeadEngagement (concurrent replies /
   // webhook stamps racing on the same lead).
+  // Only an EMAIL reply becomes an email "replied" receipt (attributed to the email
+  // that most likely prompted it) so the Emails tab's per-template response rate is right.
+  const rkind = channel === "email" ? lastSentEmailKind(lead) : undefined;
   await atomicLeadEngagement(lead.id, {
     set: {
       lastReplyAt: new Date().toISOString(),
@@ -59,6 +62,9 @@ export async function POST(req: NextRequest) {
       nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     },
     increment: { repliesCount: 1 },
+    ...(channel === "email"
+      ? { appendCommsEvent: { at: new Date().toISOString(), channel: "email", type: "replied", ...(rkind ? { kind: rkind } : {}) } }
+      : {}),
   });
 
   // Post the reply body into the customer's topic (when we have it). topicPosted

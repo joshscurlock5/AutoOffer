@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, Fragment, type ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 //  "Emails" tab — every email the system sends, in one place:
@@ -27,6 +27,7 @@ interface EmailStats {
     reached: number;
     opened: number;
     clicked: number;
+    responded: number;
     bounced: number;
     optedOut: number;
   };
@@ -35,11 +36,12 @@ interface EmailStats {
     delivered: number;
     opened: number;
     clicked: number;
+    replied: number;
     bounced: number;
     complained: number;
     unsubscribed: number;
   };
-  perKind: { kind: string; sent: number; delivered: number; opened: number; clicked: number }[];
+  perKind: { kind: string; sent: number; delivered: number; opened: number; clicked: number; responded: number; bounced: number; optedOut: number }[];
   trackingSince: string | null;
   historicalSends: { kind: string; count: number; method: string }[];
 }
@@ -77,6 +79,17 @@ function StatCard({ label, value, sub, tip }: { label: string; value: string; su
   );
 }
 
+// One labelled stat inside an expanded per-email-type detail row.
+function Detail({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-base font-bold tabular-nums text-navy">{value}</div>
+      {sub && <div className="text-[10px] text-muted">{sub}</div>}
+    </div>
+  );
+}
+
 function Section({ title, children, tip }: { title: string; children: ReactNode; tip?: string }) {
   return (
     <section className="mt-8">
@@ -105,6 +118,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [previews, setPreviews] = useState<EmailPreview[] | null>(null);
   const [openKind, setOpenKind] = useState<string | null>(null); // one modal at a time
+  const [detailKind, setDetailKind] = useState<string | null>(null); // expanded per-type stats row
 
   // Stats re-fetch whenever the dashboard's date window moves.
   useEffect(() => {
@@ -155,7 +169,8 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
     if (pk) {
       parts.push(
         `in the selected date range: ${fmt(pk.sent)} sent · ${fmt(pk.delivered)} delivered · ${fmt(pk.opened)} opened` +
-          (pk.clicked > 0 ? ` · ${fmt(pk.clicked)} clicked` : ""),
+          (pk.clicked > 0 ? ` · ${fmt(pk.clicked)} clicked` : "") +
+          (pk.responded > 0 ? ` · ${fmt(pk.responded)} replied` : ""),
       );
     }
     return parts.length ? parts.join(" — ") : "We just started counting this email — numbers will appear here.";
@@ -169,7 +184,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
         {!a ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
             <StatCard
               label="Leads we can email"
               value={fmt(a.emailableLeads)}
@@ -193,6 +208,12 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
               value={fmt(a.clicked)}
               sub={`${pctOf(a.clicked, a.reached)} of reached`}
               tip="Leads who clicked a link in any email — the clearest sign of real interest we get."
+            />
+            <StatCard
+              label="Responded"
+              value={fmt(a.responded)}
+              sub={`${pctOf(a.responded, a.reached)} of reached`}
+              tip="Leads who actually replied to an email — the strongest signal of interest, and unlike opens it can't be blocked. Counts every reply we've received, including from before open tracking existed."
             />
             <StatCard
               label="Bounced"
@@ -236,6 +257,7 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
             )}
             {stats && stats.perKind.length > 0 && (
               <div className="mt-4 overflow-x-auto">
+                <p className="mb-2 text-xs text-muted">Tap an email type to see its full breakdown and rates.</p>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
@@ -244,18 +266,47 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
                       <th className="py-2 pl-2 text-right">Delivered</th>
                       <th className="py-2 pl-2 text-right">Opened</th>
                       <th className="py-2 pl-2 text-right">Clicked</th>
+                      <th className="py-2 pl-2 text-right">Responded</th>
+                      <th className="py-2 pl-2 text-right">Opted out</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.perKind.map((k) => (
-                      <tr key={k.kind} className="border-b border-slate-50">
-                        <td className="py-2 pr-2 font-medium text-navy">{k.kind}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.sent)}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.delivered)}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.opened)}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.clicked)}</td>
-                      </tr>
-                    ))}
+                    {stats.perKind.map((k) => {
+                      const isOpen = detailKind === k.kind;
+                      return (
+                        <Fragment key={k.kind}>
+                          <tr
+                            className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60"
+                            onClick={() => setDetailKind(isOpen ? null : k.kind)}
+                          >
+                            <td className="py-2 pr-2 font-medium text-navy">
+                              <span className="mr-1 inline-block w-3 text-slate-400">{isOpen ? "▾" : "▸"}</span>{k.kind}
+                            </td>
+                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.sent)}</td>
+                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.delivered)}</td>
+                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.opened)}</td>
+                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.clicked)}</td>
+                            <td className="py-2 pl-2 text-right font-semibold tabular-nums text-navy">{fmt(k.responded)}</td>
+                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.optedOut)}</td>
+                          </tr>
+                          {isOpen && (
+                            <tr className="border-b border-slate-100 bg-slate-50/50">
+                              <td colSpan={7} className="px-3 py-3">
+                                <div className="flex flex-wrap gap-x-7 gap-y-3">
+                                  <Detail label="Delivery rate" value={pctOf(k.delivered, k.sent)} sub={`${fmt(k.delivered)} of ${fmt(k.sent)} sent`} />
+                                  <Detail label="Open rate" value={pctOf(k.opened, k.delivered)} sub={`${fmt(k.opened)} of ${fmt(k.delivered)} delivered`} />
+                                  <Detail label="Click rate" value={pctOf(k.clicked, k.delivered)} sub={`${fmt(k.clicked)} of ${fmt(k.delivered)} delivered`} />
+                                  <Detail label="Reply rate" value={pctOf(k.responded, k.delivered)} sub={`${fmt(k.responded)} replied`} />
+                                  <Detail label="Bounced" value={fmt(k.bounced)} />
+                                  <Detail label="Opted out" value={fmt(k.optedOut)} />
+                                </div>
+                                <p className="mt-2 text-[11px] text-muted">Opens/clicks count only emails sent after tracking was on; replies count for every reply received.</p>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
                 {stats.trackingSince && (
@@ -320,11 +371,11 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
 
       {/* (e) data-honesty footnote — so nobody misreads partial data as truth. */}
       <div className="card mt-6 p-4 text-xs leading-relaxed text-muted">
-        <span className="font-semibold text-navy">About these numbers.</span> We only started getting delivery, open, and click reports when
-        our email tracking was switched on — leads emailed before that show no opens or clicks even if they read everything. Opens are an
-        undercount (Apple and Gmail often block the hidden image that detects opens). Counting for each email type started
-        today, so per-email numbers build up over time; the &ldquo;~sent&rdquo; figures
-        are estimates worked out from each lead&apos;s history, not exact counts.
+        <span className="font-semibold text-navy">About these numbers.</span> Open and click tracking only records emails sent <span className="font-semibold">after</span> it
+        was turned on — anyone emailed before that shows no opens or clicks even if they read everything, and opens are always an undercount
+        (Apple and Gmail block the hidden image that detects them). <span className="font-semibold text-navy">Responses are the reliable signal</span> — a reply
+        can&apos;t be blocked, and we count every reply we&apos;ve ever received. Per-email-type counting started when tracking went on, so those
+        numbers build up over time; the &ldquo;~sent&rdquo; figures are estimates from each lead&apos;s history, not exact counts.
       </div>
 
       {/* (d) full-size viewer — one at a time, click-outside or ✕ to close. */}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getLeads, atomicLeadEngagement, getLeadByShortId, updateLead } from "@/lib/store";
+import { getLeads, atomicLeadEngagement, getLeadByShortId, updateLead, lastSentEmailKind } from "@/lib/store";
 import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
 import type { CommsEvent, Lead } from "@/lib/types";
 
@@ -205,6 +205,7 @@ async function handleInbound(event: ResendEvent): Promise<void> {
   // Stamp engagement — best-effort; a transient DynamoDB fault must NOT stop us from
   // surfacing the reply, so isolate it from the owner-facing post below.
   try {
+    const rkind = lastSentEmailKind(lead);
     await atomicLeadEngagement(lead.id, {
       set: {
         lastReplyAt: new Date().toISOString(),
@@ -212,6 +213,9 @@ async function handleInbound(event: ResendEvent): Promise<void> {
         nurturePausedUntil: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
       },
       increment: { repliesCount: 1 },
+      // Also drop a "replied" receipt into the ledger the Emails tab walks, tagged with
+      // the email that most likely prompted it, so per-template response rate is countable.
+      appendCommsEvent: { at: new Date().toISOString(), channel: "email", type: "replied", ...(rkind ? { kind: rkind } : {}) },
     });
   } catch (e) {
     console.error("[resend inbound] engagement stamp failed:", e);

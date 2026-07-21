@@ -61,13 +61,18 @@ export async function GET(req: NextRequest) {
       reached: leads.filter((l) => (l.emailEngagement?.deliveredCount || 0) > 0).length,
       opened: leads.filter((l) => (l.emailEngagement?.opensCount || 0) > 0).length,
       clicked: leads.filter((l) => (l.emailEngagement?.clicksCount || 0) > 0).length,
+      // Leads who have replied at least once. A lead-level counter, so it counts
+      // RETROACTIVELY — and a reply is a far stronger signal than an open (and can't
+      // be blocked the way opens can). SMS isn't live, so these are effectively email replies.
+      responded: leads.filter((l) => (l.repliesCount || 0) > 0).length,
       bounced: leads.filter((l) => l.emailBounced).length,
       optedOut: leads.filter((l) => l.emailOptOut).length,
     };
 
     // -- Tier 2 + 3: walk commsEvents once for both -------------------------
-    const inRange = { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0, unsubscribed: 0 };
-    const perKindMap = new Map<string, { kind: string; sent: number; delivered: number; opened: number; clicked: number }>();
+    const inRange = { sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, complained: 0, unsubscribed: 0 };
+    type KindRow = { kind: string; sent: number; delivered: number; opened: number; clicked: number; responded: number; bounced: number; optedOut: number };
+    const perKindMap = new Map<string, KindRow>();
     let trackingSince: string | null = null;
 
     for (const l of leads) {
@@ -78,14 +83,20 @@ export async function GET(req: NextRequest) {
         if (e.kind && e.type === "sent" && (!trackingSince || e.at < trackingSince)) trackingSince = e.at;
         if (!inWindow(e.at)) continue;
         if (e.type in inRange) inRange[e.type as keyof typeof inRange] += 1;
-        if (e.kind && (e.type === "sent" || e.type === "delivered" || e.type === "opened" || e.type === "clicked")) {
-          let row = perKindMap.get(e.kind);
-          if (!row) {
-            row = { kind: e.kind, sent: 0, delivered: 0, opened: 0, clicked: 0 };
-            perKindMap.set(e.kind, row);
-          }
-          row[e.type] += 1;
+        if (!e.kind) continue;
+        let row = perKindMap.get(e.kind);
+        if (!row) {
+          row = { kind: e.kind, sent: 0, delivered: 0, opened: 0, clicked: 0, responded: 0, bounced: 0, optedOut: 0 };
+          perKindMap.set(e.kind, row);
         }
+        // Map each receipt type onto the per-template column it belongs to.
+        if (e.type === "sent") row.sent += 1;
+        else if (e.type === "delivered") row.delivered += 1;
+        else if (e.type === "opened") row.opened += 1;
+        else if (e.type === "clicked") row.clicked += 1;
+        else if (e.type === "replied") row.responded += 1;
+        else if (e.type === "bounced" || e.type === "failed") row.bounced += 1;
+        else if (e.type === "unsubscribed" || e.type === "complained") row.optedOut += 1;
       }
     }
     const perKind = [...perKindMap.values()].sort((a, b) => b.sent - a.sent || a.kind.localeCompare(b.kind));
@@ -129,8 +140,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       since,
       until,
-      allTime: { leads: 0, emailableLeads: 0, reached: 0, opened: 0, clicked: 0, bounced: 0, optedOut: 0 },
-      inRange: { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0, unsubscribed: 0 },
+      allTime: { leads: 0, emailableLeads: 0, reached: 0, opened: 0, clicked: 0, responded: 0, bounced: 0, optedOut: 0 },
+      inRange: { sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, complained: 0, unsubscribed: 0 },
       perKind: [],
       trackingSince: null,
       historicalSends: [],
