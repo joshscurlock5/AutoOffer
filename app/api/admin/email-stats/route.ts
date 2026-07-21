@@ -31,7 +31,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Same shape-check lib/email.ts validEmail uses — "could we even email them".
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function GET(req: NextRequest) {
+// Shared by GET (all leads) and POST (scoped to a lead-id allow-list). `allow`
+// null = every lead; a Set = only those ids (the dashboard's dimension filters,
+// resolved upstream to lead ids — see POST).
+async function buildStats(req: NextRequest, allow: Set<string> | null) {
   if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -52,8 +55,13 @@ export async function GET(req: NextRequest) {
 
   try {
     // Archived (soft-deleted) leads are excluded from ALL analytics, same as
-    // every other dashboard endpoint.
-    const leads = (await getLeads()).filter((l) => !l.archived);
+    // every other dashboard endpoint. When an allow-list is present (filtered
+    // POST), scope to just those ids so every number below reflects the active
+    // province / source / ad-set / device filters. The matching itself is done
+    // upstream (the same profile filter every other tab uses); here we only
+    // intersect by the resulting lead ids.
+    let leads = (await getLeads()).filter((l) => !l.archived);
+    if (allow) leads = leads.filter((l) => allow.has(l.id));
 
     // -- Tier 1: all-time lead-level stamps ---------------------------------
     const emailable = leads.filter((l) => EMAIL_RE.test((l.contact.email || "").trim()));
@@ -175,7 +183,7 @@ export async function GET(req: NextRequest) {
       { kind: "booking_day_of", count: estSent.get("booking_day_of") || 0, method: "dayOfRemindedAt stamp" },
     ];
 
-    return NextResponse.json({ since, until, allTime, inRange, perKind, trackingSince, historicalSends });
+    return NextResponse.json({ since, until, filtered: !!allow, matched: leads.length, allTime, inRange, perKind, trackingSince, historicalSends });
   } catch (e) {
     // Soft-fail 200 (same convention as the other admin analytics routes): the
     // tab renders an empty state instead of a hard error page.
@@ -183,6 +191,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       since,
       until,
+      filtered: !!allow,
+      matched: 0,
       allTime: { leads: 0, emailableLeads: 0, reached: 0, opened: 0, clicked: 0, responded: 0, bounced: 0, optedOut: 0 },
       inRange: { sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, complained: 0, unsubscribed: 0 },
       perKind: [],
@@ -191,4 +201,20 @@ export async function GET(req: NextRequest) {
       error: "Failed to read leads",
     });
   }
+}
+
+// No filter → all leads (unchanged behaviour).
+export async function GET(req: NextRequest) {
+  return buildStats(req, null);
+}
+
+// Filtered view: body carries { leadIds: string[] } — the lead ids of the
+// profiles the dashboard's dimension filters (province / source / ad set /
+// device / …) currently match. An empty array legitimately means "nothing
+// matches" and yields all-zero stats.
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  const raw = (body as { leadIds?: unknown }).leadIds;
+  const ids = Array.isArray(raw) ? new Set(raw.filter((x): x is string => typeof x === "string")) : null;
+  return buildStats(req, ids);
 }

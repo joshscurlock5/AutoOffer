@@ -2939,6 +2939,19 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   // Only the dimension filters count here — the date range lives in its own control.
   const activeFilters = [filters.country, filters.region, filters.source, filters.adset, filters.device, filters.stage, filters.scoreBand].filter(Boolean).length;
 
+  // Bridge the dashboard's dimension filters to the (server-side) Emails tab:
+  // resolve them to the matching profiles' lead ids so the email numbers are
+  // scoped exactly like every other tab. DIMENSION filters only (no date) — the
+  // Emails tab keeps its own date handling. null = no filter → all leads.
+  const emailFilter = useMemo(() => {
+    if (activeFilters === 0) return { leadIds: null as string[] | null, label: "" };
+    const leadIds = [...new Set(filterProfiles(profiles, filters).flatMap((p) => p.leadIds))];
+    const label = [filters.region, filters.source, filters.adset, filters.device, filters.stage, filters.scoreBand, filters.country]
+      .filter(Boolean)
+      .join(" · ");
+    return { leadIds, label };
+  }, [profiles, filters, activeFilters]);
+
   const booked = view.funnelByRank.booked;
   // Sidebar entries — keys are unchanged (only the display labels went plain):
   // "sources" shows tracking health, "acquisition" shows where visitors come from.
@@ -3168,7 +3181,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       {tab === "ads" && <AdsTab range={range} />}
 
       {/* ---- TAB: EMAILS (previews + delivery analytics) ---- */}
-      {tab === "emails" && <EmailsTab {...windowForRange(range)} />}
+      {tab === "emails" && <EmailsTab {...windowForRange(range)} leadIds={emailFilter.leadIds} filterLabel={emailFilter.label} />}
 
       {/* ---- TAB: A/B TESTS (per-variant funnel + conversion, set live variant) ---- */}
       {tab === "experiments" && <ExperimentsTab {...windowForRange(range)} />}

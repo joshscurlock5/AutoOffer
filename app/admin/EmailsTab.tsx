@@ -21,6 +21,8 @@ import { useEffect, useMemo, useState, Fragment, type ReactNode } from "react";
 // ---------------------------------------------------------------------------
 
 interface EmailStats {
+  filtered?: boolean;
+  matched?: number;
   allTime: {
     leads: number;
     emailableLeads: number;
@@ -128,21 +130,45 @@ const AUDIENCE_CHIP: Record<EmailPreview["audience"], string> = {
   nurture: "bg-amber-100 text-amber-800",
 };
 
-export default function EmailsTab({ since, until }: { since: string; until: string }) {
+export default function EmailsTab({
+  since,
+  until,
+  leadIds = null,
+  filterLabel = "",
+}: {
+  since: string;
+  until: string;
+  /** When the dashboard's dimension filters (province / source / ad set /
+   * device / …) are active, the matching leads' ids — every stat is scoped to
+   * them. null = no filter, show all leads. */
+  leadIds?: string[] | null;
+  filterLabel?: string;
+}) {
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [previews, setPreviews] = useState<EmailPreview[] | null>(null);
   const [openKind, setOpenKind] = useState<string | null>(null); // one modal at a time
   const [detailKind, setDetailKind] = useState<string | null>(null); // expanded per-type stats row
 
-  // Stats re-fetch whenever the dashboard's date window moves.
+  // Stable dependency AND the sole source the effect reads the ids from (a new
+  // array ref each render would refetch forever). Prefix "F:" marks "filtered"
+  // so an EMPTY allow-list (filters active, nothing matches) is distinct from
+  // null (no filter) — the former must show zeros, not fall back to all leads.
+  const filterKey = Array.isArray(leadIds) ? "F:" + leadIds.join(",") : null;
+
+  // Stats re-fetch whenever the date window OR the active filters move. When
+  // filtered, POST the allow-list; otherwise a plain GET over all leads.
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/admin/email-stats?since=${since}&until=${until}`)
+    const ids = filterKey === null ? null : filterKey.slice(2) ? filterKey.slice(2).split(",") : [];
+    const init: RequestInit | undefined = ids
+      ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ leadIds: ids }) }
+      : undefined;
+    fetch(`/api/admin/email-stats?since=${since}&until=${until}`, init)
       .then((r) => r.json())
       .then((d) => { if (!cancelled && d?.allTime) setStats(d as EmailStats); })
       .catch(() => { if (!cancelled) setStats(null); });
     return () => { cancelled = true; };
-  }, [since, until]);
+  }, [since, until, filterKey]);
 
   // Previews are range-independent — fetch once.
   useEffect(() => {
@@ -192,6 +218,23 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
 
   return (
     <div>
+      {/* Scoped-view banner — shown whenever the dashboard's dimension filters
+          (province / source / ad set / device / …) are narrowing the numbers. */}
+      {leadIds && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+          <span className="font-bold uppercase tracking-wide">Filtered</span>
+          {filterLabel && <span className="font-medium">{filterLabel}</span>}
+          {(() => {
+            const n = stats?.matched ?? leadIds.length;
+            return (
+              <span className="text-brand-600">
+                · every number below is scoped to {fmt(n)} matching {n === 1 ? "lead" : "leads"}
+              </span>
+            );
+          })()}
+        </div>
+      )}
+
       {/* (a) all-time performance — lead-level stamps, so it answers "what % of
           my leads actually receive / read our email" regardless of the window. */}
       <Section title="Email performance" tip="All-time totals, based on delivery reports from our email service.">
