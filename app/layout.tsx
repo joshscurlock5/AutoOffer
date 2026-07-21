@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HideOnAdmin from "@/components/HideOnAdmin";
 import StickyMobileBar from "@/components/StickyMobileBar";
 import StickyCTA from "@/components/StickyCTA";
 import ExitIntent from "@/components/ExitIntent";
@@ -110,7 +111,7 @@ export default function RootLayout({
         <JsonLd data={organizationSchema()} />
         <Header />
         <main className="flex-1">{children}</main>
-        <Footer />
+        <HideOnAdmin><Footer /></HideOnAdmin>
         <StickyMobileBar />
         <StickyCTA />
         <ExitIntent />
