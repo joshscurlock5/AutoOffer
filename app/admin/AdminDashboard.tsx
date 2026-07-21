@@ -46,9 +46,14 @@ type LightboxState = { leadId: string; photos: UploadedPhoto[]; index: number };
 export default function AdminDashboard({
   initialLeads,
   initialReferrals,
+  embedded = false,
 }: {
   initialLeads: Lead[];
   initialReferrals: Referral[];
+  /** When rendered as a tab inside the analytics dashboard, drop the full-page
+   * wrapper, the top header bar, and the container padding — the shell around it
+   * already provides all of that. */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
@@ -330,32 +335,34 @@ export default function AdminDashboard({
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="border-b border-slate-200 bg-white">
-        <div className="container-x flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-logo text-lg font-extrabold text-navy">
-              Drive<span className="text-brand">Offer</span>
-            </span>
-            <span className="rounded-full bg-navy px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
-              Admin
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a
-              href="/admin/analytics"
-              className="rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Analytics
-            </a>
-            <button onClick={logout} className="text-sm font-semibold text-muted hover:text-brand">
-              Sign out
-            </button>
+    <div className={embedded ? "" : "min-h-screen bg-slate-100"}>
+      {!embedded && (
+        <div className="border-b border-slate-200 bg-white">
+          <div className="container-x flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="font-logo text-lg font-extrabold text-navy">
+                Drive<span className="text-brand">Offer</span>
+              </span>
+              <span className="rounded-full bg-navy px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                Admin
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href="/admin/analytics"
+                className="rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Analytics
+              </a>
+              <button onClick={logout} className="text-sm font-semibold text-muted hover:text-brand">
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="container-x py-8">
+      <div className={embedded ? "" : "container-x py-8"}>
         {/* stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[

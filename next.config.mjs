@@ -32,6 +32,15 @@ const nextConfig = {
         destination: "https://www.driveoffer.ca/:path*",
         permanent: true,
       },
+      // Analytics is now the unified /admin panel (a set of tabs, with the Leads
+      // inbox as the rightmost tab). Redirect the old route at the routing layer
+      // — clean HTTP redirect, no render — with the query string preserved so
+      // /admin/analytics?tab=emails still lands on that tab.
+      {
+        source: "/admin/analytics",
+        destination: "/admin",
+        permanent: false,
+      },
     ];
   },
 };

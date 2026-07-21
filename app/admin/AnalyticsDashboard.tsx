@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
-import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch, ClarityInsights } from "@/lib/types";
+import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch, ClarityInsights, Lead, Referral } from "@/lib/types";
 import type { AdInsightAdRanked, RegionInsightRow, PlacementInsightRow } from "@/lib/metaAds";
 import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
 import { tagsFor, TAG_META, EFFORT_META, TAG_ORDER, type EffortTag } from "@/lib/dataSourceTags";
@@ -27,6 +27,7 @@ import {
 import { META_SEGMENTS, segmentProfiles, buildMetaCsv, type MetaSegment } from "@/lib/metaExport";
 import EmailsTab from "./EmailsTab";
 import ExperimentsTab from "./ExperimentsTab";
+import AdminDashboard from "./AdminDashboard";
 
 // ---------------------------------------------------------------------------
 //  Customer-360 analytics dashboard. All data is computed server-side (profiles)
@@ -881,7 +882,7 @@ function ProfileRow({ p, onDelete }: { p: Profile; onDelete: (p: Profile) => voi
             </ol>
             <div className="mt-3 flex items-center gap-3 border-t border-slate-100 pt-3">
               {p.leadIds.length > 0 && (
-                <Link href="/admin" className="text-xs font-semibold text-brand-600 hover:underline">Open in Leads →</Link>
+                <Link href="/admin?tab=leads" className="text-xs font-semibold text-brand-600 hover:underline">Open in Leads →</Link>
               )}
               <button
                 type="button"
@@ -2784,11 +2785,38 @@ function AdsTab({ range }: { range: RangeState }) {
   );
 }
 
-type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "emails" | "people" | "experiments";
+type Tab = "sources" | "overview" | "acquisition" | "funnel" | "ads" | "emails" | "people" | "experiments" | "leads";
 
-export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
+const VALID_TABS: readonly Tab[] = ["sources", "overview", "acquisition", "funnel", "ads", "emails", "people", "experiments", "leads"];
+
+export default function AnalyticsDashboard({
+  data,
+  leads,
+  referrals,
+  initialTab,
+}: {
+  data: AnalyticsData;
+  // Raw leads + referrals for the embedded Leads tab (the former /admin page).
+  leads: Lead[];
+  referrals: Referral[];
+  // Which tab to land on (e.g. /admin?tab=leads). Defaults to Overview.
+  initialTab?: string;
+}) {
   const events = data.events;
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(
+    initialTab && (VALID_TABS as readonly string[]).includes(initialTab) ? (initialTab as Tab) : "overview",
+  );
+
+  // The Leads page's header (which held the only Sign-out) is hidden when it's
+  // embedded as a tab, so sign-out lives here now.
+  async function logout() {
+    try {
+      await fetch("/api/admin/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    window.location.href = "/admin";
+  }
   const [range, setRange] = useState<RangeState>({ preset: "30d" });
   const [filters, setFilters] = useState<Filters>({});
   const [dim, setDim] = useState<SegmentDimension>("source");
@@ -2970,6 +2998,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     { key: "people", label: "People", icon: <NavIcon><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></NavIcon> },
     { key: "sources", label: "Data health", icon: <NavIcon><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></NavIcon> },
     { key: "experiments", label: "A/B tests", icon: <NavIcon><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></NavIcon> },
+    { key: "leads", label: "Leads", icon: <NavIcon><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></NavIcon> },
   ];
 
   return (
@@ -2981,7 +3010,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <h1 className="text-2xl font-bold text-navy">Customer Analytics</h1>
           <p className="text-sm text-muted">One profile per person — ad → visit → form → replies → close.</p>
         </div>
-        <Link href="/admin" className="text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
+        <button type="button" onClick={logout} className="text-sm font-semibold text-muted hover:text-brand">Sign out</button>
       </div>
 
       <div className="flex items-start gap-6">
@@ -2990,7 +3019,6 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             tuck it behind the header). Internal scroll guard for short
             viewports. Hidden below lg, where the strip + title row take over. */}
         <div className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto lg:block">
-          <Link href="/admin" className="mb-3 inline-block text-sm font-semibold text-brand-600 hover:underline">← Leads</Link>
           <h1 className="text-xl font-bold text-navy">Customer Analytics</h1>
           <p className="mb-4 text-xs text-muted">One profile per person — ad → visit → form → replies → close.</p>
           <nav className="flex flex-col gap-1">
@@ -3006,6 +3034,13 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               </button>
             ))}
           </nav>
+          <button
+            type="button"
+            onClick={logout}
+            className="mt-3 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-muted transition hover:bg-slate-100 hover:text-brand"
+          >
+            Sign out
+          </button>
         </div>
 
         <div className="min-w-0 flex-1">
@@ -3013,7 +3048,7 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               the desktop sidebar/control bar) so tabs stay one tap away while
               scrolling long content. Solid blurred background so content scrolls
               cleanly beneath it. */}
-          <div className="sticky top-20 z-50 -mx-5 mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white/95 px-5 shadow-sm backdrop-blur lg:hidden">
+          <div className="sticky top-20 z-50 -mx-5 mb-4 flex touch-pan-x gap-1 overflow-x-auto overscroll-x-contain border-b border-slate-200 bg-white/95 px-5 shadow-sm backdrop-blur lg:hidden">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -3026,16 +3061,23 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             ))}
           </div>
 
-          <ControlBar
-            range={range}
-            setRange={setRange}
-            filters={filters}
-            set={set}
-            options={options}
-            activeFilters={activeFilters}
-            clearFilters={() => setFilters({})}
-            countLabel={`${filtered.length} of ${profiles.length} people`}
-          />
+          {/* The analytics date/dimension controls don't apply to the Leads
+              inbox (it has its own search + filters), so hide them there. */}
+          {tab !== "leads" && (
+            <ControlBar
+              range={range}
+              setRange={setRange}
+              filters={filters}
+              set={set}
+              options={options}
+              activeFilters={activeFilters}
+              clearFilters={() => setFilters({})}
+              countLabel={`${filtered.length} of ${profiles.length} people`}
+            />
+          )}
+
+      {/* ---- TAB: LEADS (the former /admin page, embedded) ---- */}
+      {tab === "leads" && <AdminDashboard embedded initialLeads={leads} initialReferrals={referrals} />}
 
       {/* ---- TAB: SOURCES ---- */}
       {tab === "sources" && <SourcesPanel sources={sources} clarity={clarityInsights} />}
