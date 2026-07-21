@@ -920,48 +920,80 @@ const SAMPLE_REFERRAL: Referral = {
 const SAMPLE_MESSAGE =
   "Hi Sarah — just tried giving you a call about your Civic. Whenever you have a minute, give us a shout or reply here and we'll get everything sorted for you.";
 
+/** Metadata for one email "reason for sending" — its display title + journey
+ * group. `order` is the canonical top-to-bottom sort for the admin stats table
+ * (the gallery re-buckets by group, so it uses this only for labels). */
+export type EmailKindMeta = { kind: string; title: string; group: string; order: number };
+
+/**
+ * SINGLE SOURCE OF TRUTH for every email type the system sends — one row per
+ * distinct "reason for sending", including each step of the multi-step
+ * follow-ups (so "Info reminder · 1st / 2nd / last" are three separate things,
+ * never collapsed to a generic "info reminder"). Both the gallery previews
+ * below AND the admin email-stats table read their labels from this list, so
+ * the two can never drift. Keep in customer-journey order.
+ */
+export const EMAIL_KINDS: EmailKindMeta[] = [
+  { kind: "confirmation", title: "Lead confirmation", group: "First contact", order: 1 },
+  { kind: "referral_confirmation", title: "Referral thank-you", group: "First contact", order: 2 },
+  { kind: "offer", title: "Your offer", group: "Sent by you", order: 3 },
+  { kind: "more_info", title: "Ask for details", group: "Sent by you", order: 4 },
+  { kind: "message", title: "Message from you", group: "Sent by you", order: 5 },
+  { kind: "photo", title: "Photo message", group: "Sent by you", order: 6 },
+  { kind: "post_offer_followup_0", title: "Offer follow-up · 1st", group: "Automatic follow-ups", order: 7 },
+  { kind: "post_offer_followup_1", title: "Offer follow-up · 2nd", group: "Automatic follow-ups", order: 8 },
+  { kind: "post_offer_followup_2", title: "Offer follow-up · last", group: "Automatic follow-ups", order: 9 },
+  { kind: "awaiting_info_reminder_0", title: "Info reminder · 1st", group: "Automatic follow-ups", order: 10 },
+  { kind: "awaiting_info_reminder_1", title: "Info reminder · 2nd", group: "Automatic follow-ups", order: 11 },
+  { kind: "awaiting_info_reminder_2", title: "Info reminder · last", group: "Automatic follow-ups", order: 12 },
+  { kind: "winback", title: "Day-21 win-back", group: "Automatic follow-ups", order: 13 },
+  { kind: "booking_day_of", title: "Day-of pickup reminder", group: "Booking", order: 14 },
+];
+
+const KIND_META = new Map(EMAIL_KINDS.map((m) => [m.kind, m]));
+
 /**
  * Every email the system can send, rendered fresh with the fixtures above, in
  * customer-journey order. Server-side only (makeUnsubToken needs env — fine,
- * the admin API route is the only caller).
+ * the admin API route is the only caller). Titles/groups come from EMAIL_KINDS
+ * so a gallery card and its stats row always agree.
  */
 export function renderAllEmailPreviews(): EmailPreview[] {
   const lead = SAMPLE_LEAD;
   const wrap = (
     kind: string,
-    title: string,
-    group: string,
     trigger: string,
     audience: "transactional" | "nurture",
     email: Email,
-  ): EmailPreview => ({ kind, title, group, trigger, audience, subject: email.subject, html: email.html });
+  ): EmailPreview => {
+    const meta = KIND_META.get(kind);
+    return { kind, title: meta?.title ?? kind, group: meta?.group ?? "Other", trigger, audience, subject: email.subject, html: email.html };
+  };
 
   return [
     // -- First contact ------------------------------------------------------
-    wrap("confirmation", "Lead confirmation", "First contact", "Instantly when a lead submits the form", "transactional", confirmationEmail(lead)),
+    wrap("confirmation", "Instantly when a lead submits the form", "transactional", confirmationEmail(lead)),
     // -- Sent by you (Telegram-driven, one at a time) ------------------------
-    wrap("offer", "Your offer", "Sent by you", "When you send /offer → ✅ from Telegram", "transactional", offerEmail(lead, 8500, 9000)),
-    wrap("more_info", "Ask for details", "Sent by you", "When you ask for details via /moreinfo", "transactional", moreInfoEmail(lead, lead.infoQuestions || [])),
-    wrap("message", "Message from you", "Sent by you", "Free-text /message from Telegram", "transactional", messageEmail(lead, SAMPLE_MESSAGE)),
+    wrap("offer", "When you send /offer → ✅ from Telegram", "transactional", offerEmail(lead, 8500, 9000)),
+    wrap("more_info", "When you ask for details via /moreinfo", "transactional", moreInfoEmail(lead, lead.infoQuestions || [])),
+    wrap("message", "Free-text /message from Telegram", "transactional", messageEmail(lead, SAMPLE_MESSAGE)),
     wrap(
       "photo",
-      "Photo message",
-      "Sent by you",
       "When you send a photo in a lead's Telegram topic — image rides as an attachment",
       "transactional",
       messageEmail(lead, "Here's a photo for you — it's attached to this email."),
     ),
     // -- Automatic follow-ups (cron-driven nurture) --------------------------
-    wrap("post_offer_followup_0", "Offer follow-up · 1st", "Automatic follow-ups", "+2 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 0)),
-    wrap("post_offer_followup_1", "Offer follow-up · 2nd", "Automatic follow-ups", "+5 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 1)),
-    wrap("post_offer_followup_2", "Offer follow-up · last", "Automatic follow-ups", "+10 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 2)),
-    wrap("awaiting_info_reminder_0", "Info reminder · 1st", "Automatic follow-ups", "+2 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 0)),
-    wrap("awaiting_info_reminder_1", "Info reminder · 2nd", "Automatic follow-ups", "+5 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 1)),
-    wrap("awaiting_info_reminder_2", "Info reminder · last", "Automatic follow-ups", "+10 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 2)),
+    wrap("post_offer_followup_0", "+2 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 0)),
+    wrap("post_offer_followup_1", "+5 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 1)),
+    wrap("post_offer_followup_2", "+10 days after an offer with no reply", "nurture", postOfferFollowupEmail(lead, 2)),
+    wrap("awaiting_info_reminder_0", "+2 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 0)),
+    wrap("awaiting_info_reminder_1", "+5 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 1)),
+    wrap("awaiting_info_reminder_2", "+10 days waiting on requested details", "nurture", awaitingInfoReminderEmail(lead, 2)),
     // -- Booking -------------------------------------------------------------
-    wrap("booking_day_of", "Day-of pickup reminder", "Booking", "Morning of a booked pickup", "transactional", bookingDayOfEmail(lead)),
+    wrap("booking_day_of", "Morning of a booked pickup", "transactional", bookingDayOfEmail(lead)),
     // -- Late-journey nurture + referrals ------------------------------------
-    wrap("winback", "Day-21 win-back", "Automatic follow-ups", "Day 21, still-open leads", "nurture", winbackEmail(lead)),
-    wrap("referral_confirmation", "Referral thank-you", "First contact", "When someone refers a friend", "transactional", referralConfirmationEmail(SAMPLE_REFERRAL)),
+    wrap("winback", "Day 21, still-open leads", "nurture", winbackEmail(lead)),
+    wrap("referral_confirmation", "When someone refers a friend", "transactional", referralConfirmationEmail(SAMPLE_REFERRAL)),
   ];
 }

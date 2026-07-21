@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { getLeads } from "@/lib/store";
+import { EMAIL_KINDS } from "@/lib/email";
+import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,27 +71,29 @@ export async function GET(req: NextRequest) {
       optedOut: leads.filter((l) => l.emailOptOut).length,
     };
 
-    // -- Tier 2 + 3: walk commsEvents once for both -------------------------
+    // -- Window-scoped activity chips (respect ?since/?until) ---------------
     const inRange = { sent: 0, delivered: 0, opened: 0, clicked: 0, replied: 0, bounced: 0, complained: 0, unsubscribed: 0 };
-    type KindRow = { kind: string; sent: number; delivered: number; opened: number; clicked: number; responded: number; bounced: number; optedOut: number };
+
+    // -- Per-type receipts: kind-tagged commsEvents, ALL-TIME (not window) --
+    // The per-type table answers "how is each individual email doing overall",
+    // so it deliberately ignores the date window. Opens/clicks are still only
+    // as old as tracking (trackingSince); the UI captions that.
+    type KindRow = { sent: number; delivered: number; opened: number; clicked: number; responded: number; bounced: number; optedOut: number };
+    const zero = (): KindRow => ({ sent: 0, delivered: 0, opened: 0, clicked: 0, responded: 0, bounced: 0, optedOut: 0 });
     const perKindMap = new Map<string, KindRow>();
     let trackingSince: string | null = null;
 
     for (const l of leads) {
       for (const e of l.commsEvents || []) {
         if (e.channel !== "email") continue;
-        // trackingSince: when kind-bearing send-logging actually began, across
-        // ALL time (not the window) — the caption for the per-template table.
+        // trackingSince: when kind-bearing send-logging actually began.
         if (e.kind && e.type === "sent" && (!trackingSince || e.at < trackingSince)) trackingSince = e.at;
-        if (!inWindow(e.at)) continue;
-        if (e.type in inRange) inRange[e.type as keyof typeof inRange] += 1;
+        // Window chips.
+        if (inWindow(e.at) && e.type in inRange) inRange[e.type as keyof typeof inRange] += 1;
+        // Per-type receipts (all-time).
         if (!e.kind) continue;
         let row = perKindMap.get(e.kind);
-        if (!row) {
-          row = { kind: e.kind, sent: 0, delivered: 0, opened: 0, clicked: 0, responded: 0, bounced: 0, optedOut: 0 };
-          perKindMap.set(e.kind, row);
-        }
-        // Map each receipt type onto the per-template column it belongs to.
+        if (!row) { row = zero(); perKindMap.set(e.kind, row); }
         if (e.type === "sent") row.sent += 1;
         else if (e.type === "delivered") row.delivered += 1;
         else if (e.type === "opened") row.opened += 1;
@@ -99,37 +103,76 @@ export async function GET(req: NextRequest) {
         else if (e.type === "unsubscribed" || e.type === "complained") row.optedOut += 1;
       }
     }
-    const perKind = [...perKindMap.values()].sort((a, b) => b.sent - a.sent || a.kind.localeCompare(b.kind));
 
-    // -- Retroactive per-template evidence (range-independent) --------------
-    // Counts derived from lifecycle stamps that predate send-logging. Honest
-    // approximations, each labelled with HOW it was counted.
+    // -- All-time SEND estimates from lifecycle stamps (predate send-logging).
+    // 0 = we have no retroactive signal for this type (the forward-tracked
+    // `sent` count is then the only number we can stand behind).
+    const estSent = new Map<string, number>([
+      ["confirmation", allTime.emailableLeads],
+      ["offer", leads.filter((l) => l.offerSentAt || l.offer?.sentAt).length],
+      ["more_info", leads.filter((l) => l.moreInfoSentAt).length],
+      ["winback", leads.filter((l) => l.winbackSentAt).length],
+      ["booking_day_of", leads.filter((l) => l.dayOfRemindedAt).length],
+    ]);
+
+    // -- Best-effort per-type RESPONSE attribution (all-time) ----------------
+    // Historical replies were never tagged with which email they answered, so
+    // we attribute each replied lead to the LAST email we can prove/ infer went
+    // to them (the one a reply most likely answers). Exact going forward (the
+    // kind-tagged `responded` receipts above are a subset of this). Sum over
+    // all types == allTime.responded, so the table reconciles with the card.
+    const inferLastEmailKind = (l: Lead): string => {
+      let bestAt = "";
+      let bestKind = "";
+      const consider = (kind: string, at?: string | null) => {
+        if (at && at > bestAt) { bestAt = at; bestKind = kind; }
+      };
+      for (const e of l.commsEvents || []) {
+        if (e.channel === "email" && e.type === "sent" && e.kind) consider(e.kind, e.at);
+      }
+      consider("offer", l.offerSentAt || l.offer?.sentAt);
+      consider("more_info", l.moreInfoSentAt);
+      consider("winback", l.winbackSentAt);
+      consider("booking_day_of", l.dayOfRemindedAt);
+      // Everyone emailable got a confirmation at signup — the safe default.
+      return bestKind || "confirmation";
+    };
+    const estResponded = new Map<string, number>();
+    for (const l of leads) {
+      if ((l.repliesCount || 0) <= 0) continue;
+      const k = inferLastEmailKind(l);
+      estResponded.set(k, (estResponded.get(k) || 0) + 1);
+    }
+
+    // -- Assemble one row per KNOWN email type, in journey order ------------
+    // Every "reason for sending" appears — even those with no receipts yet —
+    // so the table is the complete list, never a sparse subset.
+    const perKind = EMAIL_KINDS.map((m) => {
+      const r = perKindMap.get(m.kind) || zero();
+      return {
+        kind: m.kind,
+        title: m.title,
+        group: m.group,
+        order: m.order,
+        sent: r.sent,
+        delivered: r.delivered,
+        opened: r.opened,
+        clicked: r.clicked,
+        responded: r.responded,
+        bounced: r.bounced,
+        optedOut: r.optedOut,
+        estSent: estSent.get(m.kind) || 0,
+        estResponded: estResponded.get(m.kind) || 0,
+      };
+    });
+
+    // Retained for the gallery's per-card stats line (labelled estimates).
     const historicalSends = [
-      {
-        kind: "confirmation",
-        count: allTime.emailableLeads,
-        method: "≈ every lead with a valid email (sent on submit)",
-      },
-      {
-        kind: "offer",
-        count: leads.filter((l) => l.offerSentAt || l.offer?.sentAt).length,
-        method: "offerSentAt stamp",
-      },
-      {
-        kind: "more_info",
-        count: leads.filter((l) => l.moreInfoSentAt).length,
-        method: "moreInfoSentAt stamp",
-      },
-      {
-        kind: "winback",
-        count: leads.filter((l) => l.winbackSentAt).length,
-        method: "winbackSentAt stamp",
-      },
-      {
-        kind: "booking_day_of",
-        count: leads.filter((l) => l.dayOfRemindedAt).length,
-        method: "dayOfRemindedAt stamp",
-      },
+      { kind: "confirmation", count: estSent.get("confirmation") || 0, method: "≈ every lead with a valid email (sent on submit)" },
+      { kind: "offer", count: estSent.get("offer") || 0, method: "offerSentAt stamp" },
+      { kind: "more_info", count: estSent.get("more_info") || 0, method: "moreInfoSentAt stamp" },
+      { kind: "winback", count: estSent.get("winback") || 0, method: "winbackSentAt stamp" },
+      { kind: "booking_day_of", count: estSent.get("booking_day_of") || 0, method: "dayOfRemindedAt stamp" },
     ];
 
     return NextResponse.json({ since, until, allTime, inRange, perKind, trackingSince, historicalSends });

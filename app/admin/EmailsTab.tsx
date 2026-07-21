@@ -41,7 +41,21 @@ interface EmailStats {
     complained: number;
     unsubscribed: number;
   };
-  perKind: { kind: string; sent: number; delivered: number; opened: number; clicked: number; responded: number; bounced: number; optedOut: number }[];
+  perKind: {
+    kind: string;
+    title: string;
+    group: string;
+    order: number;
+    sent: number;
+    delivered: number;
+    opened: number;
+    clicked: number;
+    responded: number;
+    bounced: number;
+    optedOut: number;
+    estSent: number;
+    estResponded: number;
+  }[];
   trackingSince: string | null;
   historicalSends: { kind: string; count: number; method: string }[];
 }
@@ -255,65 +269,98 @@ export default function EmailsTab({ since, until }: { since: string; until: stri
                 We just started counting sends — every email from now on will show up here.
               </p>
             )}
-            {stats && stats.perKind.length > 0 && (
-              <div className="mt-4 overflow-x-auto">
-                <p className="mb-2 text-xs text-muted">Tap an email type to see its full breakdown and rates.</p>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
-                      <th className="py-2 pr-2">Email type</th>
-                      <th className="py-2 pl-2 text-right">Sent</th>
-                      <th className="py-2 pl-2 text-right">Delivered</th>
-                      <th className="py-2 pl-2 text-right">Opened</th>
-                      <th className="py-2 pl-2 text-right">Clicked</th>
-                      <th className="py-2 pl-2 text-right">Responded</th>
-                      <th className="py-2 pl-2 text-right">Opted out</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.perKind.map((k) => {
-                      const isOpen = detailKind === k.kind;
-                      return (
-                        <Fragment key={k.kind}>
-                          <tr
-                            className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60"
-                            onClick={() => setDetailKind(isOpen ? null : k.kind)}
-                          >
-                            <td className="py-2 pr-2 font-medium text-navy">
-                              <span className="mr-1 inline-block w-3 text-slate-400">{isOpen ? "▾" : "▸"}</span>{k.kind}
-                            </td>
-                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.sent)}</td>
-                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.delivered)}</td>
-                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.opened)}</td>
-                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.clicked)}</td>
-                            <td className="py-2 pl-2 text-right font-semibold tabular-nums text-navy">{fmt(k.responded)}</td>
-                            <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.optedOut)}</td>
-                          </tr>
-                          {isOpen && (
-                            <tr className="border-b border-slate-100 bg-slate-50/50">
-                              <td colSpan={7} className="px-3 py-3">
-                                <div className="flex flex-wrap gap-x-7 gap-y-3">
-                                  <Detail label="Delivery rate" value={pctOf(k.delivered, k.sent)} sub={`${fmt(k.delivered)} of ${fmt(k.sent)} sent`} />
-                                  <Detail label="Open rate" value={pctOf(k.opened, k.delivered)} sub={`${fmt(k.opened)} of ${fmt(k.delivered)} delivered`} />
-                                  <Detail label="Click rate" value={pctOf(k.clicked, k.delivered)} sub={`${fmt(k.clicked)} of ${fmt(k.delivered)} delivered`} />
-                                  <Detail label="Reply rate" value={pctOf(k.responded, k.delivered)} sub={`${fmt(k.responded)} replied`} />
-                                  <Detail label="Bounced" value={fmt(k.bounced)} />
-                                  <Detail label="Opted out" value={fmt(k.optedOut)} />
-                                </div>
-                                <p className="mt-2 text-[11px] text-muted">Opens/clicks count only emails sent after tracking was on; replies count for every reply received.</p>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {stats.trackingSince && (
-                  <p className="mt-2 text-[11px] text-muted">counting since {stats.trackingSince.slice(0, 10)}</p>
-                )}
-              </div>
-            )}
+          </div>
+        )}
+      </Section>
+
+      {/* (b2) EVERY email type, all-time — the complete per-reason breakdown.
+          One row per distinct reason for sending (each follow-up step separate),
+          so the 1st reminder can be compared against the last. */}
+      <Section
+        title="Performance by email type"
+        tip="Every email we send, one row each — including each step of the multi-step follow-ups — so you can compare how the 1st reminder performs vs. the last. All-time, not just the selected dates."
+      >
+        {!stats ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : (
+          <div className="card overflow-x-auto p-4">
+            <p className="mb-2 text-xs text-muted">Tap any email to see its full breakdown and rates.</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-2">Email</th>
+                  <th className="py-2 pl-2 text-right">Sent</th>
+                  <th className="py-2 pl-2 text-right">Opened</th>
+                  <th className="py-2 pl-2 text-right">Responded</th>
+                  <th className="py-2 pl-2 text-right">Opted out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.perKind.map((k, i) => {
+                  const isOpen = detailKind === k.kind;
+                  const prev = stats.perKind[i - 1];
+                  const showGroup = !prev || prev.group !== k.group;
+                  const sentVal = k.estSent > 0 ? k.estSent : k.sent;
+                  const sentEstimated = k.estSent > 0 && k.estSent !== k.sent;
+                  const replyDenom = k.estSent || k.sent;
+                  return (
+                    <Fragment key={k.kind}>
+                      {showGroup && (
+                        <tr>
+                          <td colSpan={5} className="pb-1 pt-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                            {k.group}
+                          </td>
+                        </tr>
+                      )}
+                      <tr
+                        className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60"
+                        onClick={() => setDetailKind(isOpen ? null : k.kind)}
+                      >
+                        <td className="py-2 pr-2 font-medium text-navy">
+                          <span className="mr-1 inline-block w-3 text-slate-400">{isOpen ? "▾" : "▸"}</span>{k.title}
+                        </td>
+                        <td className="py-2 pl-2 text-right tabular-nums">{sentEstimated ? "~" : ""}{fmt(sentVal)}</td>
+                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.opened)}</td>
+                        <td className="py-2 pl-2 text-right font-semibold tabular-nums text-navy">{fmt(k.estResponded)}</td>
+                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.optedOut)}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="border-b border-slate-100 bg-slate-50/50">
+                          <td colSpan={5} className="px-3 py-3">
+                            <div className="flex flex-wrap gap-x-7 gap-y-3">
+                              <Detail
+                                label="Sent"
+                                value={sentEstimated ? `~${fmt(sentVal)}` : fmt(sentVal)}
+                                sub={sentEstimated ? `${fmt(k.sent)} tracked exactly` : "exact count"}
+                              />
+                              <Detail label="Delivered" value={fmt(k.delivered)} sub={`${pctOf(k.delivered, k.sent)} of tracked sent`} />
+                              <Detail label="Open rate" value={pctOf(k.opened, k.delivered)} sub={`${fmt(k.opened)} of ${fmt(k.delivered)} delivered`} />
+                              <Detail label="Click rate" value={pctOf(k.clicked, k.delivered)} sub={`${fmt(k.clicked)} clicked`} />
+                              <Detail
+                                label="Reply rate"
+                                value={replyDenom > 0 ? pctOf(k.estResponded, replyDenom) : "—"}
+                                sub={`${fmt(k.estResponded)} replied`}
+                              />
+                              <Detail label="Bounced" value={fmt(k.bounced)} />
+                              <Detail label="Opted out" value={fmt(k.optedOut)} />
+                            </div>
+                            <p className="mt-2 text-[11px] text-muted">
+                              Opens/clicks count only emails sent after tracking went on; replies are attributed to the last email each lead
+                              received — a best estimate for older replies, exact from now on.
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="mt-3 text-[11px] text-muted">
+              &ldquo;Sent&rdquo; shows the exact tracked count where we have one, otherwise a &ldquo;~&rdquo; estimate from each lead&apos;s history.
+              Opens count only emails sent after tracking went on{stats.trackingSince ? ` (${stats.trackingSince.slice(0, 10)})` : ""}; replies are
+              attributed to the last email each lead received, so older replies are a best estimate and everything from now on is exact.
+            </p>
           </div>
         )}
       </Section>
