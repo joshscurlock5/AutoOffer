@@ -55,6 +55,40 @@ function cleanPhone(s: string): string | null {
   return t;
 }
 
+const SCHED_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/** Parse a scheduled-recontact date from the START of a string (the remainder is the
+ * note). Accepts MM/DD/YY, MM-DD-YY, MM/DD/YYYY, "MM DD YY", MM/DD (year inferred to the
+ * next occurrence), and "Oct 3" / "October 3 2026" — US-style, month first. Returns the
+ * ISO date (YYYY-MM-DD), a friendly label, and the leftover text. Null if no date found. */
+function parseScheduleDate(input: string): { iso: string; friendly: string; rest: string } | null {
+  const s = input.trim();
+  const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" }).format(new Date());
+  let mo: number | undefined, day: number | undefined, yr: number | undefined, matchLen = 0, hadYear = false;
+  const num = s.match(/^(\d{1,2})\s*[/\-. ]\s*(\d{1,2})(?:\s*[/\-. ]\s*(\d{2,4}))?/);
+  if (num) {
+    mo = Number(num[1]); day = Number(num[2]);
+    if (num[3]) { yr = Number(num[3]); hadYear = true; }
+    matchLen = num[0].length;
+  } else {
+    const nm = s.match(/^([a-z]{3,9})\.?\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?/i);
+    if (nm) {
+      const mi = SCHED_MONTHS.findIndex((name) => name.startsWith(nm[1].toLowerCase()));
+      if (mi >= 0) { mo = mi + 1; day = Number(nm[2]); if (nm[3]) { yr = Number(nm[3]); hadYear = true; } matchLen = nm[0].length; }
+    }
+  }
+  if (mo === undefined || day === undefined || mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  const M = mo, D = day;
+  const Y = yr === undefined ? Number(todayIso.slice(0, 4)) : yr < 100 ? 2000 + yr : yr;
+  const mk = (y: number) => `${y}-${String(M).padStart(2, "0")}-${String(D).padStart(2, "0")}`;
+  let iso = mk(Y);
+  const dt = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(dt.getTime()) || dt.getUTCMonth() + 1 !== M || dt.getUTCDate() !== D) return null; // e.g. Feb 30
+  if (!hadYear && iso < todayIso) iso = mk(Y + 1); // a bare "10/3" that already passed → next year
+  const friendly = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T12:00:00Z`));
+  const rest = s.slice(matchLen).replace(/^[\s,.\-–—]+/, "").trim();
+  return { iso, friendly, rest };
+}
+
 
 // ---------------------------------------------------------------------------
 //  Inbound Telegram webhook — the ONLY place the bot receives messages.
@@ -529,6 +563,32 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // 🔄 Re-contact → schedule a one-off manual re-contact (ask the date, then the note).
+      // Topic: pending-action stash (survives topics); Leads: force-reply markers.
+      const rcM = data.match(/^rc\|start\|(\S+)$/);
+      if (rcM) {
+        const code = rcM[1];
+        const { lead, multiple } = await getLeadByShortId(code);
+        if (multiple) {
+          await reply(cbChat, `More than one lead matches "${code}". Tap the button on the right lead.`);
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead) {
+          await reply(cbChat, `No lead found for "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        const ask = `🔄 When should we re-contact ${lead.contact.name || "this customer"}? Type a date — e.g. 10/3/26 or October 3.`;
+        if (cbThread != null) {
+          const at = new Date().toISOString();
+          await updateLead(lead.id, { pendingTopicAction: { kind: "rcdate", at } });
+          const pmid = await sendReturningId(cbChat, `${ask}\nYour next message here sets it.`, cancelActionKb(code), cbThread);
+          if (typeof pmid === "number") await updateLead(lead.id, { pendingTopicAction: { kind: "rcdate", at, promptMsgId: pmid } });
+          return NextResponse.json({ ok: true });
+        }
+        await sendPrompt(cbChat, `${ask}\n⟨rc|date|${code}⟩`, cb.message?.message_id, "e.g. 10/3/26", cbThread);
+        return NextResponse.json({ ok: true });
+      }
+
       // Filled preview → ✅ Send or ✋ Cancel the drafted email (offer / info / message).
       const sendM = data.match(/^act\|(offer|info|msg)(send|cancel)\|(\S+)$/);
       if (sendM) {
@@ -942,6 +1002,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Re-contact scheduling (Leads channel, two-step force-reply). Step 1: the date.
+    const rcDateRef = replyToText.match(/⟨rc\|date\|(\S+?)⟩/);
+    if (rcDateRef) {
+      const code = rcDateRef[1];
+      const parsed = parseScheduleDate(text);
+      if (!parsed) {
+        await sendPrompt(fromChat, `Couldn't read that date. Try again — e.g. 10/3/26 or October 3.\n⟨rc|date|${code}⟩`, promptId, "e.g. 10/3/26");
+        return NextResponse.json({ ok: true });
+      }
+      await clearPromptAndInput();
+      await sendPrompt(fromChat, `📅 ${parsed.friendly}. Any notes? e.g. wants to wait until October — reply here, or send "skip" for none.\n⟨rc|note|${code}|${parsed.iso}⟩`, undefined, "e.g. wants to wait til October");
+      return NextResponse.json({ ok: true });
+    }
+    // Step 2: the note → save the scheduled re-contact.
+    const rcNoteRef = replyToText.match(/⟨rc\|note\|(\S+?)\|(\d{4}-\d{2}-\d{2})⟩/);
+    if (rcNoteRef) {
+      const code = rcNoteRef[1];
+      const iso = rcNoteRef[2];
+      const note = /^(skip|none|-)?$/i.test(text.trim()) ? "" : text.trim();
+      const { lead, multiple } = await getLeadByShortId(code);
+      if (multiple) {
+        await reply(fromChat, `More than one lead matches "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      if (!lead) {
+        await reply(fromChat, `No lead found for "${code}".`);
+        return NextResponse.json({ ok: true });
+      }
+      await updateLead(lead.id, { scheduledRecontactAt: iso, scheduledRecontactNote: note || undefined });
+      await clearPromptAndInput();
+      const friendly = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T12:00:00Z`));
+      await reply(fromChat, `✅ ${lead.contact.name || carText(lead)} is set to re-contact on 📅 ${friendly}${note ? `\nNote: ${note}` : ""}. They'll appear on that day's re-contact list.`);
+      await notifyLog(`📝 ${who} scheduled re-contact — ${carText(lead)} (${code}) for ${iso}${note ? ` — ${note}` : ""}`);
+      return NextResponse.json({ ok: true });
+    }
+
     // 2b-photo) An IMAGE the owner sent in a customer's topic → forward it to the
     //     customer: email attachment today (works now), MMS once Twilio is live.
     //     Covers BOTH a compressed photo (msg.photo, largest rendition) AND an image
@@ -1013,6 +1109,28 @@ export async function POST(req: NextRequest) {
             await notifyLog(`📝 ${who} logged ${pend.kind} ${negMoney(amount)} — ${carText(relayLead)} (${psid})`);
             const label = pend.kind === "ask" ? "💬 Their ask" : pend.kind === "offer" ? "💵 Our offer" : "✅ Bought";
             await postLeadTopic(updated || { ...relayLead, ...patch }, `${label}: ${negMoney(amount)}`);
+            return NextResponse.json({ ok: true });
+          }
+          // rcdate / rcnote → schedule a manual re-contact (date, then note) in-topic.
+          if (pend.kind === "rcdate") {
+            const parsed = parseScheduleDate(text);
+            if (!parsed) {
+              await postLeadTopic(relayLead, "⚠️ Couldn't read that date. Tap 🔄 Re-contact again and type a date like 10/3/26 or October 3.");
+              return NextResponse.json({ ok: true });
+            }
+            const at = new Date().toISOString();
+            await updateLead(relayLead.id, { pendingTopicAction: { kind: "rcnote", date: parsed.iso, at } });
+            const pmid = await sendReturningId(fromChat, `📅 ${parsed.friendly}. Any notes? Type them (or "skip") — your next message sets it.`, cancelActionKb(psid), msgThread);
+            if (typeof pmid === "number") await updateLead(relayLead.id, { pendingTopicAction: { kind: "rcnote", date: parsed.iso, at, promptMsgId: pmid } });
+            return NextResponse.json({ ok: true });
+          }
+          if (pend.kind === "rcnote") {
+            const iso = pend.date || "";
+            const note = /^(skip|none|-)?$/i.test(text.trim()) ? "" : text.trim();
+            await updateLead(relayLead.id, { scheduledRecontactAt: iso || undefined, scheduledRecontactNote: note || undefined });
+            const friendly = iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T12:00:00Z`)) : iso;
+            await postLeadTopic(relayLead, `📅 Scheduled to re-contact on ${friendly}${note ? ` — ${note}` : ""}.`);
+            await notifyLog(`📝 ${who} scheduled re-contact — ${carText(relayLead)} (${psid}) for ${iso}${note ? ` — ${note}` : ""}`);
             return NextResponse.json({ ok: true });
           }
           // eoffer / einfo / emsg → stash the draft and show a compact Send / Cancel confirm.
@@ -1489,6 +1607,53 @@ export async function POST(req: NextRequest) {
         `✅ Phone ${prev ? "updated" : "added"} for ${lead.contact.name || "that lead"}: ${phone}${prev ? ` (was ${prev})` : ""}. Re-posting the lead below.`,
       );
       if (updated) await notifyNewLead(updated);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 8c) /recontact <id> <date> <note> — schedule a one-off manual re-contact for a
+    //     specific day (appears in the 📅 Scheduled section of that day's list). In a
+    //     customer's topic the id is implied, so it's just /recontact <date> <note>.
+    const recontactCmd = text.match(/^\/recontact(@\w+)?\b\s*([\s\S]*)$/i);
+    if (recontactCmd) {
+      const rest0 = (recontactCmd[2] || "").trim();
+      let targetLead: Lead | null = null;
+      let dateStr = rest0;
+      if (inTopic) {
+        targetLead = await getLeadByReplyThreadId(msgThread as number);
+        if (!targetLead) {
+          await reply(fromChat, "Couldn't tell which customer this topic is for.", msgThread);
+          return NextResponse.json({ ok: true });
+        }
+      } else {
+        const sp = rest0.match(/^(\S+)\s*([\s\S]*)$/);
+        const code = (sp?.[1] || "").trim();
+        dateStr = (sp?.[2] || "").trim();
+        if (!code || !dateStr) {
+          await reply(fromChat, "Usage: /recontact <id> <date> <note>\nExample: /recontact a1b2c3d4 10/3/26 wants to wait til October\n(Or just /recontact <date> <note> inside a customer's topic.)");
+          return NextResponse.json({ ok: true });
+        }
+        const { lead, multiple } = await getLeadByShortId(code);
+        if (multiple) {
+          await reply(fromChat, `More than one lead matches "${code}". Reply with the full ID from the alert.`);
+          return NextResponse.json({ ok: true });
+        }
+        if (!lead) {
+          await reply(fromChat, `No lead found with ID "${code}".`);
+          return NextResponse.json({ ok: true });
+        }
+        targetLead = lead;
+      }
+      if (!targetLead) return NextResponse.json({ ok: true });
+      const parsed = parseScheduleDate(dateStr);
+      if (!parsed) {
+        await reply(fromChat, `Couldn't read a date in "${dateStr}". Try e.g. ${inTopic ? "/recontact 10/3/26 wants to wait til October" : "/recontact <id> 10/3/26 wants to wait til October"}`, inTopic ? msgThread : undefined);
+        return NextResponse.json({ ok: true });
+      }
+      const note = parsed.rest;
+      const code = targetLead.id.split("-")[0];
+      await updateLead(targetLead.id, { scheduledRecontactAt: parsed.iso, scheduledRecontactNote: note || undefined });
+      await reply(fromChat, `✅ ${targetLead.contact.name || carText(targetLead)} is set to re-contact on 📅 ${parsed.friendly}${note ? `\nNote: ${note}` : ""}. They'll appear on that day's re-contact list.`, inTopic ? msgThread : undefined);
+      await notifyLog(`📝 ${who} scheduled re-contact — ${carText(targetLead)} (${code}) for ${parsed.iso}${note ? ` — ${note}` : ""}`);
       return NextResponse.json({ ok: true });
     }
 

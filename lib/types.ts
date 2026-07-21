@@ -342,7 +342,7 @@ export interface Lead {
    * flaky force-reply on mobile/in topics. kind ∈ ask|offer|bought (log a number) or
    * eoffer|einfo|emsg (draft an email). promptMsgId is the "type your …" prompt message
    * so it can be auto-deleted once the input arrives. Cleared once consumed/cancelled/expired. */
-  pendingTopicAction?: { kind: string; at: string; promptMsgId?: number };
+  pendingTopicAction?: { kind: string; at: string; promptMsgId?: number; date?: string };
   /** Set when the owner taps "📞 Called" to mark the lead contacted by phone. The
    * button is a toggle on the contacted state (new↔contacted): pressing it when the
    * lead is already contacted — even from an auto email-contact — moves it back to
@@ -361,6 +361,11 @@ export interface Lead {
    * last appeared (the next ping is due 7 days after that). */
   recontactStage?: number;
   recontactLastAt?: string;
+  /** A one-off manual re-contact the owner scheduled (via /recontact or the 🔄 button):
+   * the date it should appear on the list (YYYY-MM-DD, MT) + the reason. Cleared once it
+   * shows on that day's list, so it's a single reminder, not a recurring one. */
+  scheduledRecontactAt?: string;
+  scheduledRecontactNote?: string;
   /** Inbound email ids (Resend email.received) already relayed to Telegram — the
    * idempotency ledger that keeps Svix auto-retries/replays from double-posting.
    * Capped to the most recent 20. */

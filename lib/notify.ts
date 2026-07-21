@@ -315,7 +315,7 @@ export function topicKeyboard(lead: Lead) {
   if (lead.contact.email) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
   if (lead.contact.phone) row.push({ text: "💬 Text", callback_data: `menu|text|${sid}` });
   if (!row.length) row.push({ text: "📧 Email", callback_data: `menu|email|${sid}` });
-  return { inline_keyboard: [row] };
+  return { inline_keyboard: [row, [{ text: "🔄 Re-contact", callback_data: `rc|start|${sid}` }]] };
 }
 
 /** Email sub-menu: Offer / Info / Message + Back. Short labels (the channel is already
@@ -457,7 +457,10 @@ function negKeyboard(lead: Lead) {
         { text: "❓ Ask for info", callback_data: `act|info|${sid}` },
         { text: "✉️ Message", callback_data: `act|msg|${sid}` },
       ],
-      [{ text: "✅ Contacted", callback_data: `act|called|${sid}` }],
+      [
+        { text: "✅ Contacted", callback_data: `act|called|${sid}` },
+        { text: "🔄 Re-contact", callback_data: `rc|start|${sid}` },
+      ],
     ],
   };
 }
@@ -527,13 +530,15 @@ export async function notifyPartialLead(lead: Lead): Promise<void> {
 /** Generic owner Telegram message (gated, best-effort, never throws). Routes to
  * `channel` (defaults to the muted Updates channel); booking/appointment events
  * pass "bookings". Used by the scheduled cron and the booking routes. Await it. */
-export async function notifyOwner(text: string, channel: NotifyChannel = "updates"): Promise<void> {
+export async function notifyOwner(text: string, channel: NotifyChannel = "updates", parseMode?: string): Promise<boolean> {
   const chat = chatFor(channel);
-  if (!BOT_TOKEN || !chat) return;
+  if (!BOT_TOKEN || !chat) return false;
   try {
-    await sendText(text, chat);
+    await sendText(text, chat, undefined, undefined, parseMode);
+    return true;
   } catch (e) {
     console.error("[notify] owner message failed:", e);
+    return false;
   }
 }
 

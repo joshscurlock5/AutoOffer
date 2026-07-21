@@ -18,27 +18,35 @@ import { notifyOwner } from "./notify";
 
 const DAY = 86_400_000;
 
-/** The copy-paste text message the owner sends — sent as its own Telegram
- * message so a long-press copies exactly this and nothing else. */
+/** The copy-paste text message the owner sends — its own Telegram message,
+ * wrapped in <pre> so ONE TAP copies exactly this. Written to sound like a real
+ * person (Sam), with no emojis or dashes. */
 export const RECONTACT_TEMPLATE =
-  "Hi, it's DriveOffer 👋 Just checking in — any luck selling your car? " +
-  "We're still interested in buying it, and can get you a quick updated offer if you'd like. " +
-  "No pressure at all — if it's already sold or you've changed your mind, no worries. " +
-  "Just let us know either way. Thanks!";
+  "Hey, it's Sam with DriveOffer! Just checking in to see if you still want to sell your car. " +
+  "We're still interested and happy to send you an updated offer. No rush, just let me know!";
 
 const STAGE_HEADERS = [
-  "🟢 1st check-in — 7+ days",
-  "🟡 2nd check-in — 14+ days",
-  "🔴 Final check-in — 21+ days",
+  "🟢 1st check-in (7+ days)",
+  "🟡 2nd check-in (14+ days)",
+  "🔴 Final check-in (21+ days)",
+  "📅 Scheduled re-contact",
 ];
+
+/** Escape the few dynamic bits (phone, vehicle, name) for the HTML-parsed digest. */
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 /** Telegram hard limit is 4096 chars — chunk comfortably below it. */
 const CHUNK_MAX = 3500;
 
+export type RecontactStage = 0 | 1 | 2 | 3;
 export interface RecontactDue {
   lead: Lead;
-  /** Which check-in this appearance is (0 = 1st/7d, 1 = 2nd/14d, 2 = final/21d). */
-  stage: 0 | 1 | 2;
+  /** 0 = 1st/7d, 1 = 2nd/14d, 2 = final/21d, 3 = owner-scheduled one-off. */
+  stage: RecontactStage;
+  /** For a scheduled (stage 3) entry, the owner's reason — shown next to the line. */
+  note?: string;
   /** Other due leads with the SAME phone (repeat submissions) — hidden from the
    * list (one text covers the person) but stamped alongside so they don't
    * resurface on their own tomorrow. */
@@ -56,6 +64,7 @@ function lastTouchMs(l: Lead): number {
  * PHONE NUMBER — repeat submissions from the same person collapse into the
  * newest lead (the rest ride along in `also` for stamping). */
 export function collectRecontactDue(leads: Lead[], now: number): RecontactDue[] {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" }).format(new Date(now));
   const eligible: { lead: Lead; stage: 0 | 1 | 2; digits: string }[] = [];
   for (const l of leads) {
     // Open pipeline only: booked, closed, lost, spam and never-submitted partials
@@ -63,6 +72,8 @@ export function collectRecontactDue(leads: Lead[], now: number): RecontactDue[] 
     if (l.status !== "new" && l.status !== "contacted") continue;
     if (l.kind !== "vehicle") continue;
     if (l.smsOptOut) continue;
+    // A due owner-scheduled one-off is shown in the Scheduled section instead.
+    if (l.scheduledRecontactAt && l.scheduledRecontactAt <= today) continue;
     const digits = (l.contact.phone || "").replace(/\D/g, "");
     if (digits.length < 10) continue;
     const stage = Math.min(Math.max(l.recontactStage ?? 0, 0), 3);
@@ -95,14 +106,45 @@ export function collectRecontactDue(leads: Lead[], now: number): RecontactDue[] 
   );
 }
 
-/** One numbered line per lead: phone first (Telegram makes it tappable). The
- * name only appears when we actually have one — the form doesn't collect it. */
+/** Owner-scheduled one-off re-contacts that are due (scheduledRecontactAt on or before
+ * today, MT) — the "📅 Scheduled re-contact" section. Same phone-dedup as the regular
+ * list; each carries the owner's note. */
+export function collectScheduledDue(leads: Lead[], now: number): RecontactDue[] {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" }).format(new Date(now));
+  const byPhone = new Map<string, RecontactDue>();
+  for (const l of leads) {
+    if (l.status !== "new" && l.status !== "contacted") continue;
+    if (l.kind !== "vehicle") continue;
+    if (l.smsOptOut) continue;
+    if (!l.scheduledRecontactAt || l.scheduledRecontactAt > today) continue; // not due yet
+    const digits = (l.contact.phone || "").replace(/\D/g, "");
+    if (digits.length < 10) continue;
+    const cur = byPhone.get(digits);
+    if (!cur) {
+      byPhone.set(digits, { lead: l, stage: 3, note: l.scheduledRecontactNote, also: [] });
+    } else {
+      const newer = (l.createdAt || "") > (cur.lead.createdAt || "");
+      if (newer) byPhone.set(digits, { lead: l, stage: 3, note: l.scheduledRecontactNote, also: [...cur.also, cur.lead] });
+      else cur.also.push(l);
+    }
+  }
+  // Earliest-scheduled first, then newest lead.
+  return [...byPhone.values()].sort(
+    (a, b) =>
+      (a.lead.scheduledRecontactAt || "").localeCompare(b.lead.scheduledRecontactAt || "") ||
+      (b.lead.createdAt || "").localeCompare(a.lead.createdAt || ""),
+  );
+}
+
+/** One numbered line per lead: the phone as a tap-to-copy <code> chip, then the
+ * vehicle/name for context. The name only appears when we have one (the form
+ * doesn't collect it). */
 function dueLine(n: number, d: RecontactDue): string {
   const c = d.lead.contact;
   const v = d.lead.vehicle;
   const who = [c.name, v ? `${v.year} ${v.make} ${v.model}` : ""].filter(Boolean).join(" · ");
-  const sid = d.lead.id.split("-")[0];
-  return `${n}. ${c.phone} — ${who || "(no details)"} 🆔 ${sid}`;
+  const reason = d.stage === 3 && d.note ? ` — ${esc(d.note)}` : "";
+  return `${n}. <code>${esc(c.phone || "")}</code>${who ? ` ${esc(who)}` : ""}${reason}`;
 }
 
 /** The full digest as a list of Telegram-sized messages:
@@ -114,29 +156,18 @@ export function buildRecontactMessages(due: RecontactDue[], now: number): string
     month: "short",
     day: "numeric",
   }).format(new Date(now));
-  const counts = [0, 0, 0];
-  for (const d of due) counts[d.stage] += 1;
-  const countBits = [
-    counts[0] ? `${counts[0]} first (7d)` : "",
-    counts[1] ? `${counts[1]} second (14d)` : "",
-    counts[2] ? `${counts[2]} final (21d)` : "",
-  ].filter(Boolean);
+  // Simple header — title + date — with a marker emoji so the list stands out from
+  // the "🚗 New lead" alerts in the same channel.
+  const header = `🔄 <b>Re-contact list</b>\n${dateLabel}`;
 
-  const header = [
-    `📞 Re-contact list — ${dateLabel}`,
-    "",
-    `${due.length} lead${due.length === 1 ? "" : "s"} to text today${countBits.length ? ` · ${countBits.join(" · ")}` : ""}`,
-    "Work top to bottom — every lead is numbered, so just remember the last number you texted.",
-    "Long-press the next message to copy it, then tap a phone number below.",
-  ].join("\n");
-
-  // Numbered lines with a group header before each stage block.
+  // Numbered lines with a bold group header before each stage block. Empty stages
+  // never appear — a header is only emitted when a lead of that stage shows up.
   const listLines: string[] = [];
   let lastStage = -1;
   due.forEach((d, i) => {
     if (d.stage !== lastStage) {
       if (listLines.length) listLines.push("");
-      listLines.push(`${STAGE_HEADERS[d.stage]} (${counts[d.stage]})`);
+      listLines.push(`<b>${STAGE_HEADERS[d.stage]}</b>`);
       lastStage = d.stage;
     }
     listLines.push(dueLine(i + 1, d));
@@ -156,7 +187,7 @@ export function buildRecontactMessages(due: RecontactDue[], now: number): string
   }
   if (cur) chunks.push(cur);
 
-  return [header, RECONTACT_TEMPLATE, ...chunks];
+  return [header, `<pre>${esc(RECONTACT_TEMPLATE)}</pre>`, ...chunks];
 }
 
 /** Compute the due list, and (unless dry) send it to the Leads channel and stamp
@@ -167,27 +198,49 @@ export async function runRecontactDigest(
   now: number,
   dry: boolean,
 ): Promise<{ due: number; byStage: number[]; messages: string[] }> {
-  const due = collectRecontactDue(leads, now);
-  const byStage = [0, 0, 0];
+  const scheduled = collectScheduledDue(leads, now);
+  const scheduledPhones = new Set(
+    scheduled.flatMap((s) => [s.lead, ...s.also]).map((l) => (l.contact.phone || "").replace(/\D/g, "")),
+  );
+  // Regular check-ins, minus anyone already covered by a scheduled entry (same phone).
+  const regular = collectRecontactDue(leads, now).filter(
+    (d) => !scheduledPhones.has((d.lead.contact.phone || "").replace(/\D/g, "")),
+  );
+  const due = [...regular, ...scheduled]; // 🟢🟡🔴 first, 📅 scheduled last
+  const byStage = [0, 0, 0, 0];
   for (const d of due) byStage[d.stage] += 1;
   if (!due.length) return { due: 0, byStage, messages: [] };
 
   const messages = buildRecontactMessages(due, now);
   if (!dry) {
+    // Send the whole digest as HTML (tap-to-copy template + tappable phone chips).
+    let allSent = true;
     for (const m of messages) {
-      await notifyOwner(m, "leads");
+      if (!(await notifyOwner(m, "leads", "HTML"))) allSent = false;
     }
-    const nowISO = new Date(now).toISOString();
-    for (const d of due) {
-      // Stamp the listed lead AND its same-phone duplicates — one text covered
-      // the person, so none of their leads should resurface separately.
-      for (const l of [d.lead, ...d.also]) {
-        try {
-          await updateLead(l.id, { recontactStage: d.stage + 1, recontactLastAt: nowISO });
-        } catch (e) {
-          console.error("[recontact] stamp failed", l.id, e);
+    // Only stamp once the list actually went out — otherwise a failed send would
+    // silently mark leads "re-contacted" and they'd never resurface. A miss just
+    // retries on the next run.
+    if (allSent) {
+      const nowISO = new Date(now).toISOString();
+      for (const d of due) {
+        // Stamp the listed lead AND its same-phone duplicates — one text covered
+        // the person, so none of their leads should resurface separately.
+        for (const l of [d.lead, ...d.also]) {
+          try {
+            if (d.stage === 3) {
+              // Scheduled one-off: clear it so it doesn't recur; counts as a touch.
+              await updateLead(l.id, { scheduledRecontactAt: undefined, scheduledRecontactNote: undefined, recontactLastAt: nowISO });
+            } else {
+              await updateLead(l.id, { recontactStage: d.stage + 1, recontactLastAt: nowISO });
+            }
+          } catch (e) {
+            console.error("[recontact] stamp failed", l.id, e);
+          }
         }
       }
+    } else {
+      console.error("[recontact] some digest messages failed to send — leads NOT stamped (will retry next run)");
     }
   }
   return { due: due.length, byStage, messages };
