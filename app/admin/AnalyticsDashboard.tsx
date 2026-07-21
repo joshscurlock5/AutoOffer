@@ -509,7 +509,7 @@ function PillRow({
 }) {
   if (opts.length === 0) return null;
   const pill = (active: boolean) =>
-    `rounded-lg px-3 py-1 text-sm font-semibold transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
+    `rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="w-24 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted">{label}</span>
@@ -994,7 +994,13 @@ function ControlBar({
   clearFilters: () => void;
   countLabel: string;
 }) {
+  // Open on desktop; collapsed on phones, where 7 filter rows would otherwise
+  // bury the numbers below the fold. Adjusted after mount (not in the initial
+  // state) so server and first client render agree — no hydration mismatch.
   const [showFilters, setShowFilters] = useState(true);
+  useEffect(() => {
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) setShowFilters(false);
+  }, []);
   const presets: { key: Preset; label: string }[] = [
     { key: "7d", label: "7d" },
     { key: "30d", label: "30d" },
@@ -1003,7 +1009,7 @@ function ControlBar({
   ];
   return (
     <>
-      <div className="sticky top-20 z-40 mb-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+      <div className="z-40 mb-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:sticky lg:top-20">
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
             {presets.map((p) => (
@@ -1011,7 +1017,7 @@ function ControlBar({
                 key={p.key}
                 type="button"
                 onClick={() => setRange({ preset: p.key })}
-                className={`px-3 py-1.5 text-sm font-semibold ${range.preset === p.key ? "bg-brand-600 text-white" : "bg-white text-navy hover:bg-slate-50"}`}
+                className={`px-3.5 py-2 text-sm font-semibold ${range.preset === p.key ? "bg-brand-600 text-white" : "bg-white text-navy hover:bg-slate-50"}`}
               >
                 {p.label}
               </button>
@@ -1042,7 +1048,7 @@ function ControlBar({
           >
             {showFilters ? "Hide filters" : `Filters${activeFilters > 0 ? ` (${activeFilters})` : ""}`}
           </button>
-          <span className="ml-auto self-center text-sm text-muted">{countLabel}</span>
+          <span className="w-full text-sm text-muted lg:ml-auto lg:w-auto lg:self-center">{countLabel}</span>
         </div>
       </div>
       {showFilters && (
@@ -3003,14 +3009,17 @@ export default function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          {/* Mobile/tablet nav strip */}
-          <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 lg:hidden">
+          {/* Mobile/tablet nav strip — pinned to the top (same proven offset as
+              the desktop sidebar/control bar) so tabs stay one tap away while
+              scrolling long content. Solid blurred background so content scrolls
+              cleanly beneath it. */}
+          <div className="sticky top-20 z-50 -mx-5 mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white/95 px-5 shadow-sm backdrop-blur lg:hidden">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={`-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-semibold ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-navy"}`}
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold ${tab === t.key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-navy"}`}
               >
                 {t.label}
               </button>
