@@ -18,6 +18,7 @@ import { ddb, s3, LEADS_TABLE, EVENTS_TABLE, REFERRALS_TABLE, CHATS_TABLE, LOOKU
 import type { Lead, Referral, ChatConversation, ChatMessage, Lookup, SiteEvent, MetaSnapshot, ExperimentVariant } from "./types";
 import { DEFAULT_VARIANT, EXPERIMENT_VARIANTS } from "./types";
 import { toE164 } from "./sms";
+import { SMS_CONFIG_ID } from "./smsMode";
 
 // ---- Leads (DynamoDB) -----------------------------------------------------
 
@@ -37,7 +38,7 @@ export async function getLeads(): Promise<Lead[]> {
     lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastKey);
   return leads
-    .filter((l) => l.id !== AB_CONFIG_ID)
+    .filter((l) => l.id !== AB_CONFIG_ID && l.id !== SMS_CONFIG_ID)
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 

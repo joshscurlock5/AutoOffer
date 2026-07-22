@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MAKES, YEARS, modelsFor } from "@/lib/vehicles";
-import type { OfferEstimate, DecodedVehicle, ExperimentVariant } from "@/lib/types";
+import type { OfferEstimate, DecodedVehicle, ExperimentVariant, SmsScenario } from "@/lib/types";
 import { cad, km as fmtKm } from "@/lib/format";
 import { track, trackFunnel } from "@/lib/analytics";
 import { getAttribution, getBehavior, getTouches, markFunnelStep } from "@/lib/attribution";
@@ -85,6 +85,9 @@ export default function OfferFlow() {
   const [phone, setPhone] = useState("");
   const [contactMethod, setContactMethod] = useState<"call" | "text" | "email">("call");
   const [bestTime, setBestTime] = useState("Anytime");
+  // Express opt-in to AUTOMATED (Twilio) texts. Optional, unchecked by default;
+  // recorded on the lead and gates the automated SMS channel (see lib/sms.ts).
+  const [smsConsent, setSmsConsent] = useState(false);
   const [tsToken, setTsToken] = useState("");
 
   // A/B: which contact-requirement variant is live (server setting). "choose" =
@@ -92,14 +95,18 @@ export default function OfferFlow() {
   // and email optional. Fetched on mount — the contact step (step 3+) is reached
   // long after this resolves, so there's no flash on the fields that depend on it.
   const [formVariant, setFormVariant] = useState<ExperimentVariant>("choose");
+  // SMS opt-in A/B: whether the Twilio consent box shows. Defaults "off" (no box,
+  // today's form). Same live fetch as the contact variant — resolves well before
+  // the contact step, so no flash.
+  const [smsScenario, setSmsScenario] = useState<SmsScenario>("off");
   useEffect(() => {
     let cancelled = false;
     fetch("/api/experiment")
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled && (d?.activeVariant === "choose" || d?.activeVariant === "phone_required")) {
-          setFormVariant(d.activeVariant);
-        }
+        if (cancelled) return;
+        if (d?.activeVariant === "choose" || d?.activeVariant === "phone_required") setFormVariant(d.activeVariant);
+        if (d?.smsScenario === "off" || d?.smsScenario === "twilio") setSmsScenario(d.smsScenario);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -727,6 +734,8 @@ export default function OfferFlow() {
       fd.append("phone", phone);
       fd.append("contactMethod", contactMethod);
       fd.append("bestTime", bestTime);
+      fd.append("smsConsent", smsConsent ? "true" : "false");
+      fd.append("smsScenario", smsScenario);
       // Which A/B variant THIS form actually rendered — beats the server's live
       // setting for labeling, so a flip mid-visit can't misfile the lead.
       fd.append("experimentVariant", formVariant);
@@ -902,6 +911,25 @@ export default function OfferFlow() {
         </div>
 
         <div className="mt-6 space-y-4">
+        {/* Optional, unchecked-by-default opt-in for AUTOMATED texts (Twilio A2P).
+            Only shown under the "twilio" A/B scenario — "off" (default) is the
+            regular form with no box. Minimal wording, only what carriers require.
+            Leaving it blank still submits; it just means no automated texts. */}
+        {smsScenario === "twilio" && (
+          <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-snug text-muted">
+          <input
+            type="checkbox"
+            checked={smsConsent}
+            onChange={(e) => setSmsConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand focus:ring-brand"
+          />
+          <span>
+            <span className="font-semibold text-navy">Text me my offer.</span> Automated, recurring texts from DriveOffer. Msg &amp; data rates may apply. Reply STOP to opt out.{" "}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">Terms</a> ·{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">Privacy</a>
+          </span>
+          </label>
+        )}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
         <div className="flex justify-center">

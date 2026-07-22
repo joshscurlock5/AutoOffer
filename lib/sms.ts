@@ -2,6 +2,7 @@ import "server-only";
 import type { Lead } from "./types";
 import { site } from "./site-config";
 import { formatEdmonton } from "./time";
+import { getSmsScenario, isTwilioScenario } from "./smsMode";
 
 /**
  * Outbound customer SMS via Twilio — the texting counterpart to lib/email.ts.
@@ -40,9 +41,12 @@ export function toE164(raw: string | undefined | null): string | null {
   return null;
 }
 
-/** The number to text, or null: any lead with a valid phone that hasn't opted out. */
+/** The number to text, or null. A2P eligibility: valid phone, not opted out, AND
+ * an explicit opt-in on record. Without smsConsent we never auto-text — manual
+ * P2P texting from a rep's own phone is a separate channel and doesn't run here. */
 export function smsTo(lead: Lead): string | null {
   if (lead.smsOptOut) return null;
+  if (!lead.smsConsent) return null;
   return toE164(lead.contact.phone);
 }
 
@@ -52,6 +56,10 @@ export function smsTo(lead: Lead): string | null {
  * varies by carrier — verify with Twilio before relying on it. */
 async function send(to: string, body: string, mediaUrl?: string): Promise<boolean> {
   if (!smsConfigured()) return false;
+  // Master switch: every outbound text funnels through here, so gating the
+  // scenario in one spot keeps the whole channel dormant until it's flipped to
+  // "twilio" from the admin — belt-and-suspenders with the credential + consent gates.
+  if (!isTwilioScenario(await getSmsScenario())) return false;
   try {
     const auth = Buffer.from(`${SID}:${TOKEN}`).toString("base64");
     const params = new URLSearchParams({

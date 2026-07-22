@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { EXPERIMENT_VARIANTS, type ExperimentVariant } from "@/lib/types";
+import { EXPERIMENT_VARIANTS, SMS_SCENARIOS, type ExperimentVariant, type SmsScenario } from "@/lib/types";
 
 // Self-fetching A/B tab (same pattern as EmailsTab): pulls per-variant funnel +
 // outcomes for the selected date range, and lets the owner set which variant is
@@ -22,6 +22,7 @@ interface VariantStats {
 }
 interface ExpData {
   activeVariant: ExperimentVariant;
+  smsScenario?: SmsScenario;
   variants: VariantStats[];
 }
 
@@ -93,6 +94,7 @@ export default function ExperimentsTab({ since, until }: { since?: string; until
   const [data, setData] = useState<ExpData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<ExperimentVariant | null>(null);
+  const [savingSms, setSavingSms] = useState<SmsScenario | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -125,7 +127,25 @@ export default function ExperimentsTab({ since, until }: { since?: string; until
     }
   }
 
+  async function setActiveSms(scenario: SmsScenario) {
+    if (savingSms) return;
+    setSavingSms(scenario);
+    try {
+      const r = await fetch("/api/admin/experiments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ smsScenario: scenario }),
+      });
+      if (r.ok) setData((d) => (d ? { ...d, smsScenario: scenario } : d));
+    } catch {
+      /* leave selection unchanged on failure */
+    } finally {
+      setSavingSms(null);
+    }
+  }
+
   const active: ExperimentVariant = data?.activeVariant ?? "choose";
+  const activeSms: SmsScenario = data?.smsScenario ?? "off";
 
   return (
     <div className="space-y-6">
@@ -173,6 +193,42 @@ export default function ExperimentsTab({ since, until }: { since?: string; until
           Changing this switches the live form right away and starts saving new leads + visits under that
           version, until you switch again.
         </p>
+      </div>
+
+      {/* SMS opt-in A/B — separate switch: whether to show the Twilio consent box */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-1 text-sm font-bold text-navy">SMS opt-in box (Twilio)</div>
+        <p className="mb-2 text-xs text-muted">
+          Whether the get-offer form shows the text-message consent box. Keep it off until Twilio is
+          approved — switching it on shows the box and starts collecting opt-ins right away.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SMS_SCENARIOS.map((m) => {
+            const isActive = activeSms === m.key;
+            return (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setActiveSms(m.key)}
+                disabled={savingSms != null}
+                className={`rounded-lg border p-3 text-left transition ${isActive ? "border-brand-600 bg-brand-50" : "border-slate-200 bg-white hover:bg-slate-50"} disabled:opacity-60`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${isActive ? "border-brand-600 bg-brand-600" : "border-slate-300"}`}>
+                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </span>
+                  <span className="font-semibold text-navy">{m.label}</span>
+                  {isActive && (
+                    <span className="ml-auto rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {savingSms === m.key ? "Saving…" : "Live"}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 pl-6 text-xs text-muted">{m.blurb}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Per-variant comparison */}

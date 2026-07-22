@@ -418,6 +418,19 @@ export interface Lead {
   smsOptOut?: boolean;
   /** When the customer texted STOP (opt-out timestamp, for CASL audit + timeline). */
   smsOptOutAt?: string;
+  /** Express opt-in to AUTOMATED (Twilio A2P) texts — a deliberate, unchecked-by-default
+   * checkbox tick on the lead form. REQUIRED before any automated SMS goes out. This is
+   * NOT needed for manual P2P texting from a rep's own phone (that relies on CASL implied
+   * consent from the inquiry); it gates only the automated Twilio channel. */
+  smsConsent?: boolean;
+  /** When the box was ticked (ISO) — the A2P/CASL consent audit trail. */
+  smsConsentAt?: string;
+  /** Which form captured the consent (e.g. "get-offer") — provenance for the audit trail. */
+  smsConsentSource?: string;
+  /** Which SMS A/B scenario the form actually rendered under for this lead
+   * ("off" = no box shown, "twilio" = box shown). Stamped from what they saw
+   * (the global setting can flip mid-visit) so per-scenario comparison stays honest. */
+  smsExperiment?: SmsScenario;
   /** Coarse origin parsed from an inbound SMS (Twilio From* fields) — distinct
    * from the IP-derived Lead.geo, never overwrites it. */
   smsOrigin?: { city?: string; state?: string; zip?: string };
@@ -469,6 +482,16 @@ export const DEFAULT_VARIANT: ExperimentVariant = "choose";
 export const EXPERIMENT_VARIANTS: { key: ExperimentVariant; label: string; blurb: string }[] = [
   { key: "choose", label: "Choose either", blurb: "Seller picks how to be reached — neither email nor phone is forced. The current live form." },
   { key: "phone_required", label: "Phone required", blurb: "Phone is required; email is optional." },
+];
+
+/** SMS opt-in A/B: whether the get-offer form shows the Twilio consent checkbox.
+ * Owner-picked global switch; DEFAULT "off" (the regular form, no box). Type +
+ * labels live here (client-safe) so the admin toggle can import them; the DB
+ * getter/setter live in lib/smsMode.ts (server-only). */
+export type SmsScenario = "off" | "twilio";
+export const SMS_SCENARIOS: { key: SmsScenario; label: string; blurb: string }[] = [
+  { key: "off", label: "No texting box", blurb: "The regular form — no SMS box, just the info + secure note + button. No automated texts. (Current live form.)" },
+  { key: "twilio", label: "Twilio opt-in box", blurb: "Shows the SMS-consent checkbox; opt-ins can receive automated texts once Twilio is live." },
 ];
 
 export interface SiteEvent {

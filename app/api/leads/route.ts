@@ -203,6 +203,14 @@ export async function POST(req: NextRequest) {
     const gaClientId = clientIdFromGaCookie(req.cookies.get("_ga")?.value);
     const gaSessionId = consentDenied ? undefined : parseGa4SessionCookie(req.cookies.getAll());
 
+    // Express opt-in to AUTOMATED texts (the separate, optional, unchecked box).
+    // Absent/false → the lead is never auto-texted (lib/sms.ts smsTo); manual
+    // P2P texting from a rep's phone is a separate channel and is unaffected.
+    const smsConsent = ["true", "on", "1", "yes"].includes(str(form.get("smsConsent")).toLowerCase());
+    // A/B: which SMS scenario the form actually rendered under. Stamp ALL leads
+    // (off or twilio) so the two scenarios can be compared honestly later.
+    const smsExperiment: "off" | "twilio" = str(form.get("smsScenario")) === "twilio" ? "twilio" : "off";
+
     const lead: Lead = {
       id,
       kind,
@@ -222,6 +230,8 @@ export async function POST(req: NextRequest) {
       ...(behavior ? { behavior } : {}),
       ...(gaClientId ? { gaClientId } : {}),
       ...(gaSessionId ? { gaSessionId } : {}),
+      ...(smsConsent ? { smsConsent: true, smsConsentAt: createdAt, smsConsentSource: "get-offer" } : {}),
+      smsExperiment,
       source: "web",
       // A/B label: the variant the FORM actually rendered (client-sent) beats the
       // currently-active setting — a visitor mid-form during a flip stays filed
