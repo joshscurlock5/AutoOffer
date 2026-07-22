@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLeadByShortId, findLeadByEmail, atomicLeadEngagement, lastSentEmailKind } from "@/lib/store";
 import { postLeadTopic } from "@/lib/notify";
+import { stripQuotedReply } from "@/lib/emailReply";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -71,11 +72,13 @@ export async function POST(req: NextRequest) {
   // tells the caller whether the topic took it, so it can skip its flat alert.
   let topicPosted = false;
   if (text) {
+    // Show only the customer's new message — strip our email quoted back below it.
+    const display = stripQuotedReply(text) || text;
     const inbound = [
       `📩 ${lead.contact.name || "Customer"} (email)`,
       ...(subject ? [`Subject: ${subject}`] : []),
       "",
-      `"${text.slice(0, 900)}"`,
+      `"${display.slice(0, 900)}"`,
     ].join("\n");
     topicPosted = await postLeadTopic(lead, inbound);
   }

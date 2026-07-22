@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getLeads, atomicLeadEngagement, getLeadByShortId, updateLead, lastSentEmailKind } from "@/lib/store";
 import { notifyOwner, leadLine, postLeadTopic } from "@/lib/notify";
+import { stripQuotedReply } from "@/lib/emailReply";
 import type { CommsEvent, Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -184,7 +185,7 @@ async function handleInbound(event: ResendEvent): Promise<void> {
     const unmatchedAtt = await listInboundAttachments(emailId);
     await notifyOwner(
       `📩 Customer reply — couldn't match it to a lead\nFrom: ${from}` +
-        `${subject ? `\nSubject: ${subject}` : ""}\n\n"${(text || "(no body)").slice(0, 700)}"` +
+        `${subject ? `\nSubject: ${subject}` : ""}\n\n"${(stripQuotedReply(text) || text || "(no body)").slice(0, 700)}"` +
         (unmatchedAtt.length && emailId ? `\n\n${attachmentsLine(emailId, unmatchedAtt.length)}` : ""),
       "replies",
     );
@@ -195,11 +196,14 @@ async function handleInbound(event: ResendEvent): Promise<void> {
   // so the same inbound email must never post twice. Processed ids live on the lead.
   if (emailId && (lead.processedInboundIds || []).includes(emailId)) return;
 
+  // Show only the customer's new message — strip our email quoted back below it.
+  // (Keep the full `text` above for Ref: matching — that tag lives in the quote.)
+  const displayText = stripQuotedReply(text) || text;
   const inbound = [
     `📩 ${lead.contact.name || "Customer"} (email)`,
     ...(subject ? [`Subject: ${subject}`] : []),
     "",
-    `"${(text || "(couldn't load the message text — open it in Resend)").slice(0, 900)}"`,
+    `"${(displayText || "(couldn't load the message text — open it in Resend)").slice(0, 900)}"`,
   ].join("\n");
 
   // Stamp engagement — best-effort; a transient DynamoDB fault must NOT stop us from
