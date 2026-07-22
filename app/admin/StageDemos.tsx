@@ -6,24 +6,30 @@ import { type ReactNode } from "react";
 //  StageDemo — a small, looping, pure-CSS animation of one funnel stage: the
 //  actual form screen it maps to, with a moving cursor performing the tracked
 //  action. A button is "clicked" (press + ripple) only when the button press is
-//  part of what the stage records (Visited / Reached contact / Typing info do
-//  not click). Shown behind the ⓘ next to each stage on the A/B funnel.
+//  part of what the stage records; field-entry stages just fill a field.
 //
 //  Self-contained: all keyframes live in DEMO_CSS (sd- prefixed so nothing
-//  collides with app styles) and are injected with the component. Keyed by the
-//  stage's display LABEL (from lib/eventAnalytics STAGES) via STAGE_INFO.
+//  collides with app styles). Keyed by the stage's display LABEL (from
+//  lib/eventAnalytics STAGES) via STAGE_INFO.
 // ---------------------------------------------------------------------------
 
 /** Plain-English title + one-line description per funnel-stage label. Also the
  * allow-list: a label with no entry here gets no ⓘ button. */
 export const STAGE_INFO: Record<string, { title: string; blurb: string }> = {
   Visited: { title: "Visited", blurb: "Someone landed on the DriveOffer website." },
-  "Opened form": { title: "Opened form", blurb: "They opened the get-offer form." },
-  "Entered vehicle": { title: "Entered vehicle", blurb: "They entered year, make & model, then continued." },
-  "Added details": { title: "Added details", blurb: "They added mileage & condition, then continued." },
-  "Reached contact": { title: "Reached contact", blurb: "They reached the contact step (shown — nothing clicked yet)." },
-  "Typing info": { title: "Typing info", blurb: "They started typing their contact info." },
-  Submitted: { title: "Submitted", blurb: "They submitted the form — became a lead." },
+  "Touched form": {
+    title: "Touched form",
+    blurb: "Engaged the offer form — a field tap OR a “Get a Free Offer” button. Both count as one; the split below shows which came first.",
+  },
+  "Entered make": { title: "Entered make", blurb: "Picked their car’s make." },
+  "Entered model": { title: "Entered model", blurb: "Picked their car’s model." },
+  "Submitted vehicle": { title: "Submitted vehicle", blurb: "Pressed “Get a Free Offer” to continue past the vehicle step." },
+  "Entered trim": { title: "Entered trim", blurb: "Picked a trim (optional — it’s on the details step)." },
+  "Entered mileage": { title: "Entered mileage", blurb: "Entered mileage. Condition is pre-filled, so it can’t be tracked separately." },
+  "Submitted details": { title: "Submitted details", blurb: "Pressed “Continue” past the details step." },
+  "Entered phone": { title: "Entered phone", blurb: "Typed their phone number." },
+  "Entered email": { title: "Entered email", blurb: "Typed their email address." },
+  Submitted: { title: "Submitted", blurb: "Pressed “Get My Free Offer” — became a lead." },
 };
 
 export function hasStageDemo(label: string): boolean {
@@ -34,29 +40,32 @@ const CURSOR_SVG =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 2 L4 19 L8.5 14.5 L11.5 21.5 L14.5 20.2 L11.5 13.5 L18 13.5 Z' fill='%230e1c2b' stroke='white' stroke-width='1.3' stroke-linejoin='round'/%3E%3C/svg%3E\")";
 
 function Cursor({ anim }: { anim: string }) {
-  return (
-    <span
-      className="sd-cursor"
-      style={{ backgroundImage: CURSOR_SVG, animation: `${anim} both infinite` }}
-      aria-hidden
-    />
-  );
+  return <span className="sd-cursor" style={{ backgroundImage: CURSOR_SVG, animation: `${anim} both infinite` }} aria-hidden />;
 }
 function Ring({ anim, style }: { anim: string; style?: React.CSSProperties }) {
   return <span className="sd-ring" style={{ animation: `${anim} both infinite`, ...style }} aria-hidden />;
 }
-
 function Frame({ children, cursor }: { children: ReactNode; cursor: ReactNode }) {
   return (
     <div className="sd-frame">
-      <div className="sd-hdr">
-        Drive<b>Offer</b>
-      </div>
+      <div className="sd-hdr">Drive<b>Offer</b></div>
       {children}
       {cursor}
     </div>
   );
 }
+
+/** A form field with a placeholder and an optional value overlay (static or animated). */
+function Field({ ph, value }: { ph: string; value?: ReactNode }) {
+  return (
+    <div className="sd-field">
+      <span className="sd-ph">{ph}</span>
+      {value}
+    </div>
+  );
+}
+const staticVal = (text: string) => <span className="sd-val" style={{ position: "absolute", left: 10 }}>{text}</span>;
+const animVal = (text: string, cls: string) => <span className={`sd-val ${cls}`} style={{ position: "absolute", left: 10 }}>{text}</span>;
 
 export default function StageDemo({ stage }: { stage: string }) {
   return (
@@ -67,15 +76,25 @@ export default function StageDemo({ stage }: { stage: string }) {
   );
 }
 
+/** The Year/Make/Model + "Get a Free Offer" vehicle step, shared by stages 2–5. */
+function VehicleForm({ make, model, button }: { make?: ReactNode; model?: ReactNode; button: ReactNode }) {
+  return (
+    <div className="sd-screen">
+      <div className="sd-lbl">Year</div><Field ph="Year" value={staticVal("2025")} />
+      <div className="sd-lbl">Make</div><Field ph="Make" value={make} />
+      <div className="sd-lbl">Model</div><Field ph="Model" value={model} />
+      {button}
+    </div>
+  );
+}
+
 function renderStage(stage: string): ReactNode {
   switch (stage) {
     case "Visited":
       return (
         <Frame cursor={<Cursor anim="sd-cur-visited 5s ease-in-out" />}>
           <div className="sd-screen">
-            <div className="sd-omni">
-              🔒 <span className="sd-tw sd-caret sd-type-url" style={{ marginLeft: 6 }}>driveoffer.ca</span>
-            </div>
+            <div className="sd-omni">🔒 <span className="sd-tw sd-caret sd-type-url" style={{ marginLeft: 6 }}>driveoffer.ca</span></div>
             <div className="sd-hero sd-hero-in">
               <div className="sd-logo">Drive<b>Offer</b></div>
               <div className="sd-tag">Sell your car the easy way.</div>
@@ -84,100 +103,146 @@ function renderStage(stage: string): ReactNode {
           </div>
         </Frame>
       );
-    case "Opened form":
+    case "Touched form":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-open 5s ease-in-out" />}>
-          <div className="sd-screen">
-            <div className="sd-home-out">
-              <div className="sd-h2">Get your offer</div>
-              <div className="sd-lbl">Free • 60 seconds</div>
-              <div className="sd-btn sd-press-open" style={{ marginTop: 60, position: "relative" }}>
-                Get a Free Offer →<Ring anim="sd-ring-open 5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 4 }} />
+        <Frame cursor={<Cursor anim="sd-cur-touch 4.5s ease-in-out" />}>
+          <VehicleForm
+            make={<Ring anim="sd-ring-touch 4.5s ease-in-out" style={{ left: 100, top: 4 }} />}
+            button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 8 }}>Get a Free Offer →</div>}
+          />
+        </Frame>
+      );
+    case "Entered make":
+      return (
+        <Frame cursor={<Cursor anim="sd-cur-make 5s ease-in-out" />}>
+          <VehicleForm
+            make={animVal("BMW", "sd-val-make")}
+            button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 8 }}>Get a Free Offer →</div>}
+          />
+        </Frame>
+      );
+    case "Entered model":
+      return (
+        <Frame cursor={<Cursor anim="sd-cur-model 5s ease-in-out" />}>
+          <VehicleForm
+            make={staticVal("BMW")}
+            model={animVal("i4", "sd-val-model")}
+            button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 8 }}>Get a Free Offer →</div>}
+          />
+        </Frame>
+      );
+    case "Submitted vehicle":
+      return (
+        <Frame cursor={<Cursor anim="sd-cur-subveh 5s ease-in-out" />}>
+          <VehicleForm
+            make={staticVal("BMW")}
+            model={staticVal("i4")}
+            button={
+              <div className="sd-btn sd-press-subveh" style={{ marginTop: 8, position: "relative" }}>
+                Get a Free Offer →<Ring anim="sd-ring-subveh 5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
               </div>
-            </div>
-            <div className="sd-fade sd-form-in">
-              <div className="sd-lbl">Year</div><div className="sd-field"><span className="sd-ph">Year</span></div>
-              <div className="sd-lbl">Make</div><div className="sd-field"><span className="sd-ph">Make</span></div>
-              <div className="sd-lbl">Model</div><div className="sd-field"><span className="sd-ph">Model</span></div>
-            </div>
-          </div>
+            }
+          />
         </Frame>
       );
-    case "Entered vehicle":
+    case "Entered trim":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-veh 5.5s ease-in-out" />}>
-          <div className="sd-screen">
-            <div className="sd-lbl">Year</div>
-            <div className="sd-field"><span className="sd-ph">Year</span><span className="sd-val sd-val-y" style={{ position: "absolute", left: 10 }}>2025</span></div>
-            <div className="sd-lbl">Make</div>
-            <div className="sd-field"><span className="sd-ph">Make</span><span className="sd-val sd-val-mk" style={{ position: "absolute", left: 10 }}>BMW</span></div>
-            <div className="sd-lbl">Model</div>
-            <div className="sd-field"><span className="sd-ph">Model</span><span className="sd-val sd-val-md" style={{ position: "absolute", left: 10 }}>i4</span></div>
-            <div className="sd-btn sd-press-veh" style={{ marginTop: 8, position: "relative" }}>
-              Get a Free Offer →<Ring anim="sd-ring-veh 5.5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
-            </div>
-          </div>
+        <Frame cursor={<Cursor anim="sd-cur-trim 5s ease-in-out" />}>
+          <DetailsForm trim={animVal("M Sport", "sd-val-trim")} button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 16 }}>Continue →</div>} />
         </Frame>
       );
-    case "Added details":
+    case "Entered mileage":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-det 5.5s ease-in-out" />}>
-          <div className="sd-screen">
-            <div className="sd-vcard">
-              <div className="sd-car" />
-              <div style={{ textAlign: "left" }}>
-                <div className="sd-lbl" style={{ margin: 0 }}>Your vehicle</div>
-                <div style={{ fontWeight: 800, fontSize: 13 }}>2025 BMW i4</div>
+        <Frame cursor={<Cursor anim="sd-cur-mile 5.5s ease-in-out" />}>
+          <DetailsForm
+            trim={staticVal("M Sport")}
+            mileage={<span className="sd-tw sd-caret sd-type-km">80000</span>}
+            button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 16 }}>Continue →</div>}
+          />
+        </Frame>
+      );
+    case "Submitted details":
+      return (
+        <Frame cursor={<Cursor anim="sd-cur-subdet 5s ease-in-out" />}>
+          <DetailsForm
+            trim={staticVal("M Sport")}
+            mileage={<span className="sd-val">80000</span>}
+            button={
+              <div className="sd-btn sd-press-subdet" style={{ marginTop: 16, position: "relative" }}>
+                Continue →<Ring anim="sd-ring-subdet 5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
               </div>
-            </div>
-            <div className="sd-lbl">Mileage (km)</div>
-            <div className="sd-field"><span className="sd-tw sd-caret sd-type-km">80000</span></div>
-            <div className="sd-btn sd-press-det" style={{ marginTop: 18, position: "relative" }}>
-              Continue →<Ring anim="sd-ring-det 5.5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
-            </div>
-          </div>
+            }
+          />
         </Frame>
       );
-    case "Reached contact":
+    case "Entered phone":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-reach 4.5s ease-in-out" />}>
-          <div className="sd-screen sd-slide-in">
-            <div className="sd-h2">How should we reach you?</div>
-            <div className="sd-row"><div className="sd-pill sd-on">Call</div><div className="sd-pill">Text</div><div className="sd-pill">Email</div></div>
-            <div className="sd-lbl">Mobile phone</div><div className="sd-field"><span className="sd-ph">(___) ___-____</span></div>
-            <div className="sd-lbl">Email (optional)</div><div className="sd-field"><span className="sd-ph">you@email.com</span></div>
-          </div>
+        <Frame cursor={<Cursor anim="sd-cur-phone 5s ease-in-out" />}>
+          <ContactForm phone={<span className="sd-tw sd-caret sd-type-phone">(780) 555-01</span>} button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 14 }}>Get My Free Offer →</div>} />
         </Frame>
       );
-    case "Typing info":
+    case "Entered email":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-type 5s ease-in-out" />}>
-          <div className="sd-screen">
-            <div className="sd-h2">How should we reach you?</div>
-            <div className="sd-row"><div className="sd-pill sd-on">Call</div><div className="sd-pill">Text</div><div className="sd-pill">Email</div></div>
-            <div className="sd-lbl">Mobile phone</div>
-            <div className="sd-field"><span className="sd-tw sd-caret sd-type-phone">(780) 555-01</span><Ring anim="sd-ring-type 5s ease-in-out" style={{ left: 96, top: 3 }} /></div>
-            <div className="sd-lbl">Email (optional)</div><div className="sd-field"><span className="sd-ph">you@email.com</span></div>
-          </div>
+        <Frame cursor={<Cursor anim="sd-cur-email 5s ease-in-out" />}>
+          <ContactForm
+            phone={<span className="sd-val">(780) 555-0142</span>}
+            email={<span className="sd-tw sd-caret sd-type-email">sarah@email.com</span>}
+            button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 14 }}>Get My Free Offer →</div>}
+          />
         </Frame>
       );
     case "Submitted":
       return (
         <Frame cursor={<Cursor anim="sd-cur-sub 5s ease-in-out" />}>
-          <div className="sd-screen">
-            <div className="sd-h2">Almost done</div>
-            <div className="sd-lbl">Mobile phone</div><div className="sd-field"><span className="sd-val">(780) 555-0142</span></div>
-            <div className="sd-lbl">Email (optional)</div><div className="sd-field"><span className="sd-val">sarah@email.com</span></div>
-            <div className="sd-btn sd-press-sub" style={{ marginTop: 16, position: "relative" }}>
-              Get My Free Offer →<Ring anim="sd-ring-sub 5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
-            </div>
-            <div className="sd-check sd-check-in"><div className="sd-circle">✓</div><div className="sd-checktxt">Offer request sent!</div></div>
-          </div>
+          <ContactForm
+            phone={<span className="sd-val">(780) 555-0142</span>}
+            email={<span className="sd-val">sarah@email.com</span>}
+            button={
+              <div className="sd-btn sd-press-sub" style={{ marginTop: 14, position: "relative" }}>
+                Get My Free Offer →<Ring anim="sd-ring-sub 5s ease-in-out" style={{ left: "50%", marginLeft: -13, top: 5 }} />
+              </div>
+            }
+          />
+          <div className="sd-check sd-check-in"><div className="sd-circle">✓</div><div className="sd-checktxt">Offer request sent!</div></div>
         </Frame>
       );
     default:
       return null;
   }
+}
+
+/** The "Add a few details" step (trim + mileage + Continue), shared by stages 6–8. */
+function DetailsForm({ trim, mileage, button }: { trim?: ReactNode; mileage?: ReactNode; button: ReactNode }) {
+  return (
+    <div className="sd-screen">
+      <div className="sd-vcard">
+        <div className="sd-car" />
+        <div style={{ textAlign: "left" }}>
+          <div className="sd-lbl" style={{ margin: 0 }}>Your vehicle</div>
+          <div style={{ fontWeight: 800, fontSize: 13 }}>2025 BMW i4</div>
+        </div>
+      </div>
+      <div className="sd-lbl">Trim</div><Field ph="Select trim" value={trim} />
+      <div className="sd-lbl">Mileage (km)</div>
+      <div className="sd-field">{mileage ?? <span className="sd-ph">e.g. 80000</span>}</div>
+      {button}
+    </div>
+  );
+}
+
+/** The contact step (phone + email + Get My Free Offer), shared by stages 9–11. */
+function ContactForm({ phone, email, button }: { phone?: ReactNode; email?: ReactNode; button: ReactNode }) {
+  return (
+    <div className="sd-screen">
+      <div className="sd-h2">How should we reach you?</div>
+      <div className="sd-row"><div className="sd-pill sd-on">Call</div><div className="sd-pill">Text</div><div className="sd-pill">Email</div></div>
+      <div className="sd-lbl">Mobile phone</div>
+      <div className="sd-field">{phone ?? <span className="sd-ph">(___) ___-____</span>}</div>
+      <div className="sd-lbl">Email (optional)</div>
+      <div className="sd-field">{email ?? <span className="sd-ph">you@email.com</span>}</div>
+      {button}
+    </div>
+  );
 }
 
 const DEMO_CSS = `
@@ -190,6 +255,7 @@ const DEMO_CSS = `
 .sd-ph{color:#94a3b8}
 .sd-val{color:#0e1c2b;font-weight:600}
 .sd-btn{height:36px;border-radius:999px;background:#2563EB;color:#fff;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px}
+.sd-btn-idle{opacity:.6}
 .sd-pill{height:30px;border:1px solid #e2e8f0;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:1}
 .sd-pill.sd-on{background:#0e1c2b;color:#fff;border-color:#0e1c2b}
 .sd-row{display:flex;gap:7px;margin-bottom:11px}
@@ -208,57 +274,68 @@ const DEMO_CSS = `
 .sd-car:before{content:"";position:absolute;left:12px;top:-9px;width:38px;height:16px;background:#60a5fa;border-radius:8px 8px 0 0}
 .sd-car:after{content:"";position:absolute;left:10px;bottom:-6px;width:12px;height:12px;background:#1e293b;border-radius:50%;box-shadow:40px 0 #1e293b}
 .sd-vcard{display:flex;gap:12px;align-items:center;background:#f5f8fc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;margin-bottom:14px}
-.sd-fade{position:absolute;inset:0;padding:14px;background:#fff}
 .sd-check{position:absolute;inset:0;background:rgba(255,255,255,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:0}
 .sd-check .sd-circle{width:52px;height:52px;border-radius:50%;background:#16a34a;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center}
 .sd-check .sd-checktxt{font-size:13px;font-weight:700;color:#16a34a}
 
+/* Visited */
 @keyframes sd-cur-visited{0%{transform:translate(175px,300px)}16%{transform:translate(112px,60px)}58%{transform:translate(112px,60px)}72%{transform:translate(120px,190px)}100%{transform:translate(120px,190px)}}
 @keyframes sd-type-url{0%,18%{width:0}54%,100%{width:88px}}
 @keyframes sd-hero-in{0%,58%{opacity:.12}74%,100%{opacity:1}}
 .sd-type-url{animation:sd-type-url 5s steps(13) infinite}
 .sd-hero-in{animation:sd-hero-in 5s ease-in-out infinite}
 
-@keyframes sd-cur-open{0%{transform:translate(180px,300px)}30%{transform:translate(120px,206px)}100%{transform:translate(120px,206px)}}
-@keyframes sd-ring-open{0%,26%{opacity:0;transform:scale(.5)}34%{opacity:.9;transform:scale(1)}46%,100%{opacity:0;transform:scale(1.25)}}
-@keyframes sd-press-open{0%,28%{transform:scale(1)}34%{transform:scale(.95)}42%,100%{transform:scale(1)}}
-@keyframes sd-home-out{0%,42%{opacity:1}52%,100%{opacity:0}}
-@keyframes sd-form-in{0%,48%{opacity:0}62%,100%{opacity:1}}
-.sd-press-open{animation:sd-press-open 5s ease-in-out infinite}
-.sd-home-out{animation:sd-home-out 5s ease-in-out infinite}
-.sd-form-in{animation:sd-form-in 5s ease-in-out infinite}
+/* Touched form — tap the make field, no fill, no button */
+@keyframes sd-cur-touch{0%{transform:translate(180px,320px)}36%{transform:translate(118px,133px)}100%{transform:translate(118px,133px)}}
+@keyframes sd-ring-touch{0%,34%{opacity:0;transform:scale(.5)}44%{opacity:.9;transform:scale(1)}58%,100%{opacity:0;transform:scale(1.25)}}
 
-@keyframes sd-cur-veh{0%{transform:translate(180px,300px)}12%{transform:translate(120px,74px)}30%{transform:translate(120px,128px)}48%{transform:translate(120px,182px)}66%{transform:translate(120px,300px)}100%{transform:translate(120px,300px)}}
-@keyframes sd-val-y{0%,13%{opacity:0}19%,100%{opacity:1}}
-@keyframes sd-val-mk{0%,31%{opacity:0}37%,100%{opacity:1}}
-@keyframes sd-val-md{0%,49%{opacity:0}55%,100%{opacity:1}}
-@keyframes sd-press-veh{0%,66%{transform:scale(1)}72%{transform:scale(.95)}80%,100%{transform:scale(1)}}
-@keyframes sd-ring-veh{0%,64%{opacity:0;transform:scale(.5)}72%{opacity:.9;transform:scale(1)}84%,100%{opacity:0;transform:scale(1.25)}}
-.sd-val-y{animation:sd-val-y 5.5s ease-in-out infinite}
-.sd-val-mk{animation:sd-val-mk 5.5s ease-in-out infinite}
-.sd-val-md{animation:sd-val-md 5.5s ease-in-out infinite}
-.sd-press-veh{animation:sd-press-veh 5.5s ease-in-out infinite}
+/* Entered make */
+@keyframes sd-cur-make{0%{transform:translate(180px,320px)}30%{transform:translate(118px,133px)}100%{transform:translate(118px,133px)}}
+@keyframes sd-val-make{0%,32%{opacity:0}40%,100%{opacity:1}}
+.sd-val-make{animation:sd-val-make 5s ease-in-out infinite}
 
-@keyframes sd-cur-det{0%{transform:translate(180px,300px)}22%{transform:translate(120px,150px)}60%{transform:translate(120px,150px)}74%{transform:translate(120px,300px)}100%{transform:translate(120px,300px)}}
-@keyframes sd-type-km{0%,26%{width:0}56%,100%{width:52px}}
-@keyframes sd-press-det{0%,74%{transform:scale(1)}80%{transform:scale(.95)}88%,100%{transform:scale(1)}}
-@keyframes sd-ring-det{0%,72%{opacity:0;transform:scale(.5)}80%{opacity:.9;transform:scale(1)}92%,100%{opacity:0;transform:scale(1.25)}}
+/* Entered model */
+@keyframes sd-cur-model{0%{transform:translate(180px,320px)}30%{transform:translate(118px,188px)}100%{transform:translate(118px,188px)}}
+@keyframes sd-val-model{0%,32%{opacity:0}40%,100%{opacity:1}}
+.sd-val-model{animation:sd-val-model 5s ease-in-out infinite}
+
+/* Submitted vehicle — click Get a Free Offer */
+@keyframes sd-cur-subveh{0%{transform:translate(180px,320px)}40%{transform:translate(120px,248px)}100%{transform:translate(120px,248px)}}
+@keyframes sd-press-subveh{0%,40%{transform:scale(1)}46%{transform:scale(.95)}54%,100%{transform:scale(1)}}
+@keyframes sd-ring-subveh{0%,38%{opacity:0;transform:scale(.5)}46%{opacity:.9;transform:scale(1)}58%,100%{opacity:0;transform:scale(1.25)}}
+.sd-press-subveh{animation:sd-press-subveh 5s ease-in-out infinite}
+
+/* Entered trim */
+@keyframes sd-cur-trim{0%{transform:translate(180px,320px)}32%{transform:translate(120px,150px)}100%{transform:translate(120px,150px)}}
+@keyframes sd-val-trim{0%,34%{opacity:0}42%,100%{opacity:1}}
+.sd-val-trim{animation:sd-val-trim 5s ease-in-out infinite}
+
+/* Entered mileage — type the number */
+@keyframes sd-cur-mile{0%{transform:translate(180px,320px)}26%{transform:translate(120px,205px)}100%{transform:translate(120px,205px)}}
+@keyframes sd-type-km{0%,30%{width:0}60%,100%{width:52px}}
 .sd-type-km{animation:sd-type-km 5.5s steps(5) infinite}
-.sd-press-det{animation:sd-press-det 5.5s ease-in-out infinite}
 
-@keyframes sd-slide-in{0%{opacity:0;transform:translateY(16px)}30%,100%{opacity:1;transform:translateY(0)}}
-@keyframes sd-cur-reach{0%{transform:translate(180px,300px)}40%{transform:translate(70px,58px)}100%{transform:translate(70px,58px)}}
-.sd-slide-in{animation:sd-slide-in 4.5s ease-out infinite}
+/* Submitted details — click Continue */
+@keyframes sd-cur-subdet{0%{transform:translate(180px,320px)}42%{transform:translate(120px,262px)}100%{transform:translate(120px,262px)}}
+@keyframes sd-press-subdet{0%,42%{transform:scale(1)}48%{transform:scale(.95)}56%,100%{transform:scale(1)}}
+@keyframes sd-ring-subdet{0%,40%{opacity:0;transform:scale(.5)}48%{opacity:.9;transform:scale(1)}60%,100%{opacity:0;transform:scale(1.25)}}
+.sd-press-subdet{animation:sd-press-subdet 5s ease-in-out infinite}
 
-@keyframes sd-cur-type{0%{transform:translate(180px,300px)}24%{transform:translate(120px,150px)}100%{transform:translate(120px,150px)}}
-@keyframes sd-type-phone{0%,28%{width:0}66%,100%{width:104px}}
-@keyframes sd-ring-type{0%,22%{opacity:0;transform:scale(.5)}30%{opacity:.9;transform:scale(1)}42%,100%{opacity:0;transform:scale(1.25)}}
+/* Entered phone — type the number */
+@keyframes sd-cur-phone{0%{transform:translate(180px,320px)}26%{transform:translate(120px,150px)}100%{transform:translate(120px,150px)}}
+@keyframes sd-type-phone{0%,30%{width:0}66%,100%{width:104px}}
 .sd-type-phone{animation:sd-type-phone 5s steps(11) infinite}
 
-@keyframes sd-cur-sub{0%{transform:translate(180px,300px)}38%{transform:translate(120px,300px)}100%{transform:translate(120px,300px)}}
-@keyframes sd-press-sub{0%,38%{transform:scale(1)}44%{transform:scale(.95)}52%,100%{transform:scale(1)}}
-@keyframes sd-ring-sub{0%,36%{opacity:0;transform:scale(.5)}44%{opacity:.9;transform:scale(1)}56%,100%{opacity:0;transform:scale(1.25)}}
-@keyframes sd-check-in{0%,54%{opacity:0}66%,100%{opacity:1}}
+/* Entered email — type the address */
+@keyframes sd-cur-email{0%{transform:translate(180px,320px)}26%{transform:translate(120px,205px)}100%{transform:translate(120px,205px)}}
+@keyframes sd-type-email{0%,30%{width:0}70%,100%{width:118px}}
+.sd-type-email{animation:sd-type-email 5s steps(15) infinite}
+
+/* Submitted — click Get My Free Offer + success */
+@keyframes sd-cur-sub{0%{transform:translate(180px,320px)}40%{transform:translate(120px,268px)}100%{transform:translate(120px,268px)}}
+@keyframes sd-press-sub{0%,40%{transform:scale(1)}46%{transform:scale(.95)}54%,100%{transform:scale(1)}}
+@keyframes sd-ring-sub{0%,38%{opacity:0;transform:scale(.5)}46%{opacity:.9;transform:scale(1)}58%,100%{opacity:0;transform:scale(1.25)}}
+@keyframes sd-check-in{0%,58%{opacity:0}70%,100%{opacity:1}}
 .sd-press-sub{animation:sd-press-sub 5s ease-in-out infinite}
 .sd-check-in{animation:sd-check-in 5s ease-in-out infinite}
 `;

@@ -12,6 +12,10 @@ export interface EventAnalytics {
   totalSessions: number;
   /** Distinct sessions reaching each offer-funnel stage, in order. */
   funnel: { label: string; count: number }[];
+  /** The "Touched form" stage split by which happened FIRST in the session — a
+   * CTA-button click vs a direct touch of the form. The two sum to that stage's
+   * count with no session double-counted. */
+  formEngagement: { ctaFirst: number; touchedFirst: number };
   /** Median minutes between consecutive funnel stages (sessions with both). */
   stepMedianMins: { label: string; mins: number }[];
   /** Form-field friction: who touched a field, and where abandoners stopped. */
@@ -43,17 +47,36 @@ export interface EventAnalytics {
 }
 
 /** Funnel stages: event name → display label, in journey order. */
-// Labels are the plain-English stage names shown on every funnel (A/B tab + main
-// dashboard). Keep "Submitted" verbatim — AnalyticsDashboard matches it by string.
-const STAGES: { event: string; label: string }[] = [
-  { event: "page_view", label: "Visited" },
-  { event: "offer_flow_start", label: "Opened form" },
-  { event: "step1_submitted", label: "Entered vehicle" },
-  { event: "details_submitted", label: "Added details" },
-  { event: "contact_started", label: "Reached contact" },
-  { event: "contact_engaged", label: "Typing info" },
-  { event: "generate_lead", label: "Submitted" },
+// Funnel stages, most-granular version: one row per real action a seller takes.
+// Each stage matches ANY of its events (so make/model entered on the home widget
+// OR the /get-offer form both count, without double-counting the session). Labels
+// are the plain-English names shown on every funnel (A/B tab + main dashboard).
+// Keep "Submitted" verbatim — AnalyticsDashboard matches it by string.
+const STAGES: { events: string[]; label: string }[] = [
+  { events: ["page_view"], label: "Visited" },
+  // Touched form = engaged the form at all: a field tap OR a "Get a Free Offer"
+  // CTA click. Combined into one number; formEngagement splits which came first.
+  { events: ["home_form_start", "offer_form_start", "cta_click"], label: "Touched form" },
+  { events: ["home_make_selected", "offer_make_selected"], label: "Entered make" },
+  { events: ["home_model_selected", "offer_model_selected"], label: "Entered model" },
+  { events: ["step1_submitted"], label: "Submitted vehicle" },
+  { events: ["details_trim_selected"], label: "Entered trim" },
+  { events: ["details_mileage_entered"], label: "Entered mileage" },
+  { events: ["details_submitted"], label: "Submitted details" },
+  { events: ["contact_phone_entered"], label: "Entered phone" },
+  { events: ["contact_email_entered"], label: "Entered email" },
+  { events: ["generate_lead"], label: "Submitted" },
 ];
+
+/** Earliest time a session hit any of a stage's events, or undefined. */
+function stageTime(per: Map<string, string>, events: string[]): string | undefined {
+  let best: string | undefined;
+  for (const e of events) {
+    const t = per.get(e);
+    if (t && (!best || t < best)) best = t;
+  }
+  return best;
+}
 
 function median(nums: number[]): number {
   if (!nums.length) return 0;
@@ -207,27 +230,28 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     bucket.sessions.add(e.sessionId);
   }
 
-  // Funnel as "sessions that reached AT LEAST this stage". The offer flow is a
-  // linear pipeline, so reaching any stage implies the earlier ones happened —
-  // even when the earlier stage's event never fired. That gap is real: a vehicle
-  // arriving pre-filled (a deep link / the make-model widget, or a restored
-  // in-progress session) skips the manual step and never fires step1_submitted,
-  // yet those sessions DO reach details_submitted and beyond. Counting each stage
-  // as "fired exactly this event" then made "Vehicle entered" read LOWER than the
-  // later "Details entered" — an impossible funnel. So for each session we find
-  // the deepest stage it reached and credit every stage up to it. This both
-  // backfills history correctly and guarantees a monotonic funnel going forward.
-  const stageIndex = new Map(STAGES.map((s, i) => [s.event, i]));
-  const reached = new Array(STAGES.length).fill(0);
+  // Raw per-stage reach: a session counts for a stage if it fired ANY of that
+  // stage's events. Field stages are intentionally NOT forced monotonic — an
+  // optional field (trim, email) genuinely sitting below a later required step is
+  // the drop-off signal the owner asked to see, not an error to smooth over.
+  const funnel = STAGES.map((s) => ({
+    label: s.label,
+    count: [...firstAt.values()].filter((per) => s.events.some((e) => per.has(e))).length,
+  }));
+
+  // "Touched form" breakdown — every engaged session bucketed by what came FIRST,
+  // a CTA-button click or a direct form touch, so the two sum to that stage's
+  // total with nobody double-counted.
+  let ctaFirst = 0;
+  let touchedFirst = 0;
   for (const per of firstAt.values()) {
-    let deepest = -1;
-    for (const evt of per.keys()) {
-      const idx = stageIndex.get(evt);
-      if (idx !== undefined && idx > deepest) deepest = idx;
-    }
-    for (let i = 0; i <= deepest; i += 1) reached[i] += 1;
+    const touchAt = stageTime(per, ["home_form_start", "offer_form_start"]);
+    const ctaAt = per.get("cta_click");
+    if (!touchAt && !ctaAt) continue;
+    if (ctaAt && (!touchAt || ctaAt < touchAt)) ctaFirst += 1;
+    else touchedFirst += 1;
   }
-  const funnel = STAGES.map((s, i) => ({ label: s.label, count: reached[i] }));
+  const formEngagement = { ctaFirst, touchedFirst };
 
   // Median minutes between consecutive stages, over sessions that hit both.
   const stepMedianMins: { label: string; mins: number }[] = [];
@@ -236,8 +260,8 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     const b = STAGES[i];
     const gaps: number[] = [];
     for (const per of firstAt.values()) {
-      const ta = per.get(a.event);
-      const tb = per.get(b.event);
+      const ta = stageTime(per, a.events);
+      const tb = stageTime(per, b.events);
       if (!ta || !tb) continue;
       const mins = (Date.parse(tb) - Date.parse(ta)) / 60000;
       if (Number.isFinite(mins) && mins >= 0 && mins < 24 * 60) gaps.push(mins);
@@ -298,6 +322,7 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     totalEvents: events.length,
     totalSessions: firstAt.size,
     funnel,
+    formEngagement,
     stepMedianMins,
     friction,
     errorsByReason: toCounts(errorCounts, 12),

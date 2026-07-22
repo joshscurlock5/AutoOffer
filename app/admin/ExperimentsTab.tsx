@@ -14,6 +14,7 @@ interface VariantStats {
   key: string;
   label: string;
   funnel: { label: string; count: number }[];
+  formEngagement?: { ctaFirst: number; touchedFirst: number };
   visitors: number;
   submitted: number;
   leads: number;
@@ -31,7 +32,13 @@ interface ExpData {
   smsScenarios?: VariantStats[];
 }
 
-function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) {
+function FunnelBars({
+  funnel,
+  formEngagement,
+}: {
+  funnel: { label: string; count: number }[];
+  formEngagement?: { ctaFirst: number; touchedFirst: number };
+}) {
   const max = Math.max(1, ...funnel.map((f) => f.count));
   // Which stage's "what does this track?" demo is open (by label), if any.
   const [demo, setDemo] = useState<string | null>(null);
@@ -42,27 +49,36 @@ function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) 
         const prev = i > 0 ? funnel[i - 1].count : null;
         const drop = prev && prev > 0 ? Math.round(((prev - s.count) / prev) * 100) : null;
         return (
-          <div key={s.label} className="flex items-center gap-2 text-sm">
-            <span className="flex w-32 shrink-0 items-center gap-1 text-muted">
-              <span className="truncate" title={s.label}>{s.label}</span>
-              {hasStageDemo(s.label) && (
-                <button
-                  type="button"
-                  onClick={() => setDemo(s.label)}
-                  aria-label={`See what "${s.label}" tracks`}
-                  className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-slate-200 text-[9px] font-bold leading-none text-slate-500 hover:bg-brand-600 hover:text-white"
-                >
-                  i
-                </button>
-              )}
-            </span>
-            <div className="relative h-6 flex-1 overflow-hidden rounded bg-slate-100">
-              <div className="h-full rounded bg-brand" style={{ width: `${(s.count / max) * 100}%` }} />
+          <div key={s.label}>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="flex w-36 shrink-0 items-center gap-1 text-muted">
+                <span className="truncate" title={s.label}>{s.label}</span>
+                {hasStageDemo(s.label) && (
+                  <button
+                    type="button"
+                    onClick={() => setDemo(s.label)}
+                    aria-label={`See what "${s.label}" tracks`}
+                    className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-slate-200 text-[9px] font-bold leading-none text-slate-500 hover:bg-brand-600 hover:text-white"
+                  >
+                    i
+                  </button>
+                )}
+              </span>
+              <div className="relative h-6 flex-1 overflow-hidden rounded bg-slate-100">
+                <div className="h-full rounded bg-brand" style={{ width: `${(s.count / max) * 100}%` }} />
+              </div>
+              <span className="w-10 shrink-0 text-right font-semibold text-navy">{s.count}</span>
+              <span className="w-12 shrink-0 text-right text-xs text-red-500">
+                {drop != null && drop > 0 ? `−${drop}%` : ""}
+              </span>
             </div>
-            <span className="w-10 shrink-0 text-right font-semibold text-navy">{s.count}</span>
-            <span className="w-12 shrink-0 text-right text-xs text-red-500">
-              {drop != null && drop > 0 ? `−${drop}%` : ""}
-            </span>
+            {/* "Touched form" first-touch split — the two sum to the row above. */}
+            {s.label === "Touched form" && formEngagement && (
+              <div className="ml-[calc(9rem+0.5rem)] mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted">
+                <span>👆 Touched form first: <span className="font-semibold text-navy">{formEngagement.touchedFirst}</span></span>
+                <span>🔘 Clicked CTA first: <span className="font-semibold text-navy">{formEngagement.ctaFirst}</span></span>
+              </div>
+            )}
           </div>
         );
       })}
@@ -126,7 +142,7 @@ function VariantCard({ v, active }: { v: VariantStats; active: boolean }) {
         {active && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">Live now</span>}
         <span className="ml-auto text-xs text-muted">{v.visitors.toLocaleString("en-CA")} visits</span>
       </div>
-      <FunnelBars funnel={v.funnel} />
+      <FunnelBars funnel={v.funnel} formEngagement={v.formEngagement} />
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Tile label="Leads" value={v.leads} />
         <Tile label="Booked" value={v.booked} />
