@@ -245,3 +245,79 @@ export async function runRecontactDigest(
   }
   return { due: due.length, byStage, messages };
 }
+
+// ===========================================================================
+//  Daily recap — a 10pm (MT) Telegram list of every phone number that came in
+//  TODAY, each with its vehicle, so the rep can sweep anyone they didn't get to.
+//  Unlike the re-contact list there's NO copy-paste template — the rep writes
+//  whatever they want; this is just the tappable call sheet for the day.
+// ===========================================================================
+
+/** Today's (MT) submitted leads that have a usable phone — one entry per phone
+ * (repeat submissions collapse to the newest). Junk is excluded: spam, archived,
+ * and never-submitted partials. Newest first. */
+export function collectTodayPhoneLeads(leads: Lead[], now: number): Lead[] {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" });
+  const today = fmt.format(new Date(now));
+  const byPhone = new Map<string, Lead>();
+  for (const l of leads) {
+    if (l.archived) continue;
+    if (l.status === "spam" || l.status === "partial") continue;
+    if (!l.createdAt || fmt.format(new Date(l.createdAt)) !== today) continue;
+    const digits = (l.contact.phone || "").replace(/\D/g, "");
+    if (digits.length < 10) continue;
+    const cur = byPhone.get(digits);
+    if (!cur || (l.createdAt || "") > (cur.createdAt || "")) byPhone.set(digits, l);
+  }
+  return [...byPhone.values()].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+/** One recap line: tap-to-copy phone chip, then the vehicle (make model trim). */
+function recapLine(n: number, l: Lead): string {
+  const v = l.vehicle;
+  const vehicle = v ? [v.make, v.model, v.trim].filter(Boolean).join(" ") : "";
+  return `${n}. <code>${esc(l.contact.phone || "")}</code>${vehicle ? ` ${esc(vehicle)}` : ""}`;
+}
+
+/** The recap as Telegram-sized HTML messages: a "📆 Daily recap" header followed
+ * by the numbered phone list (chunked under Telegram's 4096-char limit). */
+export function buildDailyRecapMessages(todayLeads: Lead[], now: number): string[] {
+  const dateLabel = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(now));
+  const header = `📆 <b>Daily recap</b>\n${dateLabel}`;
+  if (!todayLeads.length) return [`${header}\n\nNo new numbers today.`];
+
+  const chunks: string[] = [];
+  let cur = header;
+  todayLeads.forEach((l, i) => {
+    const line = recapLine(i + 1, l);
+    const next = `${cur}\n${line}`;
+    if (next.length > CHUNK_MAX) {
+      chunks.push(cur);
+      cur = `…continued\n${line}`;
+    } else {
+      cur = next;
+    }
+  });
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
+/** Compute today's phone leads and (unless dry) send the recap to the Leads
+ * channel. No stamping — it's a pure daily snapshot, safe to recompute. */
+export async function runDailyRecap(
+  leads: Lead[],
+  now: number,
+  dry: boolean,
+): Promise<{ count: number; messages: string[] }> {
+  const today = collectTodayPhoneLeads(leads, now);
+  const messages = buildDailyRecapMessages(today, now);
+  if (!dry) {
+    for (const m of messages) await notifyOwner(m, "leads", "HTML");
+  }
+  return { count: today.length, messages };
+}

@@ -15,7 +15,7 @@ import {
   smsWinback,
   smsBookingDayOf,
 } from "@/lib/sms";
-import { runRecontactDigest } from "@/lib/recontact";
+import { runRecontactDigest, runDailyRecap } from "@/lib/recontact";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -67,6 +67,20 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Manual/preview trigger for JUST the daily recap: ?task=recap (&dry=1 returns
+  // the messages without sending). Lets you preview tonight's list any time.
+  if (req.nextUrl.searchParams.get("task") === "recap") {
+    const dry = req.nextUrl.searchParams.get("dry") === "1";
+    try {
+      const leads = (await getLeads()).filter((l) => !l.archived);
+      const r = await runDailyRecap(leads, Date.now(), dry);
+      return NextResponse.json({ ok: true, task: "recap", dry, ...r });
+    } catch (e) {
+      console.error("[cron] recap trigger failed", e);
+      return NextResponse.json({ ok: false, error: "recap failed" }, { status: 500 });
+    }
+  }
+
   const now = Date.now();
   const nowISO = new Date(now).toISOString();
   const summary = {
@@ -80,6 +94,7 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
     partialRecovery: 0,
     geoResolved: 0,
     recontactListed: 0,
+    recapListed: 0,
     digestSent: false,
     scoreboardSent: false,
     metaSynced: false,
@@ -301,6 +316,18 @@ async function runCron(req: NextRequest): Promise<NextResponse> {
       summary.recontactListed = r.due;
     } catch (e) {
       console.error("[cron] recontact digest failed", e);
+    }
+  }
+
+  // --- Daily recap — 10pm MT into the Leads channel. Every phone number that
+  //     came in today + its vehicle (make/model/trim), so the rep can sweep
+  //     anyone they didn't get to. No copy-paste template — rep writes their own. ---
+  if (mtHour === 22) {
+    try {
+      const r = await runDailyRecap(leads, now, false);
+      summary.recapListed = r.count;
+    } catch (e) {
+      console.error("[cron] daily recap failed", e);
     }
   }
 
