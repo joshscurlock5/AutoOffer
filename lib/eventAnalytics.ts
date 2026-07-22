@@ -205,10 +205,27 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     bucket.sessions.add(e.sessionId);
   }
 
-  const funnel = STAGES.map((s) => ({
-    label: s.label,
-    count: [...firstAt.values()].filter((per) => per.has(s.event)).length,
-  }));
+  // Funnel as "sessions that reached AT LEAST this stage". The offer flow is a
+  // linear pipeline, so reaching any stage implies the earlier ones happened —
+  // even when the earlier stage's event never fired. That gap is real: a vehicle
+  // arriving pre-filled (a deep link / the make-model widget, or a restored
+  // in-progress session) skips the manual step and never fires step1_submitted,
+  // yet those sessions DO reach details_submitted and beyond. Counting each stage
+  // as "fired exactly this event" then made "Vehicle entered" read LOWER than the
+  // later "Details entered" — an impossible funnel. So for each session we find
+  // the deepest stage it reached and credit every stage up to it. This both
+  // backfills history correctly and guarantees a monotonic funnel going forward.
+  const stageIndex = new Map(STAGES.map((s, i) => [s.event, i]));
+  const reached = new Array(STAGES.length).fill(0);
+  for (const per of firstAt.values()) {
+    let deepest = -1;
+    for (const evt of per.keys()) {
+      const idx = stageIndex.get(evt);
+      if (idx !== undefined && idx > deepest) deepest = idx;
+    }
+    for (let i = 0; i <= deepest; i += 1) reached[i] += 1;
+  }
+  const funnel = STAGES.map((s, i) => ({ label: s.label, count: reached[i] }));
 
   // Median minutes between consecutive stages, over sessions that hit both.
   const stepMedianMins: { label: string; mins: number }[] = [];

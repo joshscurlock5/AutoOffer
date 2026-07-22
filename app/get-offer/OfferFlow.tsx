@@ -122,6 +122,11 @@ export default function OfferFlow() {
 
   // Funnel instrumentation guards (per-mount; reset on a fresh /get-offer load).
   const flowStarted = useRef(false);
+  // step1_submitted ("Vehicle entered") fires once per session. The manual/VIN
+  // paths fire it on submit; a vehicle that arrives pre-filled (deep link / widget
+  // or a restored session) skips those paths, so we fire it here too — otherwise
+  // that stage undercounts. Guarded so it can't double-fire.
+  const step1Fired = useRef(false);
   const estimateViews = useRef(0);
   const contactStarts = useRef(0);
   // First real interaction with the contact form (a keystroke in name/email/phone),
@@ -192,6 +197,13 @@ export default function OfferFlow() {
     if (flowStarted.current) return;
     flowStarted.current = true;
     track("offer_flow_start", { source: sp.get("make") ? "widget" : "direct", cta_source: ctaSource });
+    // A pre-filled vehicle (deep link / make-model widget) starts the flow on the
+    // details step, skipping the manual step-1 submit — but the vehicle WAS
+    // entered, so fire step1_submitted here so "Vehicle entered" counts it.
+    if (cameWithVehicle && !step1Fired.current) {
+      step1Fired.current = true;
+      track("step1_submitted", { make, model, year: Number(year), source: source() });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -221,7 +233,14 @@ export default function OfferFlow() {
       if (s.phone) setPhone(s.phone);
       if (s.contactMethod) setContactMethod(s.contactMethod);
       if (s.bestTime) setBestTime(s.bestTime);
-      if (s.year && s.make && s.model) setStep(2);
+      if (s.year && s.make && s.model) {
+        setStep(2);
+        // Restoring a saved vehicle also skips the manual step-1 submit — count it.
+        if (!step1Fired.current) {
+          step1Fired.current = true;
+          track("step1_submitted", { make: s.make, model: s.model, year: Number(s.year), source: "restore" });
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -558,6 +577,7 @@ export default function OfferFlow() {
       document.getElementById(firstMissing)?.focus();
       return;
     }
+    step1Fired.current = true;
     track("step1_submitted", { make, model, year: Number(year), source: source() });
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -646,6 +666,7 @@ export default function OfferFlow() {
     setModel(decoded.model || "");
     setTrim(decoded.trim || "");
     track("vin_confirmed", {});
+    step1Fired.current = true;
     track("step1_submitted", {
       make: decoded.make || "",
       model: decoded.model || "",
