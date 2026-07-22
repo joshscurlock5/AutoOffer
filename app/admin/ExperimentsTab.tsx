@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { EXPERIMENT_VARIANTS, SMS_SCENARIOS, type ExperimentVariant, type SmsScenario } from "@/lib/types";
+import StageDemo, { STAGE_INFO, hasStageDemo } from "./StageDemos";
 
 // Self-fetching A/B tab (same pattern as EmailsTab): pulls per-variant funnel +
 // outcomes for the selected date range, and lets the owner set which variant is
@@ -32,6 +33,9 @@ interface ExpData {
 
 function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) {
   const max = Math.max(1, ...funnel.map((f) => f.count));
+  // Which stage's "what does this track?" demo is open (by label), if any.
+  const [demo, setDemo] = useState<string | null>(null);
+  const info = demo ? STAGE_INFO[demo] : undefined;
   return (
     <div className="space-y-1.5">
       {funnel.map((s, i) => {
@@ -39,7 +43,19 @@ function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) 
         const drop = prev && prev > 0 ? Math.round(((prev - s.count) / prev) * 100) : null;
         return (
           <div key={s.label} className="flex items-center gap-2 text-sm">
-            <span className="w-28 shrink-0 truncate text-muted" title={s.label}>{s.label}</span>
+            <span className="flex w-32 shrink-0 items-center gap-1 text-muted">
+              <span className="truncate" title={s.label}>{s.label}</span>
+              {hasStageDemo(s.label) && (
+                <button
+                  type="button"
+                  onClick={() => setDemo(s.label)}
+                  aria-label={`See what "${s.label}" tracks`}
+                  className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-slate-200 text-[9px] font-bold leading-none text-slate-500 hover:bg-brand-600 hover:text-white"
+                >
+                  i
+                </button>
+              )}
+            </span>
             <div className="relative h-6 flex-1 overflow-hidden rounded bg-slate-100">
               <div className="h-full rounded bg-brand" style={{ width: `${(s.count / max) * 100}%` }} />
             </div>
@@ -50,6 +66,37 @@ function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) 
           </div>
         );
       })}
+
+      {/* Stage demo — a looping animation of the actual form stage + tracked action. */}
+      {demo && info && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDemo(null)}
+        >
+          <div
+            className="flex w-full max-w-[300px] flex-col items-center rounded-2xl bg-white p-5 text-center shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex w-full items-start justify-between gap-2">
+              <div className="text-left">
+                <div className="text-sm font-bold text-navy">{info.title}</div>
+                <div className="text-xs text-muted">{info.blurb}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDemo(null)}
+                aria-label="Close"
+                className="-mr-1 -mt-1 shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-3">
+              <StageDemo stage={demo} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

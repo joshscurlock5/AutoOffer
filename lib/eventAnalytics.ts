@@ -43,13 +43,15 @@ export interface EventAnalytics {
 }
 
 /** Funnel stages: event name → display label, in journey order. */
+// Labels are the plain-English stage names shown on every funnel (A/B tab + main
+// dashboard). Keep "Submitted" verbatim — AnalyticsDashboard matches it by string.
 const STAGES: { event: string; label: string }[] = [
   { event: "page_view", label: "Visited" },
-  { event: "offer_flow_start", label: "Opened offer form" },
-  { event: "step1_submitted", label: "Vehicle entered" },
-  { event: "details_submitted", label: "Details entered" },
+  { event: "offer_flow_start", label: "Opened form" },
+  { event: "step1_submitted", label: "Entered vehicle" },
+  { event: "details_submitted", label: "Added details" },
   { event: "contact_started", label: "Reached contact" },
-  { event: "contact_engaged", label: "Typing contact info" },
+  { event: "contact_engaged", label: "Typing info" },
   { event: "generate_lead", label: "Submitted" },
 ];
 
