@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { AnalyticsData } from "@/lib/analyticsData";
 import type { EventAnalytics } from "@/lib/eventAnalytics";
+import StageDemo, { STAGE_INFO, hasStageDemo } from "./StageDemos";
 import type { Profile, AdInsight, AdInsightAd, Ga4Traffic, Touch, ClarityInsights, Lead, Referral } from "@/lib/types";
 import type { AdInsightAdRanked, RegionInsightRow, PlacementInsightRow } from "@/lib/metaAds";
 import { DATA_SOURCES, STATUS_META, type SourceHealth, type SourceStatus, type SourceCategory } from "@/lib/dataSources";
@@ -346,9 +347,22 @@ function HBars({ title, rows, tip, share = true }: { title: string; rows: Count[
   );
 }
 
-function Funnel({ rows, tip, title = "Funnel — how many reach each step" }: { rows: Count[]; tip?: string; title?: string }) {
+function Funnel({
+  rows,
+  tip,
+  title = "Funnel — how many reach each step",
+  breakdowns,
+}: {
+  rows: Count[];
+  tip?: string;
+  title?: string;
+  breakdowns?: Record<string, { label: string; count: number }[]>;
+}) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   const top = rows[0]?.count ?? 0;
+  // Which stage's "what does this track?" demo is open (by label), if any.
+  const [demo, setDemo] = useState<string | null>(null);
+  const info = demo ? STAGE_INFO[demo] : undefined;
   return (
     <div className="card p-4">
       <h3 className="mb-3 text-sm font-bold text-navy">{title}{tip && <InfoDot tip={tip} />}</h3>
@@ -360,26 +374,74 @@ function Funnel({ rows, tip, title = "Funnel — how many reach each step" }: { 
           const width = (r.count / max) * 100;
           const narrow = width < 15; // fill too short for the white inside-count
           return (
-            <div key={r.label} className="flex items-center gap-2 text-sm">
-              <div className="w-24 shrink-0 text-muted">{r.label}</div>
-              <div className="relative h-5 flex-1 rounded bg-slate-100">
-                <div className={`flex h-5 items-center rounded bg-brand-600 ${narrow ? "" : "px-2 text-xs font-semibold text-white"}`} style={{ width: `${width}%` }}>
-                  {!narrow && r.count}
+            <div key={r.label}>
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex w-28 shrink-0 items-center gap-1 text-muted">
+                  <span className="truncate" title={r.label}>{r.label}</span>
+                  {hasStageDemo(r.label) && (
+                    <button
+                      type="button"
+                      onClick={() => setDemo(r.label)}
+                      aria-label={`See what "${r.label}" tracks`}
+                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-slate-200 text-[9px] font-bold leading-none text-slate-500 hover:bg-brand-600 hover:text-white"
+                    >
+                      i
+                    </button>
+                  )}
                 </div>
-                {narrow && (
-                  <span className="absolute top-0 flex h-5 items-center pl-1.5 text-xs font-semibold text-navy" style={{ left: `${width}%` }}>
-                    {r.count}
-                  </span>
-                )}
+                <div className="relative h-5 flex-1 rounded bg-slate-100">
+                  <div className={`flex h-5 items-center rounded bg-brand-600 ${narrow ? "" : "px-2 text-xs font-semibold text-white"}`} style={{ width: `${width}%` }}>
+                    {!narrow && r.count}
+                  </div>
+                  {narrow && (
+                    <span className="absolute top-0 flex h-5 items-center pl-1.5 text-xs font-semibold text-navy" style={{ left: `${width}%` }}>
+                      {r.count}
+                    </span>
+                  )}
+                </div>
+                <div className="w-20 shrink-0 text-right text-xs text-muted">
+                  <div>{i === 0 ? "100%" : pct != null ? `${pct}%` : ""}</div>
+                  {i > 0 && ofTop != null && <div className="text-[10px] text-muted">{ofTop}% of first step</div>}
+                </div>
               </div>
-              <div className="w-20 shrink-0 text-right text-xs text-muted">
-                <div>{i === 0 ? "100%" : pct != null ? `${pct}%` : ""}</div>
-                {i > 0 && ofTop != null && <div className="text-[10px] text-muted">{ofTop}% of first step</div>}
-              </div>
+              {breakdowns?.[r.label] && (
+                <div className="ml-[calc(7rem+0.5rem)] mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted">
+                  {breakdowns[r.label].map((part) => (
+                    <span key={part.label}>
+                      {part.label}: <span className="font-semibold text-navy">{part.count}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Stage demo — a looping animation of the actual form stage + tracked action. */}
+      {demo && info && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDemo(null)}>
+          <div className="flex w-full max-w-[300px] flex-col items-center rounded-2xl bg-white p-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex w-full items-start justify-between gap-2">
+              <div className="text-left">
+                <div className="text-sm font-bold text-navy">{info.title}</div>
+                <div className="text-xs text-muted">{info.blurb}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDemo(null)}
+                aria-label="Close"
+                className="-mr-1 -mt-1 shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-3">
+              <StageDemo stage={demo} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1818,6 +1880,7 @@ function EventDetails({ ev, windowLabel }: { ev: EventAnalytics; windowLabel: st
       <div className="grid gap-4 lg:grid-cols-2">
         <Funnel
           rows={ev.funnel}
+          breakdowns={ev.breakdowns}
           tip={SRC.events}
           title={`Every visit, step by step (${ev.totalSessions.toLocaleString("en-CA")} visits)`}
         />
