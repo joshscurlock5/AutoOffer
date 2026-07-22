@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addEvents, getLeads, getActiveVariant } from "@/lib/store";
+import { getSmsScenario } from "@/lib/smsMode";
 import { allowRequest, clientIpFrom } from "@/lib/rateLimit";
 import type { SiteEvent } from "@/lib/types";
 
@@ -121,9 +122,10 @@ export async function POST(req: NextRequest) {
     }
 
     const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
-    // Stamp the A/B variant live right now (cached read) onto every event so the
-    // anonymous on-page funnel can be split per contact-requirement variant.
-    const variant = await getActiveVariant();
+    // Stamp BOTH live A/B settings right now (cached reads) onto every event so the
+    // anonymous on-page funnel can be split per contact-requirement variant AND per
+    // SMS opt-in scenario (box vs no box). Absent stamps fold to the defaults.
+    const [variant, smsScenario] = await Promise.all([getActiveVariant(), getSmsScenario()]);
     const items: SiteEvent[] = [];
     for (const raw of rawEvents) {
       const e = raw as { n?: unknown; p?: unknown; path?: unknown; at?: unknown };
@@ -150,6 +152,7 @@ export async function POST(req: NextRequest) {
         ...(utmCampaign ? { utmCampaign } : {}),
         ...(utmSource ? { utmSource } : {}),
         variant,
+        smsScenario,
         ttl,
       });
     }

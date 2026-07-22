@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { getLeads, getAllEvents, getActiveVariant, setActiveVariant } from "@/lib/store";
 import { getSmsScenario, setSmsScenario } from "@/lib/smsMode";
-import { computeExperiments } from "@/lib/experiments";
+import { computeExperiments, computeSmsScenarios } from "@/lib/experiments";
 import { EXPERIMENT_VARIANTS, type ExperimentVariant } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,11 +42,12 @@ export async function GET(req: NextRequest) {
     const leads = allLeads.filter((l) => !l.archived && inWindow(l.createdAt));
     const events = allEvents.filter((e) => inWindow(e.at));
     const data = computeExperiments(leads, events, activeVariant);
-    return NextResponse.json({ since, until, smsScenario, ...data });
+    const sms = computeSmsScenarios(leads, events, smsScenario);
+    return NextResponse.json({ since, until, smsScenario, smsScenarios: sms.scenarios, ...data });
   } catch (e) {
     console.error("[experiments] failed:", e);
     // Soft-fail 200 like the other admin analytics routes — the tab shows an empty state.
-    return NextResponse.json({ since, until, activeVariant: "choose", smsScenario: "off", variants: [], error: "Failed to load" });
+    return NextResponse.json({ since, until, activeVariant: "choose", smsScenario: "off", variants: [], smsScenarios: [], error: "Failed to load" });
   }
 }
 

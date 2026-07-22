@@ -518,6 +518,10 @@ export interface SiteEvent {
   /** Contact-requirement experiment variant live when this event fired, stamped by
    * /api/events from the active setting. Absent on pre-experiment rows → "choose". */
   variant?: ExperimentVariant;
+  /** SMS opt-in scenario live when this event fired, stamped by /api/events from the
+   * active setting. Absent on pre-experiment rows → "off" (no texting box) — which is
+   * how the form ran since launch, so old history folds into that bucket correctly. */
+  smsScenario?: SmsScenario;
   /** Epoch-seconds TTL attribute. */
   ttl: number;
 }

@@ -8,7 +8,9 @@ import { EXPERIMENT_VARIANTS, SMS_SCENARIOS, type ExperimentVariant, type SmsSce
 // live (which drives BOTH the form and how new data is labeled).
 
 interface VariantStats {
-  key: ExperimentVariant;
+  // string (not the ExperimentVariant union) so the same card renders both the
+  // contact-requirement variants and the SMS opt-in scenarios.
+  key: string;
   label: string;
   funnel: { label: string; count: number }[];
   visitors: number;
@@ -24,6 +26,8 @@ interface ExpData {
   activeVariant: ExperimentVariant;
   smsScenario?: SmsScenario;
   variants: VariantStats[];
+  /** Per-SMS-scenario funnels (no texting box vs Twilio box). */
+  smsScenarios?: VariantStats[];
 }
 
 function FunnelBars({ funnel }: { funnel: { label: string; count: number }[] }) {
@@ -231,7 +235,24 @@ export default function ExperimentsTab({ since, until }: { since?: string; until
         </div>
       </div>
 
-      {/* Per-variant comparison */}
+      {/* SMS-scenario comparison — box vs no box, in the same spot as the toggle
+          so the numbers sit right under the switch that drives them. All history
+          with no SMS label counts under "No texting box" (the form since launch). */}
+      {loading ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-muted">Loading…</div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(data?.smsScenarios ?? []).map((v) => (
+            <VariantCard key={v.key} v={v} active={activeSms === v.key} />
+          ))}
+        </div>
+      )}
+
+      {/* Contact-requirement comparison */}
+      <div className="pt-2">
+        <h3 className="text-sm font-bold text-navy">Contact-requirement comparison</h3>
+        <p className="mt-0.5 text-xs text-muted">How each contact-step version converts.</p>
+      </div>
       {loading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-muted">Loading…</div>
       ) : (
