@@ -65,8 +65,14 @@ const STAGES: { events: string[]; label: string }[] = [
   // Moving past the vehicle page = the on-page submit OR the home-widget submit
   // (its "Get a Free Offer" fires widget_submit, not step1_submitted).
   { events: ["step1_submitted", "widget_submit"], label: "Submitted vehicle" },
-  { events: ["details_trim_selected", "vin_confirmed"], label: "Entered trim" },
-  { events: ["details_mileage_entered"], label: "Entered mileage" },
+  // Trim is optional: dropdown OR VIN OR left-blank-but-continued (details_submitted
+  // past it). breakdowns splits the three. Including details_submitted also keeps
+  // it from dipping below the later required steps.
+  { events: ["details_trim_selected", "vin_confirmed", "details_submitted"], label: "Entered trim" },
+  // Mileage is required to submit details, so anyone who submitted details had it —
+  // even when it was pre-filled/restored and the typed event never fired. Counting
+  // details_submitted here keeps "Entered mileage" >= "Submitted details".
+  { events: ["details_mileage_entered", "details_submitted"], label: "Entered mileage" },
   { events: ["details_submitted"], label: "Submitted details" },
   // Phone + email folded into one number; breakdowns splits by contact method
   // (a phone means call/text; email-only means email).
@@ -248,7 +254,8 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
   // Sub-splits for the combined stages. Each session lands in exactly one bucket
   // per split (or none), so the two buckets sum to that stage's total.
   let touchedFirst = 0, ctaFirst = 0;
-  let makeList = 0, makeVin = 0, modelList = 0, modelVin = 0, trimList = 0, trimVin = 0;
+  let makeList = 0, makeVin = 0, modelList = 0, modelVin = 0;
+  let trimList = 0, trimVin = 0, trimBlank = 0;
   let contactPhone = 0, contactEmail = 0;
   for (const per of firstAt.values()) {
     // Touched form — bucket by which came first (CTA click vs a direct touch).
@@ -267,6 +274,7 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     else if (per.has("home_model_selected") || per.has("offer_model_selected")) modelList += 1;
     if (vin) trimVin += 1;
     else if (per.has("details_trim_selected")) trimList += 1;
+    else if (per.has("details_submitted")) trimBlank += 1;
     // Contact — a phone means call/text; only an email means email.
     if (per.has("contact_phone_entered")) contactPhone += 1;
     else if (per.has("contact_email_entered")) contactEmail += 1;
@@ -287,6 +295,7 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     "Entered trim": [
       { label: "📋 Dropdown", count: trimList },
       { label: "🔢 VIN", count: trimVin },
+      { label: "⬜ Left blank", count: trimBlank },
     ],
     "Entered contact": [
       { label: "📞 Phone", count: contactPhone },

@@ -24,7 +24,7 @@ export const STAGE_INFO: Record<string, { title: string; blurb: string }> = {
   "Entered make": { title: "Entered make", blurb: "Picked their make — from the dropdown, or decoded from a VIN. The split shows which." },
   "Entered model": { title: "Entered model", blurb: "Picked their model — from the dropdown, or decoded from a VIN." },
   "Submitted vehicle": { title: "Submitted vehicle", blurb: "Pressed “Get a Free Offer” to move past the vehicle page (home form or /get-offer)." },
-  "Entered trim": { title: "Entered trim", blurb: "Picked a trim (optional), or got one from a VIN. It’s on the details step." },
+  "Entered trim": { title: "Entered trim", blurb: "Reached the trim step (optional) — picked one, got it from a VIN, or left it blank and continued. The split shows which." },
   "Entered mileage": { title: "Entered mileage", blurb: "Entered mileage. Condition is pre-filled, so it can’t be tracked separately." },
   "Submitted details": { title: "Submitted details", blurb: "Pressed “Continue” past the details step." },
   "Entered contact": { title: "Entered contact", blurb: "Typed their contact info. The split buckets by method — a phone means call/text, email-only means email." },
