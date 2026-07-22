@@ -52,6 +52,7 @@ export const site = {
   // ---- OWNER / LICENSING / TRUST ------------------------------------------
   // Leave any string blank ("") and its trust badge stays hidden.
   owner: "Samir Osman", //                                   real owner / founder
+  repName: "Sam", //  the ONE human name customers see across emails (From name, signoffs) — Samir goes by Sam
   amvicNumber: "B2036941", //                                AMVIC licence number
   amvicClass: "Wholesaler", //                               AMVIC licence class
   businessNumber: "", //  GST / AB corp # — used on invoices, not required on the site

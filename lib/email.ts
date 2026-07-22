@@ -15,7 +15,18 @@ import { atomicLeadEngagement } from "./store";
 // ===========================================================================
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const EMAIL_FROM = process.env.EMAIL_FROM || `${site.name} <hello@driveoffer.ca>`;
+// From name is a person, not a brand — "Sam at DriveOffer" reads as a human and
+// lifts opens vs a faceless "DriveOffer". (If EMAIL_FROM is set in the environment
+// it wins — update it there too, keeping the same @driveoffer.ca address for DKIM.)
+const EMAIL_FROM = process.env.EMAIL_FROM || `${site.repName} at ${site.name} <hello@driveoffer.ca>`;
+
+/** The display name a customer sees in the inbox "From" column — the part of
+ * EMAIL_FROM before the <address>. Parsed (not hard-coded) so the admin inbox /
+ * notification previews match whatever actually sends, env override included. */
+export function fromDisplayName(): string {
+  const m = EMAIL_FROM.match(/^\s*"?([^"<]*?)"?\s*(?:<|$)/);
+  return (m?.[1] || "").trim() || site.name;
+}
 // Replies go to an address ON the sending domain so Resend Inbound (MX → the
 // `email.received` webhook at /api/webhooks/resend) catches them and posts them
 // straight into the customer's Replies topic — instant, and never lost to a Gmail
@@ -209,10 +220,23 @@ function questionsBox(qs: string[]): string {
 // footerHtml, when passed, replaces the ENTIRE default footer row (used by the
 // confirmation email's reply-focused footer). Everything else — the header bar,
 // the card chrome — stays identical across every email.
+// The hidden preheader: the gray preview snippet a mail client shows in the inbox
+// AFTER the subject. Without it, clients pull the first visible body text (our logo
+// bar) into the preview — wasting a second selling line. First div = the text we
+// want shown; second div = a run of zero-width spacers that eats the rest of the
+// preview slot so no body text ("DriveOffer", "Hi Sarah…") leaks in behind it.
+function preheaderBlock(text: string): string {
+  if (!text) return "";
+  const spacer = "&#847;&zwnj;&nbsp;".repeat(40);
+  return `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f4f6f8;opacity:0;">${esc(text)}</div>
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f4f6f8;opacity:0;">${spacer}</div>`;
+}
+
 function shell(
   innerRows: string,
   footerNote = "You're receiving this because you requested an offer at driveoffer.ca.",
   footerHtml?: string,
+  preheader = "",
 ): string {
   const footer =
     footerHtml ??
@@ -225,6 +249,7 @@ function shell(
         </td></tr>`;
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  ${preheaderBlock(preheader)}
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e9ec;">
@@ -241,7 +266,11 @@ function shell(
 
 // ---- The three messages ---------------------------------------------------
 
-type Email = { subject: string; html: string };
+// preheader = the hidden inbox-preview line (see preheaderBlock). Carried on the
+// Email so the admin "unopened" previews can show it as its own field, not just
+// bury it invisibly in the html. Every template must set it — keep it in sync
+// with the text passed to shell().
+type Email = { subject: string; html: string; preheader: string };
 
 // Reply-focused footer — on EVERY email, so the customer always knows they can
 // just reply to reach a real person. `headline` is tailored per email. Carries the
@@ -313,9 +342,13 @@ function confirmationEmail(lead: Lead): Email {
         <div style="font-size:13px;line-height:1.5;color:#8792a2;margin-top:13px;">Call or text anytime. We're here to help.</div>
       </div></td></tr>`;
 
+  const pre = v
+    ? `Your offer for your ${carPlain(lead)} is on the way — ${site.repName} will be in touch shortly.`
+    : `Thanks for reaching out — ${site.repName} will be in touch shortly with your offer.`;
   return {
     subject: v ? `We've got your ${v.year} ${v.make} ${v.model} — ${site.name}` : `Thanks for reaching out — ${site.name}`,
-    html: shell(head + subline + nextBox + ctaCard + proofBox(), undefined, replyFooter(lead, "Questions? Just reply to this email.")),
+    preheader: pre,
+    html: shell(head + subline + nextBox + ctaCard + proofBox(), undefined, replyFooter(lead, "Questions? Just reply to this email."), pre),
   };
 }
 
@@ -330,6 +363,12 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
       ? money(lead.offer.low)
       : `${money(lead.offer.low)} &ndash; ${money(lead.offer.high)}`
     : "your offer";
+  // Plain-text price (no HTML entity) for the inbox preheader.
+  const pricePlain = lead.offer
+    ? lead.offer.low === lead.offer.high
+      ? money(lead.offer.low)
+      : `${money(lead.offer.low)}–${money(lead.offer.high)}`
+    : "your offer";
   const bodies = [
     `Just making sure our offer of <strong>${priceText}</strong> for your <strong>${car}</strong> reached you.`,
     `Your offer of <strong>${priceText}</strong> for your <strong>${car}</strong> still stands.\nUsed values shift week to week, so it's worth locking in this week's number.`,
@@ -341,10 +380,16 @@ function postOfferFollowupEmail(lead: Lead, step: number): Email {
     `Last reminder — your offer for ${plain}`,
   ];
   const headings = ["Your offer's ready", "Still good to go?", "Still here when you're ready"];
+  const preheaders = [
+    `Just checking our offer of ${pricePlain} for your ${plain} reached you.`,
+    `Used values shift weekly — worth locking in ${pricePlain} for your ${plain} now.`,
+    `Last note on your ${pricePlain} offer — we'll come to you and pay on the spot.`,
+  ];
   const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
   return {
     subject: subjects[i],
-    html: shell(intro(headings[i], bodies[i]) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "To book a time or ask anything, just reply to this email.", true)),
+    preheader: preheaders[i],
+    html: shell(intro(headings[i], bodies[i]) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "To book a time or ask anything, just reply to this email.", true), preheaders[i]),
   };
 }
 
@@ -358,11 +403,16 @@ function moreInfoEmail(lead: Lead, questions: string[]): Email {
   const signoff = `<tr><td style="padding:16px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Looking forward to getting you your offer.<br/><br/>
     Thanks,<br/>
-    <strong>Your ${esc(site.name)} Representative</strong>
+    <strong>${esc(site.repName)}</strong><br/>
+    <span style="font-size:14px;color:#5b6b7b;">Your ${esc(site.name)} Representative</span>
   </td></tr>`;
+  const pre = v
+    ? `Just a couple details and ${site.repName} can send your offer for your ${carPlain(lead)}.`
+    : `Just a couple details and ${site.repName} can send your offer.`;
   return {
     subject: v ? `A couple quick questions about your ${v.make} ${v.model}` : `A couple quick questions — ${site.name}`,
-    html: shell(intro(heading, body) + questionsBox(questions) + callCta("fastest") + signoff + proofBox(), undefined, replyFooter(lead, "Easiest way to answer? Just reply to this email.")),
+    preheader: pre,
+    html: shell(intro(heading, body) + questionsBox(questions) + callCta("fastest") + signoff + proofBox(), undefined, replyFooter(lead, "Easiest way to answer? Just reply to this email."), pre),
   };
 }
 
@@ -386,10 +436,17 @@ function awaitingInfoReminderEmail(lead: Lead, step = 0): Email {
     plain ? `Last reminder — your ${plain} offer is ready` : `Last reminder — your offer is ready — ${site.name}`,
   ];
   const headings = ["Let's finish your offer", "Still want your offer?", "Still here when you're ready"];
+  const carPre = plain ? `your ${plain}` : "your car";
+  const preheaders = [
+    `A couple details and your offer for ${carPre} is ready to go.`,
+    `We're holding your offer for ${carPre} — just need those last details.`,
+    `Last check-in — send the details and we'll get your ${plain || "car"} offer right out.`,
+  ];
   const i = step <= 0 ? 0 : step >= 2 ? 2 : 1;
   return {
     subject: subjects[i],
-    html: shell(intro(headings[i], bodies[i]) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "Got the details? Just reply to this email.", true)),
+    preheader: preheaders[i],
+    html: shell(intro(headings[i], bodies[i]) + questionsBox(lead.infoQuestions || []) + callCta("fastest") + proofBox(), undefined, replyFooter(lead, "Got the details? Just reply to this email.", true), preheaders[i]),
   };
 }
 
@@ -405,9 +462,11 @@ function bookingDayOfEmail(lead: Lead): Email {
       </td></tr>`
     : "";
   const body = `Quick reminder that a ${esc(site.name)} rep is coming by <strong>today at ${time}</strong> (&#128205; ${where}) to inspect your car, confirm your offer, and pay you on the spot.\n<strong>Please tap below to confirm you'll be there</strong> — if we don't hear from you, we may have to cancel the visit.\nSomething changed? Just call or text.`;
+  const pre = `${site.repName} comes by today at ${time} to inspect, confirm your offer, and pay you — tap to confirm.`;
   return {
     subject: `Today: your ${site.name} inspection at ${time}`,
-    html: shell(intro("See you today!", body) + confirmBtn + ctaBox() + proofBox(), undefined, replyFooter(lead, "Running late or need to reschedule? Just reply to this email.")),
+    preheader: pre,
+    html: shell(intro("See you today!", body) + confirmBtn + ctaBox() + proofBox(), undefined, replyFooter(lead, "Running late or need to reschedule? Just reply to this email."), pre),
   };
 }
 
@@ -417,9 +476,13 @@ function winbackEmail(lead: Lead): Email {
   const v = lead.vehicle;
   const carRef = v ? `your ${carLine(lead)}` : "your car";
   const body = `We'd still love to make you an offer on ${carRef} — no obligation at all.\nUsed-car prices move week to week, so it may be worth more than you'd expect.\nAlready sold it? No worries — just ignore this.`;
+  const pre = v
+    ? `Prices move weekly — your ${carPlain(lead)} may be worth more than you think. No obligation.`
+    : `Prices move weekly — your car may be worth more than you think. No obligation.`;
   return {
     subject: v ? `Still have your ${v.make} ${v.model}? We'd love to make an offer` : `Still selling your car? — ${site.name}`,
-    html: shell(intro("Still have your car?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "") + proofBox(), undefined, replyFooter(lead, "Want another look? Just reply to this email.", true)),
+    preheader: pre,
+    html: shell(intro("Still have your car?", body) + callFirstCta("fastest", `${site.url}/get-offer`, "Get an offer online &rarr;", "") + proofBox(), undefined, replyFooter(lead, "Want another look? Just reply to this email.", true), pre),
   };
 }
 
@@ -429,16 +492,21 @@ function referralConfirmationEmail(ref: Referral): Email {
   const first = esc((ref.referrer.name || "there").trim().split(" ")[0] || "there");
   const friend = ref.friend?.name ? esc(ref.friend.name.trim().split(" ")[0]) : "";
   const who = friend || "your friend";
+  // Plain (un-escaped) friend name for the preheader, which esc()'s its own input.
+  const whoPlain = (ref.friend?.name ? ref.friend.name.trim().split(" ")[0] : "") || "your friend";
   const body = `Thanks for spreading the word!\nWe've got your referral${friend ? ` for ${friend}` : ""} and a specialist will reach out to ${who} soon.\nWhen ${who} sells their car to ${esc(site.name)}, you'll earn $100 — we'll be in touch to get you paid, nothing more you need to do.`;
   // No pushy call button here — a referral isn't urgent. The footer just offers
   // both ways to reach us (reply or call) in case they have any questions.
   const contact = `Questions or concerns? Reply here, or call <a href="tel:${site.phoneE164}" style="color:#1A7F54;text-decoration:none;font-weight:700;">${esc(site.phoneDisplay)}</a>.`;
+  const pre = `Your $100 referral reward is on the way once ${whoPlain} sells to ${site.name}.`;
   return {
     subject: `Thanks for referring ${friend || "a friend"} — ${site.name}`,
+    preheader: pre,
     html: shell(
       intro(`Thanks, ${first}!`, body),
       undefined,
       replyFooter(null, contact),
+      pre,
     ),
   };
 }
@@ -450,6 +518,7 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   const car = carLine(lead); // escaped, for HTML
   const plain = carPlain(lead);
   const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
+  const pricePlain = low === high ? money(low) : `${money(low)}–${money(high)}`;
   const leadIn = car
     ? `We looked at similar vehicles — here's your offer for your <strong>${car}</strong>:`
     : `We looked at similar vehicles — here's your offer:`;
@@ -467,11 +536,16 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   </td></tr>`;
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Talk soon,<br/>
-    <strong>The ${esc(site.name)} Team</strong>
+    <strong>${esc(site.repName)}</strong><br/>
+    <span style="font-size:14px;color:#5b6b7b;">Your ${esc(site.name)} Representative</span>
   </td></tr>`;
+  const pre = plain
+    ? `Your offer for your ${plain}: ${pricePlain}. No obligation — it's your call.`
+    : `Your offer is ready: ${pricePlain}. No obligation — it's your call.`;
   return {
     subject: plain ? `Your offer for your ${plain} — ${site.name}` : `Your offer is ready — ${site.name}`,
-    html: shell(intro("Your offer is ready", leadIn) + offerBox + callCta("fastest") + noPressure + signoff + proofBox(), undefined, replyFooter(lead, "To schedule or ask anything, just reply to this email.")),
+    preheader: pre,
+    html: shell(intro("Your offer is ready", leadIn) + offerBox + callCta("fastest") + noPressure + signoff + proofBox(), undefined, replyFooter(lead, "To schedule or ask anything, just reply to this email."), pre),
   };
 }
 
@@ -490,7 +564,7 @@ function messageEmail(lead: Lead, message: string): Email {
     .join("");
   const head = `<tr><td style="padding:28px 28px 4px;">
     <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#0e1c2b;font-weight:800;">Hi ${first},</h1>
-    <p style="margin:0;font-size:16px;line-height:1.6;color:#3a4654;">You have a new message from your ${esc(site.name)} representative:</p>
+    <p style="margin:0;font-size:16px;line-height:1.6;color:#3a4654;">You have a new message from ${esc(site.repName)}, your ${esc(site.name)} representative:</p>
   </td></tr>`;
   const box = `<tr><td style="padding:14px 28px 6px;">
     <div style="background:#f4f7fb;border:1px solid #dbe4ef;border-radius:12px;padding:16px 18px;">
@@ -500,11 +574,23 @@ function messageEmail(lead: Lead, message: string): Email {
   // Sign-off under the message so it reads as a note from a real person.
   const signoff = `<tr><td style="padding:14px 28px 4px;font-size:16px;line-height:1.6;color:#3a4654;">
     Thank you,<br/>
-    <strong>Your ${esc(site.name)} Representative</strong>
+    <strong>${esc(site.repName)}</strong><br/>
+    <span style="font-size:14px;color:#5b6b7b;">Your ${esc(site.name)} Representative</span>
   </td></tr>`;
+  // Subject leads with the customer's vehicle when we have it (specific + personal
+  // beats generic for opens), signed by the rep by name; falls back to the rep-name
+  // line when there's no vehicle on the lead.
+  const plain = carPlain(lead);
+  const subject = plain
+    ? `About your ${plain} — a message from ${site.repName}`
+    : `A message from ${site.repName}, your ${site.name} representative`;
+  const pre = plain
+    ? `${site.repName} has a quick note about your ${plain}.`
+    : `${site.repName} sent you a quick message.`;
   return {
-    subject: `A message from ${site.name}`,
-    html: shell(head + box + signoff + callCta("fastest"), undefined, replyFooter(lead, "Just reply to this email to get back to us.")),
+    subject,
+    preheader: pre,
+    html: shell(head + box + signoff + callCta("fastest"), undefined, replyFooter(lead, "Just reply to this email to get back to us."), pre),
   };
 }
 
@@ -548,7 +634,8 @@ export function offerPreview(lead: Lead, low?: number, high?: number): string {
     "No pressure — once you see it, it's your call. If it's a yes, we come to you and pay on the spot.",
     "",
     "Talk soon,",
-    `The ${site.name} Team`,
+    site.repName,
+    `Your ${site.name} Representative`,
     `${site.phoneDisplay} · ${site.email}`,
   ].join("\n");
 }
@@ -580,14 +667,18 @@ export function moreInfoPreview(lead: Lead, questions?: string[]): string {
 export function messagePreview(lead: Lead, message?: string): string {
   const first = (lead.contact.name || "there").trim().split(" ")[0] || "there";
   const body = message && message.trim() ? message.trim() : "(your message goes here)";
+  const plain = carPlain(lead);
+  const subject = plain
+    ? `About your ${plain} — a message from ${site.repName}`
+    : `A message from ${site.repName}, your ${site.name} representative`;
   return [
     "📧 EMAIL PREVIEW · Message",
     previewTo(lead),
-    `Subject: A message from ${site.name}`,
+    `Subject: ${subject}`,
     PREVIEW_DIVIDER,
     `Hi ${first},`,
     "",
-    `You have a new message from your ${site.name} representative:`,
+    `You have a new message from ${site.repName}, your ${site.name} representative:`,
     "",
     body,
     "",
@@ -883,6 +974,13 @@ export type EmailPreview = {
   /** transactional = always sends (validEmail); nurture = respects emailOptOut (nurtureEmail). */
   audience: "transactional" | "nurture";
   subject: string;
+  /** The inbox-preview snippet (hidden preheader) — shown as its own field in the
+   * admin "unopened" previews, since it's invisible in the rendered html. */
+  preheader: string;
+  /** The "From" display name the customer sees (e.g. "Sam at DriveOffer"). Same
+   * for every email, but carried per-preview so the inbox/notification mock is
+   * self-contained. */
+  fromName: string;
   html: string;
 };
 
@@ -967,7 +1065,7 @@ export function renderAllEmailPreviews(): EmailPreview[] {
     email: Email,
   ): EmailPreview => {
     const meta = KIND_META.get(kind);
-    return { kind, title: meta?.title ?? kind, group: meta?.group ?? "Other", trigger, audience, subject: email.subject, html: email.html };
+    return { kind, title: meta?.title ?? kind, group: meta?.group ?? "Other", trigger, audience, subject: email.subject, preheader: email.preheader, fromName: fromDisplayName(), html: email.html };
   };
 
   return [
