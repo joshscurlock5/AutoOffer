@@ -23,8 +23,8 @@ export interface VariantStats {
   label: string;
   /** On-page session funnel: Visited → … → Submitted (from computeEventAnalytics). */
   funnel: { label: string; count: number }[];
-  /** "Touched form" split by what came first — CTA click vs direct form touch. */
-  formEngagement: { ctaFirst: number; touchedFirst: number };
+  /** Per-stage sub-splits (dropdown/VIN, phone/email, touched/CTA), keyed by label. */
+  breakdowns: Record<string, { label: string; count: number }[]>;
   visitors: number;
   submitted: number;
   leads: number;
@@ -78,7 +78,7 @@ function bucketStats(key: string, label: string, vEvents: SiteEvent[], vLeads: L
     key,
     label,
     funnel: ea.funnel,
-    formEngagement: ea.formEngagement,
+    breakdowns: ea.breakdowns,
     visitors,
     submitted,
     leads: leadsN,

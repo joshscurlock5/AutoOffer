@@ -12,10 +12,11 @@ export interface EventAnalytics {
   totalSessions: number;
   /** Distinct sessions reaching each offer-funnel stage, in order. */
   funnel: { label: string; count: number }[];
-  /** The "Touched form" stage split by which happened FIRST in the session — a
-   * CTA-button click vs a direct touch of the form. The two sum to that stage's
-   * count with no session double-counted. */
-  formEngagement: { ctaFirst: number; touchedFirst: number };
+  /** Sub-splits for stages that combine two paths into one number, keyed by the
+   * stage label. Each part's counts sum to the stage total, no double-counting —
+   * e.g. "Entered make" splits into dropdown vs VIN, "Entered contact" into
+   * phone vs email, "Touched form" into touched-first vs CTA-first. */
+  breakdowns: Record<string, { label: string; count: number }[]>;
   /** Median minutes between consecutive funnel stages (sessions with both). */
   stepMedianMins: { label: string; mins: number }[];
   /** Form-field friction: who touched a field, and where abandoners stopped. */
@@ -55,16 +56,21 @@ export interface EventAnalytics {
 const STAGES: { events: string[]; label: string }[] = [
   { events: ["page_view"], label: "Visited" },
   // Touched form = engaged the form at all: a field tap OR a "Get a Free Offer"
-  // CTA click. Combined into one number; formEngagement splits which came first.
+  // CTA click. Combined into one number; breakdowns splits which came first.
   { events: ["home_form_start", "offer_form_start", "cta_click"], label: "Touched form" },
-  { events: ["home_make_selected", "offer_make_selected"], label: "Entered make" },
-  { events: ["home_model_selected", "offer_model_selected"], label: "Entered model" },
-  { events: ["step1_submitted"], label: "Submitted vehicle" },
-  { events: ["details_trim_selected"], label: "Entered trim" },
+  // Make/model/trim each fold in vin_confirmed — decoding a VIN fills all three,
+  // so a VIN user genuinely entered each. breakdowns splits dropdown vs VIN.
+  { events: ["home_make_selected", "offer_make_selected", "vin_confirmed"], label: "Entered make" },
+  { events: ["home_model_selected", "offer_model_selected", "vin_confirmed"], label: "Entered model" },
+  // Moving past the vehicle page = the on-page submit OR the home-widget submit
+  // (its "Get a Free Offer" fires widget_submit, not step1_submitted).
+  { events: ["step1_submitted", "widget_submit"], label: "Submitted vehicle" },
+  { events: ["details_trim_selected", "vin_confirmed"], label: "Entered trim" },
   { events: ["details_mileage_entered"], label: "Entered mileage" },
   { events: ["details_submitted"], label: "Submitted details" },
-  { events: ["contact_phone_entered"], label: "Entered phone" },
-  { events: ["contact_email_entered"], label: "Entered email" },
+  // Phone + email folded into one number; breakdowns splits by contact method
+  // (a phone means call/text; email-only means email).
+  { events: ["contact_phone_entered", "contact_email_entered"], label: "Entered contact" },
   { events: ["generate_lead"], label: "Submitted" },
 ];
 
@@ -239,19 +245,54 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     count: [...firstAt.values()].filter((per) => s.events.some((e) => per.has(e))).length,
   }));
 
-  // "Touched form" breakdown — every engaged session bucketed by what came FIRST,
-  // a CTA-button click or a direct form touch, so the two sum to that stage's
-  // total with nobody double-counted.
-  let ctaFirst = 0;
-  let touchedFirst = 0;
+  // Sub-splits for the combined stages. Each session lands in exactly one bucket
+  // per split (or none), so the two buckets sum to that stage's total.
+  let touchedFirst = 0, ctaFirst = 0;
+  let makeList = 0, makeVin = 0, modelList = 0, modelVin = 0, trimList = 0, trimVin = 0;
+  let contactPhone = 0, contactEmail = 0;
   for (const per of firstAt.values()) {
+    // Touched form — bucket by which came first (CTA click vs a direct touch).
     const touchAt = stageTime(per, ["home_form_start", "offer_form_start"]);
     const ctaAt = per.get("cta_click");
-    if (!touchAt && !ctaAt) continue;
-    if (ctaAt && (!touchAt || ctaAt < touchAt)) ctaFirst += 1;
-    else touchedFirst += 1;
+    if (touchAt || ctaAt) {
+      if (ctaAt && (!touchAt || ctaAt < touchAt)) ctaFirst += 1;
+      else touchedFirst += 1;
+    }
+    // Make / model / trim — VIN takes priority (decoding a VIN fills the field),
+    // otherwise the dropdown selection.
+    const vin = per.has("vin_confirmed");
+    if (vin) makeVin += 1;
+    else if (per.has("home_make_selected") || per.has("offer_make_selected")) makeList += 1;
+    if (vin) modelVin += 1;
+    else if (per.has("home_model_selected") || per.has("offer_model_selected")) modelList += 1;
+    if (vin) trimVin += 1;
+    else if (per.has("details_trim_selected")) trimList += 1;
+    // Contact — a phone means call/text; only an email means email.
+    if (per.has("contact_phone_entered")) contactPhone += 1;
+    else if (per.has("contact_email_entered")) contactEmail += 1;
   }
-  const formEngagement = { ctaFirst, touchedFirst };
+  const breakdowns: Record<string, { label: string; count: number }[]> = {
+    "Touched form": [
+      { label: "👆 Touched form first", count: touchedFirst },
+      { label: "🔘 Clicked CTA first", count: ctaFirst },
+    ],
+    "Entered make": [
+      { label: "📋 Dropdown", count: makeList },
+      { label: "🔢 VIN", count: makeVin },
+    ],
+    "Entered model": [
+      { label: "📋 Dropdown", count: modelList },
+      { label: "🔢 VIN", count: modelVin },
+    ],
+    "Entered trim": [
+      { label: "📋 Dropdown", count: trimList },
+      { label: "🔢 VIN", count: trimVin },
+    ],
+    "Entered contact": [
+      { label: "📞 Phone", count: contactPhone },
+      { label: "✉️ Email", count: contactEmail },
+    ],
+  };
 
   // Median minutes between consecutive stages, over sessions that hit both.
   const stepMedianMins: { label: string; mins: number }[] = [];
@@ -322,7 +363,7 @@ export function computeEventAnalytics(events: SiteEvent[]): EventAnalytics {
     totalEvents: events.length,
     totalSessions: firstAt.size,
     funnel,
-    formEngagement,
+    breakdowns,
     stepMedianMins,
     friction,
     errorsByReason: toCounts(errorCounts, 12),

@@ -14,7 +14,7 @@ interface VariantStats {
   key: string;
   label: string;
   funnel: { label: string; count: number }[];
-  formEngagement?: { ctaFirst: number; touchedFirst: number };
+  breakdowns?: Record<string, { label: string; count: number }[]>;
   visitors: number;
   submitted: number;
   leads: number;
@@ -34,10 +34,10 @@ interface ExpData {
 
 function FunnelBars({
   funnel,
-  formEngagement,
+  breakdowns,
 }: {
   funnel: { label: string; count: number }[];
-  formEngagement?: { ctaFirst: number; touchedFirst: number };
+  breakdowns?: Record<string, { label: string; count: number }[]>;
 }) {
   const max = Math.max(1, ...funnel.map((f) => f.count));
   // Which stage's "what does this track?" demo is open (by label), if any.
@@ -72,11 +72,14 @@ function FunnelBars({
                 {drop != null && drop > 0 ? `−${drop}%` : ""}
               </span>
             </div>
-            {/* "Touched form" first-touch split — the two sum to the row above. */}
-            {s.label === "Touched form" && formEngagement && (
+            {/* Sub-split for combined stages — the parts sum to the row above. */}
+            {breakdowns?.[s.label] && (
               <div className="ml-[calc(9rem+0.5rem)] mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted">
-                <span>👆 Touched form first: <span className="font-semibold text-navy">{formEngagement.touchedFirst}</span></span>
-                <span>🔘 Clicked CTA first: <span className="font-semibold text-navy">{formEngagement.ctaFirst}</span></span>
+                {breakdowns[s.label].map((part) => (
+                  <span key={part.label}>
+                    {part.label}: <span className="font-semibold text-navy">{part.count}</span>
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -142,7 +145,7 @@ function VariantCard({ v, active }: { v: VariantStats; active: boolean }) {
         {active && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">Live now</span>}
         <span className="ml-auto text-xs text-muted">{v.visitors.toLocaleString("en-CA")} visits</span>
       </div>
-      <FunnelBars funnel={v.funnel} formEngagement={v.formEngagement} />
+      <FunnelBars funnel={v.funnel} breakdowns={v.breakdowns} />
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Tile label="Leads" value={v.leads} />
         <Tile label="Booked" value={v.booked} />

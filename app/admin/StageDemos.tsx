@@ -21,14 +21,13 @@ export const STAGE_INFO: Record<string, { title: string; blurb: string }> = {
     title: "Touched form",
     blurb: "Engaged the offer form — a field tap OR a “Get a Free Offer” button. Both count as one; the split below shows which came first.",
   },
-  "Entered make": { title: "Entered make", blurb: "Picked their car’s make." },
-  "Entered model": { title: "Entered model", blurb: "Picked their car’s model." },
-  "Submitted vehicle": { title: "Submitted vehicle", blurb: "Pressed “Get a Free Offer” to continue past the vehicle step." },
-  "Entered trim": { title: "Entered trim", blurb: "Picked a trim (optional — it’s on the details step)." },
+  "Entered make": { title: "Entered make", blurb: "Picked their make — from the dropdown, or decoded from a VIN. The split shows which." },
+  "Entered model": { title: "Entered model", blurb: "Picked their model — from the dropdown, or decoded from a VIN." },
+  "Submitted vehicle": { title: "Submitted vehicle", blurb: "Pressed “Get a Free Offer” to move past the vehicle page (home form or /get-offer)." },
+  "Entered trim": { title: "Entered trim", blurb: "Picked a trim (optional), or got one from a VIN. It’s on the details step." },
   "Entered mileage": { title: "Entered mileage", blurb: "Entered mileage. Condition is pre-filled, so it can’t be tracked separately." },
   "Submitted details": { title: "Submitted details", blurb: "Pressed “Continue” past the details step." },
-  "Entered phone": { title: "Entered phone", blurb: "Typed their phone number." },
-  "Entered email": { title: "Entered email", blurb: "Typed their email address." },
+  "Entered contact": { title: "Entered contact", blurb: "Typed their contact info. The split buckets by method — a phone means call/text, email-only means email." },
   Submitted: { title: "Submitted", blurb: "Pressed “Get My Free Offer” — became a lead." },
 };
 
@@ -175,18 +174,12 @@ function renderStage(stage: string): ReactNode {
           />
         </Frame>
       );
-    case "Entered phone":
+    case "Entered contact":
       return (
-        <Frame cursor={<Cursor anim="sd-cur-phone 5s ease-in-out" />}>
-          <ContactForm phone={<span className="sd-tw sd-caret sd-type-phone">(780) 555-01</span>} button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 14 }}>Get My Free Offer →</div>} />
-        </Frame>
-      );
-    case "Entered email":
-      return (
-        <Frame cursor={<Cursor anim="sd-cur-email 5s ease-in-out" />}>
+        <Frame cursor={<Cursor anim="sd-cur-contact 6s ease-in-out" />}>
           <ContactForm
-            phone={<span className="sd-val">(780) 555-0142</span>}
-            email={<span className="sd-tw sd-caret sd-type-email">sarah@email.com</span>}
+            phone={<span className="sd-tw sd-caret sd-type-phone2">(780) 555-0142</span>}
+            email={<span className="sd-tw sd-caret sd-type-email2">sarah@email.com</span>}
             button={<div className="sd-btn sd-btn-idle" style={{ marginTop: 14 }}>Get My Free Offer →</div>}
           />
         </Frame>
@@ -321,15 +314,12 @@ const DEMO_CSS = `
 @keyframes sd-ring-subdet{0%,40%{opacity:0;transform:scale(.5)}48%{opacity:.9;transform:scale(1)}60%,100%{opacity:0;transform:scale(1.25)}}
 .sd-press-subdet{animation:sd-press-subdet 5s ease-in-out infinite}
 
-/* Entered phone — type the number */
-@keyframes sd-cur-phone{0%{transform:translate(180px,320px)}26%{transform:translate(120px,150px)}100%{transform:translate(120px,150px)}}
-@keyframes sd-type-phone{0%,30%{width:0}66%,100%{width:104px}}
-.sd-type-phone{animation:sd-type-phone 5s steps(11) infinite}
-
-/* Entered email — type the address */
-@keyframes sd-cur-email{0%{transform:translate(180px,320px)}26%{transform:translate(120px,205px)}100%{transform:translate(120px,205px)}}
-@keyframes sd-type-email{0%,30%{width:0}70%,100%{width:118px}}
-.sd-type-email{animation:sd-type-email 5s steps(15) infinite}
+/* Entered contact — type the phone, then the email */
+@keyframes sd-cur-contact{0%{transform:translate(180px,320px)}16%{transform:translate(120px,148px)}52%{transform:translate(120px,148px)}60%{transform:translate(120px,203px)}100%{transform:translate(120px,203px)}}
+@keyframes sd-type-phone2{0%,16%{width:0}46%,100%{width:112px}}
+@keyframes sd-type-email2{0%,60%{width:0}90%,100%{width:118px}}
+.sd-type-phone2{animation:sd-type-phone2 6s steps(14) infinite}
+.sd-type-email2{animation:sd-type-email2 6s steps(15) infinite}
 
 /* Submitted — click Get My Free Offer + success */
 @keyframes sd-cur-sub{0%{transform:translate(180px,320px)}40%{transform:translate(120px,268px)}100%{transform:translate(120px,268px)}}
