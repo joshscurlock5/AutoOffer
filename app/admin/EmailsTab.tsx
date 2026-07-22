@@ -69,6 +69,10 @@ interface EmailPreview {
   trigger: string;
   audience: "transactional" | "nurture";
   subject: string;
+  /** Hidden inbox-preview snippet (the email's preheader). */
+  preheader: string;
+  /** "From" display name the customer sees, e.g. "Sam at DriveOffer". */
+  fromName: string;
   html: string;
 }
 
@@ -115,6 +119,51 @@ function Section({ title, children, tip }: { title: string; children: ReactNode;
   );
 }
 
+/** First letter of the sender name, for the avatar bubble. */
+const initialOf = (name: string) => (name.trim()[0] || "?").toUpperCase();
+
+/** One unread email as it appears in a phone inbox list: sender + subject in
+ * bold (unread), the preheader as the gray preview snippet, an unread dot, and a
+ * fixed sample time. This is the whole point of the preheader — the third line a
+ * customer reads before deciding to open. */
+function InboxRow({ p }: { p: EmailPreview }) {
+  return (
+    <div className="flex items-start gap-3 px-3 py-3">
+      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
+        {initialOf(p.fromName)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-bold text-navy">{p.fromName}</span>
+          <span className="shrink-0 text-[11px] text-muted">9:41 AM</span>
+        </div>
+        <div className="truncate text-sm font-semibold text-navy">{p.subject}</div>
+        <div className="truncate text-xs text-muted">{p.preheader || <span className="italic">(no preview text)</span>}</div>
+      </div>
+      <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-500" aria-label="unread" />
+    </div>
+  );
+}
+
+/** The same email as a phone push notification (iOS-Mail style): app row, sender
+ * in bold, subject, then the preheader as the body snippet. */
+function NotificationCard({ p }: { p: EmailPreview }) {
+  return (
+    <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white/90 px-3.5 py-3 shadow-sm backdrop-blur">
+      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-brand-600 text-lg text-white">✉</div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Mail</span>
+          <span className="shrink-0 text-[10px] text-muted">now</span>
+        </div>
+        <div className="truncate text-sm font-bold text-navy">{p.fromName}</div>
+        <div className="truncate text-sm font-medium text-navy">{p.subject}</div>
+        <div className="line-clamp-2 text-xs text-muted">{p.preheader || <span className="italic">(no preview text)</span>}</div>
+      </div>
+    </div>
+  );
+}
+
 const fmt = (n: number) => n.toLocaleString("en-CA");
 /** "x%" of a denominator, or an em-dash when the denominator is empty — a 0/0
  * shown as "0%" would read as a real (terrible) rate. */
@@ -148,6 +197,7 @@ export default function EmailsTab({
   const [previews, setPreviews] = useState<EmailPreview[] | null>(null);
   const [openKind, setOpenKind] = useState<string | null>(null); // one modal at a time
   const [detailKind, setDetailKind] = useState<string | null>(null); // expanded per-type stats row
+  const [unopenedView, setUnopenedView] = useState<"inbox" | "notification">("inbox"); // "How it looks unopened" toggle
 
   // Stable dependency AND the sole source the effect reads the ids from (a new
   // array ref each render would refetch forever). Prefix "F:" marks "filtered"
@@ -405,6 +455,63 @@ export default function EmailsTab({
               attributed to the last email each lead received, so older replies are a best estimate and everything from now on is exact.
             </p>
           </div>
+        )}
+      </Section>
+
+      {/* (b3) "How it looks unopened" — the inbox row / push notification a
+          customer sees BEFORE opening: sender name, subject, and the preview
+          snippet (preheader). This is the surface that drives whether they open
+          at all, so it gets its own section, separate from the full render. */}
+      <Section
+        title="How it looks unopened"
+        tip="What a customer sees in their inbox or as a phone notification before they open — sender name, subject, and the preview snippet. This is what decides whether they open at all."
+      >
+        {previews === null ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : previews.length === 0 ? (
+          <p className="text-sm text-muted">Couldn&apos;t load the previews.</p>
+        ) : (
+          <>
+            {/* Inbox ⇄ Notification segmented toggle. */}
+            <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold">
+              {(["inbox", "notification"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setUnopenedView(v)}
+                  className={`rounded-md px-3 py-1.5 transition ${
+                    unopenedView === v ? "bg-white text-navy shadow-sm" : "text-muted hover:text-navy"
+                  }`}
+                >
+                  {v === "inbox" ? "Inbox list" : "Notification"}
+                </button>
+              ))}
+            </div>
+
+            {grouped.map(({ group, items }) => (
+              <div key={group} className="mb-6">
+                <h3 className="mb-2 text-sm font-bold text-navy">{group}</h3>
+                {unopenedView === "inbox" ? (
+                  <div className="card divide-y divide-slate-100 overflow-hidden p-0">
+                    {items.map((p) => (
+                      <InboxRow key={p.kind} p={p} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 rounded-2xl bg-slate-100/70 p-3 md:grid-cols-2 xl:grid-cols-3">
+                    {items.map((p) => (
+                      <NotificationCard key={p.kind} p={p} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <p className="mt-1 text-[11px] text-muted">
+              The preview snippet is the email&apos;s hidden &ldquo;preheader.&rdquo; A blank one means the inbox falls back to
+              showing the top of the email instead — usually the logo, which wastes the line.
+            </p>
+          </>
         )}
       </Section>
 
