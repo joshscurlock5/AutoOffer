@@ -169,6 +169,19 @@ const fmt = (n: number) => n.toLocaleString("en-CA");
  * shown as "0%" would read as a real (terrible) rate. */
 const pctOf = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : "—");
 
+/** Step-over-step change vs the previous funnel stage (e.g. Opened vs Sent),
+ * shown under the count like the A/B funnel's drop-off deltas. Red on a drop
+ * (the usual case — that's the fall-off to fix), emerald on the rare gain, and
+ * nothing when there's no previous stage to measure against. Uses a true minus
+ * glyph so "−99%" reads cleanly. */
+function StageDelta({ cur, prev }: { cur: number; prev: number }) {
+  if (!(prev > 0)) return null;
+  const pct = Math.round(((cur - prev) / prev) * 100);
+  const cls = pct < 0 ? "text-rose-500" : pct > 0 ? "text-emerald-600" : "text-slate-400";
+  const text = pct < 0 ? `−${Math.abs(pct)}%` : pct > 0 ? `+${pct}%` : "0%";
+  return <div className={`text-[10px] font-semibold tabular-nums ${cls}`}>{text}</div>;
+}
+
 // Gallery group order = the customer journey. Previews arrive in journey order
 // already, but grouping re-buckets them, so the bucket order is pinned here.
 const GROUP_ORDER = ["First contact", "Sent by you", "Automatic follow-ups", "Booking"];
@@ -371,13 +384,16 @@ export default function EmailsTab({
           so the 1st reminder can be compared against the last. */}
       <Section
         title="Performance by email type"
-        tip="Every email we send, one row each — including each step of the multi-step follow-ups — so you can compare how the 1st reminder performs vs. the last. All-time, not just the selected dates."
+        tip="Every email we send, one row each — including each step of the multi-step follow-ups. The −% under each number is the drop-off from the previous stage (Sent → Opened → Responded), so you can see where people fall away. All-time, not just the selected dates."
       >
         {!stats ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
           <div className="card overflow-x-auto p-4">
-            <p className="mb-2 text-xs text-muted">Tap any email to see its full breakdown and rates.</p>
+            <p className="mb-2 text-xs text-muted">
+              The small <span className="font-semibold text-rose-500">−%</span> under each number is the drop-off from the stage
+              before it (Sent&nbsp;→&nbsp;Opened&nbsp;→&nbsp;Responded), so the sharpest fall-offs stand out. Tap any email for its full breakdown.
+            </p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-muted">
@@ -412,10 +428,16 @@ export default function EmailsTab({
                         <td className="py-2 pr-2 font-medium text-navy">
                           <span className="mr-1 inline-block w-3 text-slate-400">{isOpen ? "▾" : "▸"}</span>{k.title}
                         </td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{sentEstimated ? "~" : ""}{fmt(sentVal)}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.opened)}</td>
-                        <td className="py-2 pl-2 text-right font-semibold tabular-nums text-navy">{fmt(k.estResponded)}</td>
-                        <td className="py-2 pl-2 text-right tabular-nums">{fmt(k.optedOut)}</td>
+                        <td className="py-2 pl-2 align-top text-right tabular-nums">{sentEstimated ? "~" : ""}{fmt(sentVal)}</td>
+                        <td className="py-2 pl-2 align-top text-right tabular-nums">
+                          {fmt(k.opened)}
+                          <StageDelta cur={k.opened} prev={sentVal} />
+                        </td>
+                        <td className="py-2 pl-2 align-top text-right font-semibold tabular-nums text-navy">
+                          {fmt(k.estResponded)}
+                          <StageDelta cur={k.estResponded} prev={k.opened} />
+                        </td>
+                        <td className="py-2 pl-2 align-top text-right tabular-nums">{fmt(k.optedOut)}</td>
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-slate-100 bg-slate-50/50">
