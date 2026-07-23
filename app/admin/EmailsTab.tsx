@@ -55,8 +55,6 @@ interface EmailStats {
     responded: number;
     bounced: number;
     optedOut: number;
-    estSent: number;
-    estResponded: number;
   }[];
   trackingSince: string | null;
   historicalSends: { kind: string; count: number; method: string }[];
@@ -391,8 +389,9 @@ export default function EmailsTab({
         ) : (
           <div className="card overflow-x-auto p-4">
             <p className="mb-2 text-xs text-muted">
-              The small <span className="font-semibold text-rose-500">−%</span> under each number is the drop-off from the stage
-              before it (Sent&nbsp;→&nbsp;Opened&nbsp;→&nbsp;Responded), so the sharpest fall-offs stand out. Tap any email for its full breakdown.
+              Only emails we logged sending are counted here, each once per recipient — no estimates — so the numbers are real and a later
+              stage can never top the one before it. The small <span className="font-semibold text-rose-500">−%</span> under each number is
+              the drop-off from the stage before it (Sent&nbsp;→&nbsp;Opened&nbsp;→&nbsp;Responded), so the sharpest fall-offs stand out. Tap any email for its full breakdown.
             </p>
             <table className="w-full text-sm">
               <thead>
@@ -409,9 +408,6 @@ export default function EmailsTab({
                   const isOpen = detailKind === k.kind;
                   const prev = stats.perKind[i - 1];
                   const showGroup = !prev || prev.group !== k.group;
-                  const sentVal = k.estSent > 0 ? k.estSent : k.sent;
-                  const sentEstimated = k.estSent > 0 && k.estSent !== k.sent;
-                  const replyDenom = k.estSent || k.sent;
                   return (
                     <Fragment key={k.kind}>
                       {showGroup && (
@@ -428,14 +424,14 @@ export default function EmailsTab({
                         <td className="py-2 pr-2 font-medium text-navy">
                           <span className="mr-1 inline-block w-3 text-slate-400">{isOpen ? "▾" : "▸"}</span>{k.title}
                         </td>
-                        <td className="py-2 pl-2 align-top text-right tabular-nums">{sentEstimated ? "~" : ""}{fmt(sentVal)}</td>
+                        <td className="py-2 pl-2 align-top text-right tabular-nums">{fmt(k.sent)}</td>
                         <td className="py-2 pl-2 align-top text-right tabular-nums">
                           {fmt(k.opened)}
-                          <StageDelta cur={k.opened} prev={sentVal} />
+                          <StageDelta cur={k.opened} prev={k.sent} />
                         </td>
                         <td className="py-2 pl-2 align-top text-right font-semibold tabular-nums text-navy">
-                          {fmt(k.estResponded)}
-                          <StageDelta cur={k.estResponded} prev={k.opened} />
+                          {fmt(k.responded)}
+                          <StageDelta cur={k.responded} prev={k.opened} />
                         </td>
                         <td className="py-2 pl-2 align-top text-right tabular-nums">{fmt(k.optedOut)}</td>
                       </tr>
@@ -443,25 +439,17 @@ export default function EmailsTab({
                         <tr className="border-b border-slate-100 bg-slate-50/50">
                           <td colSpan={5} className="px-3 py-3">
                             <div className="flex flex-wrap gap-x-7 gap-y-3">
-                              <Detail
-                                label="Sent"
-                                value={sentEstimated ? `~${fmt(sentVal)}` : fmt(sentVal)}
-                                sub={sentEstimated ? `${fmt(k.sent)} tracked exactly` : "exact count"}
-                              />
-                              <Detail label="Delivered" value={fmt(k.delivered)} sub={`${pctOf(k.delivered, k.sent)} of tracked sent`} />
-                              <Detail label="Open rate" value={pctOf(k.opened, k.delivered)} sub={`${fmt(k.opened)} of ${fmt(k.delivered)} delivered`} />
-                              <Detail label="Click rate" value={pctOf(k.clicked, k.delivered)} sub={`${fmt(k.clicked)} clicked`} />
-                              <Detail
-                                label="Reply rate"
-                                value={replyDenom > 0 ? pctOf(k.estResponded, replyDenom) : "—"}
-                                sub={`${fmt(k.estResponded)} replied`}
-                              />
+                              <Detail label="Sent" value={fmt(k.sent)} sub="logged sends" />
+                              <Detail label="Delivered" value={fmt(k.delivered)} sub={`${pctOf(k.delivered, k.sent)} of sent`} />
+                              <Detail label="Open rate" value={pctOf(k.opened, k.sent)} sub={`${fmt(k.opened)} of ${fmt(k.sent)} sent`} />
+                              <Detail label="Click rate" value={pctOf(k.clicked, k.sent)} sub={`${fmt(k.clicked)} clicked`} />
+                              <Detail label="Reply rate" value={pctOf(k.responded, k.sent)} sub={`${fmt(k.responded)} replied`} />
                               <Detail label="Bounced" value={fmt(k.bounced)} />
                               <Detail label="Opted out" value={fmt(k.optedOut)} />
                             </div>
                             <p className="mt-2 text-[11px] text-muted">
-                              Opens/clicks count only emails sent after tracking went on; replies are attributed to the last email each lead
-                              received — a best estimate for older replies, exact from now on.
+                              Every stage is counted once per recipient among the emails we logged sending, so a rate can never top 100%.
+                              Opens are still an undercount — Apple and Gmail block the tracking pixel — so a reply can occasionally outrun a tracked open.
                             </p>
                           </td>
                         </tr>
@@ -472,9 +460,9 @@ export default function EmailsTab({
               </tbody>
             </table>
             <p className="mt-3 text-[11px] text-muted">
-              &ldquo;Sent&rdquo; shows the exact tracked count where we have one, otherwise a &ldquo;~&rdquo; estimate from each lead&apos;s history.
-              Opens count only emails sent after tracking went on{stats.trackingSince ? ` (${stats.trackingSince.slice(0, 10)})` : ""}; replies are
-              attributed to the last email each lead received, so older replies are a best estimate and everything from now on is exact.
+              These are tracked sends only — every email we&apos;ve logged sending since open-tracking went on{stats.trackingSince ? ` (${stats.trackingSince.slice(0, 10)})` : ""},
+              counted once per recipient. Emails from before then aren&apos;t shown rather than estimated, so a row can read lower than you remember but
+              every number is real. Opens are always an undercount (Apple and Gmail block the tracking pixel); replies can&apos;t be blocked.
             </p>
           </div>
         )}
