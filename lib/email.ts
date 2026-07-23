@@ -518,7 +518,6 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
   const car = carLine(lead); // escaped, for HTML
   const plain = carPlain(lead);
   const priceText = low === high ? money(low) : `${money(low)} &ndash; ${money(high)}`;
-  const pricePlain = low === high ? money(low) : `${money(low)}–${money(high)}`;
   const leadIn = car
     ? `We looked at similar vehicles — here's your offer for your <strong>${car}</strong>:`
     : `We looked at similar vehicles — here's your offer:`;
@@ -539,13 +538,11 @@ function offerEmail(lead: Lead, low: number, high: number): Email {
     <strong>${esc(site.repName)}</strong><br/>
     <span style="font-size:14px;color:#5b6b7b;">Your ${esc(site.name)} Representative</span>
   </td></tr>`;
-  const pre = plain
-    ? `Your offer for your ${plain}: ${pricePlain}. No obligation — it's your call.`
-    : `Your offer is ready: ${pricePlain}. No obligation — it's your call.`;
+  const pre = `No hassle, no headache. Selling with ${site.name} is easy 😊`;
   return {
-    subject: plain ? `Your offer for your ${plain} — ${site.name}` : `Your offer is ready — ${site.name}`,
+    subject: plain ? `Your ${plain} offer is here!` : `Your offer is here! — ${site.name}`,
     preheader: pre,
-    html: shell(intro("Your offer is ready", leadIn) + offerBox + callCta("fastest") + noPressure + signoff + proofBox(), undefined, replyFooter(lead, "To schedule or ask anything, just reply to this email."), pre),
+    html: shell(intro("Your offer is here!", leadIn) + offerBox + callCta("fastest") + noPressure + signoff + proofBox(), undefined, replyFooter(lead, "To schedule or ask anything, just reply to this email."), pre),
   };
 }
 
@@ -614,6 +611,7 @@ function previewTo(lead: Lead): string {
 /** The offer email as text. Pass low/high to fill the price; omit both for the blank draft. */
 export function offerPreview(lead: Lead, low?: number, high?: number): string {
   const car = previewCar(lead);
+  const plain = carPlain(lead);
   const priceText =
     low == null || high == null
       ? "______  (you'll fill this in)"
@@ -623,9 +621,10 @@ export function offerPreview(lead: Lead, low?: number, high?: number): string {
   return [
     "📧 EMAIL PREVIEW · Offer",
     previewTo(lead),
-    `Subject: Your offer for your ${car} — ${site.name}`,
+    `Subject: ${plain ? `Your ${plain} offer is here!` : `Your offer is here! — ${site.name}`}`,
+    `Preview: No hassle, no headache. Selling with ${site.name} is easy 😊`,
     PREVIEW_DIVIDER,
-    "Your offer is ready",
+    "Your offer is here!",
     "",
     `We looked at similar vehicles — here's your offer for your ${car}:`,
     "",
