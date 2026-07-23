@@ -39,28 +39,46 @@ export default function StickyCTA() {
     return () => io.disconnect();
   }, [pathname, hideBar]);
 
-  // Publish two positions from the viewport bottom, both tracked live by a
-  // ResizeObserver so a resize (which can wrap the label onto a second line and
-  // grow the pill) keeps them correct: the pill's CENTERLINE, so the floating
-  // chat button lines up with it, and the pill's TOP edge + a gap, so the cookie
-  // notice sits fully ABOVE it. Using the full height for the top is what keeps
-  // the notice clear of a taller (wrapped) pill — a fixed center-offset didn't.
-  // Uses offsetHeight (not a rect) so it's correct even mid entrance-transition.
+  // Publish the pill's CENTERLINE so the floating chat button lines up with it.
+  // Deliberately NOT gated on `show`: the pill is always laid out on lg (it only
+  // fades/slides via opacity+transform), so its measured centre is constant and
+  // the chat button holds a stable position instead of animate-chasing the pill's
+  // scroll show/hide (the jitter). Cleared on the offer flow / admin (hideBar) and
+  // below lg (offsetParent null → the pill is display:none and the mobile bar rules).
+  // ResizeObserver keeps it correct if the label wraps and grows the pill.
   useEffect(() => {
     const root = document.documentElement;
-    const clear = () => {
-      root.style.removeProperty("--cta-pill-center");
-      root.style.removeProperty("--cta-pill-top");
+    const clear = () => root.style.removeProperty("--cta-pill-center");
+    const el = pillRef.current;
+    if (hideBar || !el) {
+      clear();
+      return clear;
+    }
+    const apply = () => {
+      if (el.offsetParent === null) { clear(); return; }
+      root.style.setProperty("--cta-pill-center", `calc(1.5rem + ${el.offsetHeight / 2}px)`);
     };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      clear();
+    };
+  }, [hideBar]);
+
+  // Publish the pill's TOP edge + a gap so the cookie notice sits fully ABOVE it.
+  // This one IS gated on `show`: the notice should ride down to the corner when the
+  // pill is hidden rather than reserve empty space above a pill that isn't there.
+  useEffect(() => {
+    const root = document.documentElement;
+    const clear = () => root.style.removeProperty("--cta-pill-top");
     const el = pillRef.current;
     if (!show || !el || el.offsetParent === null) {
       clear();
       return clear;
     }
-    const apply = () => {
-      root.style.setProperty("--cta-pill-center", `calc(1.5rem + ${el.offsetHeight / 2}px)`);
-      root.style.setProperty("--cta-pill-top", `calc(1.5rem + ${el.offsetHeight}px + 0.75rem)`);
-    };
+    const apply = () => root.style.setProperty("--cta-pill-top", `calc(1.5rem + ${el.offsetHeight}px + 0.75rem)`);
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);

@@ -33,13 +33,16 @@ export default function StickyMobileBar() {
     return () => io.disconnect();
   }, [pathname]);
 
-  // Publish the bar's live height so the floating chat button can sit above it
-  // while it's up and drop back to the corner when it's down. Cleared whenever
-  // the bar isn't rendered/visible so the chat button falls back to the corner.
+  // Publish the bar's height so the floating chat button (and the cookie notice)
+  // reserve a stable spot above it. Deliberately NOT gated on `show`: the bar is
+  // always in the DOM and slides in/out via its own transform, so keeping the
+  // reserved height constant means the chat button holds its position instead of
+  // animate-chasing the show/hide on every fast scroll (the old jitter). Cleared
+  // only when the bar isn't rendered at all (admin / offer flow).
   useEffect(() => {
     const root = document.documentElement;
     const clear = () => root.style.removeProperty("--mobile-cta-bar");
-    if (hideBar || !show) {
+    if (hideBar) {
       clear();
       return clear;
     }
@@ -53,7 +56,7 @@ export default function StickyMobileBar() {
       ro.disconnect();
       clear();
     };
-  }, [show, hideBar]);
+  }, [hideBar]);
 
   if (hideBar) {
     return null;

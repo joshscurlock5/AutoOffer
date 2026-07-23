@@ -262,20 +262,23 @@ body {
     background-size: 22px 22px;
   }
 
-  /* Floating chat launcher + panel. They anchor to the bottom-right corner and
-     lift above the mobile CTA bar when it's up: StickyMobileBar publishes its
-     live height to --mobile-cta-bar. When the bar is down the variable is unset,
-     so the button falls back to the safe-area inset and keeps the same corner
-     gap (top of the bar is treated as the floor when it's up). lg+ has no bar. */
+  /* Floating chat launcher + panel. They reserve a stable spot above the mobile
+     CTA bar: StickyMobileBar publishes the bar's height to --mobile-cta-bar for as
+     long as it's mounted (the bar itself slides in/out via its own transform). The
+     button's `bottom` is therefore constant and does NOT animate on scroll — that's
+     what stops it jittering when you flick up and down. lg+ has no bar. */
   .chat-fab {
     bottom: calc(1.25rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
-    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
-      transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease;
   }
   .chat-panel {
-    /* clears the launcher (3.5rem) plus a 0.75rem gap above it */
+    /* Mobile: anchor the panel TOP and BOTTOM so it fills the screen between the
+       status bar and the launcher. Anchoring both (instead of a tall fixed height
+       hung off the bottom) is what keeps the header on-screen — the old fixed
+       height pushed the top up behind the browser bar and cut it off. The body
+       scrolls inside. clears the launcher (3.5rem) + a 0.75rem gap above it. */
+    top: calc(0.75rem + env(safe-area-inset-top));
     bottom: calc(1.25rem + 3.5rem + 0.75rem + var(--mobile-cta-bar, env(safe-area-inset-bottom)));
-    transition: bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   /* Cookie notice (mobile/swipe widths): center it on the chat button's
      centerline so the OK button and the chat bubble line up. bottom = the chat
@@ -291,6 +294,9 @@ body {
       bottom: calc(var(--cta-pill-center, 3rem) - 1.75rem);
     }
     .chat-panel {
+      /* Desktop: revert to the floating card anchored above the pill (height comes
+         from the lg:h / lg:max-h utilities, so the top anchor is dropped). */
+      top: auto;
       bottom: 5.5rem;
     }
   }
