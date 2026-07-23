@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { addLead, getLeads } from "@/lib/store";
 import { notifyNewLead } from "@/lib/notify";
+import { decodeVin, isValidVinFormat, type VinSpecs } from "@/lib/marketcheck";
+import { cacheGet, cachePut, reserveApiCall, recordApiCalls } from "@/lib/marketCache";
+import { canonicalMake } from "@/lib/vehicles";
 import type { Attribution, Lead, VehicleInfo } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -121,10 +124,38 @@ function toFieldMap(fieldData: FieldDatum[] | undefined): Record<string, string>
   return map;
 }
 
-/** First value whose slugified key matches the regex (undefined if none). */
-function pick(map: Record<string, string>, re: RegExp): string | undefined {
-  for (const [k, v] of Object.entries(map)) if (re.test(k)) return v;
+/** First value whose slugified key matches the regex (undefined if none). Pass
+ * `exceptKey` to skip a specific answer (e.g. the one already claimed as the VIN). */
+function pick(map: Record<string, string>, re: RegExp, exceptKey?: string): string | undefined {
+  for (const [k, v] of Object.entries(map)) if (k !== exceptKey && re.test(k)) return v;
   return undefined;
+}
+
+/** Normalize a candidate VIN: uppercase and drop the spaces / dashes people paste
+ * in. Returns the clean 17-char VIN if it matches the VIN charset (excludes I/O/Q),
+ * else undefined. */
+function normalizeVin(s?: string): string | undefined {
+  const cleaned = String(s || "").toUpperCase().replace(/[\s-]/g, "");
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(cleaned) ? cleaned : undefined;
+}
+
+/** Locate the VIN in a field map. Tries a VIN-ish question label first (labels vary
+ * across Instant Forms — "VIN", "Vehicle Identification Number", "Chassis #"), then
+ * falls back to ANY answer whose value is VIN-shaped. Returns the clean VIN and the
+ * key it came from (so the caller can keep that answer from being re-parsed as a
+ * free-text vehicle string). */
+function findVin(map: Record<string, string>): { vin?: string; key?: string } {
+  for (const [k, v] of Object.entries(map)) {
+    if (/(^|_)vin($|_)|vehicle_identification|chassis/.test(k)) {
+      const vin = normalizeVin(v);
+      if (vin) return { vin, key: k };
+    }
+  }
+  for (const [k, v] of Object.entries(map)) {
+    const vin = normalizeVin(v);
+    if (vin) return { vin, key: k };
+  }
+  return {};
 }
 
 /** Parse a single free-text "2018 Honda Civic EX" style answer into parts. */
@@ -190,7 +221,12 @@ function mapFieldData(map: Record<string, string>): MappedLead {
   let year = pick(map, /(^|_)year($|_)/);
   let trim = pick(map, /(^|_)trim($|_)/);
 
-  const combined = pick(map, /(^|_)(vehicle|car|make_model|year_make)($|_)/) || pick(map, /make.?model/);
+  // Detect the VIN up front so its answer isn't also swallowed by the combined
+  // free-text vehicle parser (a VIN under a "Vehicle Identification…" label would
+  // otherwise be misread as "year make model" and the VIN itself lost).
+  const { vin, key: vinKey } = findVin(map);
+
+  const combined = pick(map, /(^|_)(vehicle|car|make_model|year_make)($|_)/, vinKey) || pick(map, /make.?model/, vinKey);
   if (combined && (!make || !model)) {
     const parsed = parseVehicleString(combined);
     year = year || parsed.year;
@@ -200,8 +236,6 @@ function mapFieldData(map: Record<string, string>): MappedLead {
   }
 
   const mileageKm = parseMileage(pick(map, /mileage|odometer|kilomet|(^|_)kms?($|_)/));
-  const vinRaw = (pick(map, /(^|_)vin($|_)/) || "").toUpperCase();
-  const vin = /^[A-HJ-NPR-Z0-9]{17}$/.test(vinRaw) ? vinRaw : undefined;
   const conditionNote = pick(map, /condition|damage|wrong|accident|(^|_)issues?($|_)|dents?/);
   const message = pick(map, /message|comment|(^|_)notes?($|_)|details?|tell_us|anything|question/);
 
@@ -219,6 +253,33 @@ function mapFieldData(map: Record<string, string>): MappedLead {
     : undefined;
 
   return { name, email, phone, ...(message ? { message: message.slice(0, 1000) } : {}), vehicle };
+}
+
+// ---- VIN decode (shared cache + budget with the on-site flow) --------------
+
+type VinCacheEntry = VinSpecs | { miss: true };
+
+/** Decode a VIN to exact year/make/model/trim, reusing the SAME DynamoDB cache +
+ * monthly MarketCheck budget as the on-site /api/decode-vin route (so a Meta lead
+ * and a website lead for the same VIN share one cached decode and one billed call).
+ * Returns null on a cached miss, exhausted budget, or any failure — the lead is
+ * still saved with the raw VIN, just not enriched. */
+async function decodeVinForLead(vin: string): Promise<VinSpecs | null> {
+  if (!isValidVinFormat(vin)) return null;
+  const cacheKey = `vin:${vin}`;
+  const cached = await cacheGet<VinCacheEntry>(cacheKey);
+  if (cached) return "miss" in cached ? null : cached;
+  if (!(await reserveApiCall())) return null; // over budget → keep the raw VIN only
+  const res = await decodeVin(vin);
+  if (res.attempts > 1) await recordApiCalls(res.attempts - 1);
+  if (res.specs) {
+    // Store the catalog spelling so a later estimate + the saved lead agree.
+    const specs = { ...res.specs, make: res.specs.make ? canonicalMake(res.specs.make) : res.specs.make };
+    await cachePut(cacheKey, specs, 365);
+    return specs;
+  }
+  await cachePut(cacheKey, { miss: true }, Number(process.env.MARKETCHECK_MISS_CACHE_DAYS || 0.02));
+  return null;
 }
 
 // ---- POST: signed leadgen notifications ------------------------------------
@@ -242,6 +303,28 @@ async function processLeadgen(v: LeadgenValue, seen: Set<string>): Promise<void>
   if (!detail) return; // failure already logged; return 200 so Meta stops retrying
 
   const mapped = mapFieldData(toFieldMap(detail.field_data));
+
+  // VIN path: decode the raw VIN into exact year/make/model/trim so the Leads alert
+  // shows BOTH the VIN and what it decodes to (mirrors the website VIN-lookup flow).
+  // The raw VIN is always kept; the decode only fills/sharpens the vehicle fields.
+  // Best-effort — a decode failure must never stop the lead from being saved.
+  if (mapped.vehicle?.vin) {
+    try {
+      const specs = await decodeVinForLead(mapped.vehicle.vin);
+      if (specs) {
+        mapped.vehicle = {
+          ...mapped.vehicle,
+          year: specs.year != null ? specs.year : mapped.vehicle.year,
+          make: specs.make || mapped.vehicle.make,
+          model: specs.model || mapped.vehicle.model,
+          ...(specs.trim ? { trim: specs.trim.slice(0, 80) } : {}),
+        };
+      }
+    } catch (e) {
+      console.error(`[meta-leads] VIN decode failed for leadgen ${leadgenId}:`, e);
+    }
+  }
+
   const adId = detail.ad_id || v.ad_id;
 
   const attribution: Attribution = {
